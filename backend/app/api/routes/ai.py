@@ -52,16 +52,23 @@ class AnalyzeRequest(BaseModel):
 def _get_llm():
     """Build the LLM provider from settings. Raises HTTP 503 if not configured."""
     settings = get_settings()
-    if not settings.LLM_API_KEY:
-        raise HTTPException(
-            status_code=503,
-            detail="LLM provider not configured. Set LLM_API_KEY in environment.",
+    if settings.LLM_PROVIDER.lower() == "groq":
+        api_key, model = settings.GROQ_API_KEY, settings.GROQ_MODEL
+        missing_key_detail = (
+            "LLM provider not configured. Set GROQ_API_KEY in environment."
         )
+    else:
+        api_key, model = settings.LLM_API_KEY, settings.LLM_MODEL
+        missing_key_detail = (
+            "LLM provider not configured. Set LLM_API_KEY in environment."
+        )
+    if not api_key:
+        raise HTTPException(status_code=503, detail=missing_key_detail)
     from backend.app.ai.llm.provider import build_llm_provider
     return build_llm_provider(
         provider=settings.LLM_PROVIDER,
-        api_key=settings.LLM_API_KEY,
-        model=settings.LLM_MODEL,
+        api_key=api_key,
+        model=model,
         timeout=settings.LLM_REQUEST_TIMEOUT,
         max_retries=settings.LLM_MAX_RETRIES,
         max_tokens=settings.LLM_MAX_TOKENS,

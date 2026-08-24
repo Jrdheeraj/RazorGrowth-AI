@@ -1,7 +1,11 @@
 """
-OpenAI LLM provider implementation.
+LLM provider implementations.
 
-Production-hardened:
+Providers:
+  - OpenAIProvider — OpenAI chat completions
+  - GroqProvider   — Groq chat completions (OpenAI-compatible endpoint)
+
+Production-hardened (shared):
   - configurable timeout (LLM_REQUEST_TIMEOUT)
   - automatic retry on transient errors (LLM_MAX_RETRIES)
   - structured JSON output mode for generate_structured()
@@ -69,6 +73,7 @@ class OpenAIProvider(BaseLLMProvider):
         timeout: int = 60,
         max_retries: int = 2,
         max_tokens: int = 2048,
+        base_url: str | None = None,
     ) -> None:
         try:
             from openai import OpenAI
@@ -79,10 +84,13 @@ class OpenAIProvider(BaseLLMProvider):
         self._timeout = timeout
         self._max_retries = max_retries
         self._max_tokens = max_tokens
-        self._client = OpenAI(api_key=api_key, timeout=float(timeout))
+        client_kwargs: dict = {"api_key": api_key, "timeout": float(timeout)}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+        self._client = OpenAI(**client_kwargs)
         log.info(
-            "OpenAIProvider initialised. model=%s timeout=%ds max_retries=%d",
-            model, timeout, max_retries,
+            "%s initialised. model=%s timeout=%ds max_retries=%d",
+            type(self).__name__, model, timeout, max_retries,
         )
 
     # ------------------------------------------------------------------ #
@@ -187,6 +195,38 @@ class OpenAIProvider(BaseLLMProvider):
         raise LLMError(f"LLM call failed: {type(last_exc).__name__}") from last_exc
 
 
+class GroqProvider(OpenAIProvider):
+    """
+    Groq chat completions provider.
+
+    Groq exposes an OpenAI-compatible /chat/completions endpoint, so this
+    provider reuses the OpenAIProvider request/retry/validation logic and
+    only retargets the SDK client at Groq's base URL. Timeout, retry with
+    exponential back-off, max_tokens, JSON mode, and Pydantic validation
+    behave identically. The API key is never logged.
+    """
+
+    BASE_URL = "https://api.groq.com/openai/v1"
+    DEFAULT_MODEL = "openai/gpt-oss-120b"
+
+    def __init__(
+        self,
+        api_key: str,
+        model: str | None = None,
+        timeout: int = 60,
+        max_retries: int = 2,
+        max_tokens: int = 2048,
+    ) -> None:
+        super().__init__(
+            api_key=api_key,
+            model=model or self.DEFAULT_MODEL,
+            timeout=timeout,
+            max_retries=max_retries,
+            max_tokens=max_tokens,
+            base_url=self.BASE_URL,
+        )
+
+
 def build_llm_provider(
     provider: str,
     api_key: str,
@@ -198,9 +238,10 @@ def build_llm_provider(
     """
     Factory — construct the configured LLM provider.
 
-    Currently supports: openai
+    Supported: openai · groq
     """
-    if provider.lower() == "openai":
+    normalized = provider.lower()
+    if normalized == "openai":
         return OpenAIProvider(
             api_key=api_key,
             model=model,
@@ -208,4 +249,12 @@ def build_llm_provider(
             max_retries=max_retries,
             max_tokens=max_tokens,
         )
-    raise ValueError(f"Unsupported LLM_PROVIDER: {provider!r}. Supported: openai")
+    if normalized == "groq":
+        return GroqProvider(
+            api_key=api_key,
+            model=model,
+            timeout=timeout,
+            max_retries=max_retries,
+            max_tokens=max_tokens,
+        )
+    raise ValueError(f"Unsupported LLM_PROVIDER: {provider!r}. Supported: openai, groq")

@@ -218,9 +218,45 @@ class ApprovalGate:
 # Public entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
-def evaluate_action(action: ProposedAction) -> GuardrailResult:
+def _write_guardrail_audit(db: Any, action: ProposedAction, result: GuardrailResult) -> None:
+    """
+    Persist the guardrail outcome as an immutable audit event.
+
+    Never raises — an audit-write failure must never block evaluation.
+    Payload contains no secrets (see GuardrailResult.to_dict()).
+    """
+    try:
+        from backend.app.models.audit_event import AuditEvent
+        from backend.app.models.enums import ActorType, AuditEventType
+
+        evt = AuditEvent(
+            merchant_id=action.merchant_id,
+            actor_type=ActorType.ai_agent,
+            actor_id="guardrail_policy",
+            event_type=(
+                AuditEventType.guardrail_rejected
+                if result.is_rejected
+                else AuditEventType.guardrail_evaluated
+            ),
+            entity_type="proposed_action",
+            entity_id=result.action_id,
+            payload=result.to_dict(),
+        )
+        db.add(evt)
+        db.flush()
+    except Exception as exc:
+        log.warning("Failed to write guardrail audit event: %s", exc)
+
+
+def evaluate_action(action: ProposedAction, *, db: Any | None = None) -> GuardrailResult:
     """
     Run the full guardrail chain for a proposed action.
+
+    Args:
+        action: the AI-proposed action to evaluate.
+        db:     optional SQLAlchemy session. When provided, the outcome is
+                appended to the audit trail (guardrail_evaluated /
+                guardrail_rejected) associated with action.merchant_id.
 
     Returns a GuardrailResult whose approval_status is one of:
       - requires_approval  (default — needs human sign-off)
@@ -249,6 +285,9 @@ def evaluate_action(action: ProposedAction) -> GuardrailResult:
         if not ok:
             # Chain stops on first hard failure
             break
+
+    if db is not None:
+        _write_guardrail_audit(db, action, result)
 
     log.info(
         "Guardrail evaluation complete. action=%r status=%s risk=%s merchant=%s",

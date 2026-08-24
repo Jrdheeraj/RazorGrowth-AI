@@ -40,12 +40,19 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------ #
     # AI — LLM provider
     # ------------------------------------------------------------------ #
+    # Provider selection: "openai" | "groq" (see llm/provider.py factory).
     LLM_PROVIDER: str = "openai"
     LLM_MODEL: str = "gpt-4o-mini"
     LLM_API_KEY: str = ""
     LLM_REQUEST_TIMEOUT: int = 60          # seconds
     LLM_MAX_RETRIES: int = 2               # retry on transient errors
     LLM_MAX_TOKENS: int = 2048             # max output tokens
+
+    # ------------------------------------------------------------------ #
+    # AI — Groq (used when LLM_PROVIDER="groq")
+    # ------------------------------------------------------------------ #
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "openai/gpt-oss-120b"   # current Groq production model
 
     # ------------------------------------------------------------------ #
     # AI — Embedding provider
