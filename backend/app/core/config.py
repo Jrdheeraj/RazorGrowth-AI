@@ -8,6 +8,7 @@ avoid circular imports.
 """
 from __future__ import annotations
 
+from decimal import Decimal
 from functools import lru_cache
 from typing import Literal
 
@@ -68,10 +69,29 @@ class Settings(BaseSettings):
     GUARDRAIL_REQUIRE_APPROVAL: bool = True      # always require human approval
 
     # ------------------------------------------------------------------ #
-    # Razorpay — placeholders only; not used yet
+    # Phase 4 — Safe execution configuration
     # ------------------------------------------------------------------ #
+    # Production safety defaults:
+    #   execution disabled unless explicitly enabled.
+    #   Real Razorpay execution disabled unless explicitly enabled.
+    EXECUTION_ENABLED: bool = False   # global execution switch
+    RAZORPAY_ENABLED: bool = False    # real Razorpay execution switch
+
+    # Razorpay credentials — placeholders only, MUST come from environment.
+    # Never hardcode real values here or commit them anywhere.
     RAZORPAY_KEY_ID: str = ""
     RAZORPAY_KEY_SECRET: str = ""
+
+    # Approval expiry (days; None = no expiry)
+    APPROVAL_EXPIRY_DAYS: int | None = None
+
+    # Campaign & discount limits
+    CAMPAIGN_MAX_TARGET: int | None = None
+    DISCOUNT_MAX_PERCENTAGE: Decimal = Decimal("100.0")  # hard ceiling
+    DISCOUNT_MAX_AMOUNT_INR: Decimal = Decimal("50000.0")  # guardrail ceiling
+
+    # Measurement
+    MEASUREMENT_REQUIRE_REAL_DATA: bool = True  # never fabricate revenue
 
     @field_validator("DATABASE_URL")
     @classmethod

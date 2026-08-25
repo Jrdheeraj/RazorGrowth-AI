@@ -9,6 +9,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
 from backend.app.core.config import get_settings
 from backend.app.core.logging import configure_logging, get_logger
@@ -55,6 +56,7 @@ from backend.app.api.routes.customers import router as customers_router
 from backend.app.api.routes.orders import router as orders_router
 from backend.app.api.routes.payments import router as payments_router
 from backend.app.api.routes.ai import router as ai_router
+from backend.app.api.routes.actions import router as actions_router
 
 app.include_router(health_router, prefix="/api")
 app.include_router(opportunities_router, prefix="/api")
@@ -64,6 +66,7 @@ app.include_router(customers_router, prefix="/api")
 app.include_router(orders_router, prefix="/api")
 app.include_router(payments_router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
+app.include_router(actions_router, prefix="/api")
 
 
 @app.get("/")

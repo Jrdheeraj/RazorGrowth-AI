@@ -248,7 +248,12 @@ def _write_guardrail_audit(db: Any, action: ProposedAction, result: GuardrailRes
         log.warning("Failed to write guardrail audit event: %s", exc)
 
 
-def evaluate_action(action: ProposedAction, *, db: Any | None = None) -> GuardrailResult:
+def evaluate_action(
+    action: ProposedAction,
+    *,
+    db: Any | None = None,
+    action_id: str | None = None,
+) -> GuardrailResult:
     """
     Run the full guardrail chain for a proposed action.
 
@@ -257,6 +262,9 @@ def evaluate_action(action: ProposedAction, *, db: Any | None = None) -> Guardra
         db:     optional SQLAlchemy session. When provided, the outcome is
                 appended to the audit trail (guardrail_evaluated /
                 guardrail_rejected) associated with action.merchant_id.
+        action_id: optional external identifier. When provided it becomes
+                the GuardrailResult.action_id so the audit record is linked
+                to the real AgentAction row instead of a random id.
 
     Returns a GuardrailResult whose approval_status is one of:
       - requires_approval  (default — needs human sign-off)
@@ -272,6 +280,8 @@ def evaluate_action(action: ProposedAction, *, db: Any | None = None) -> Guardra
         reason=action.reason,
         evidence=action.evidence,
     )
+    if action_id is not None:
+        result.action_id = action_id
 
     validators = [
         PolicyValidator(),

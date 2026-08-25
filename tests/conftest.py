@@ -30,7 +30,7 @@ from backend.app.main import app
 # SQLite shared-cache in-memory DB with WAL journal mode.
 # WAL allows concurrent reads from multiple connections without locking.
 # --------------------------------------------------------------------------- #
-_TEST_DATABASE_URL = "sqlite:///file:testdb?mode=memory&cache=shared&uri=true"
+_TEST_DATABASE_URL = "sqlite:///file:testdb?mode=memory&cache=shared&uri=true&timeout=30"
 
 
 def _make_test_engine():
