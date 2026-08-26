@@ -149,3 +149,83 @@ class RiskLevel(str, enum.Enum):
     medium = "medium"
     high = "high"
     critical = "critical"
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Phase 5 — Agentic Growth Intelligence
+# ────────────────────────────────────────────────────────────────────────────
+
+
+class GrowthSignalType(str, enum.Enum):
+    revenue_drop = "revenue_drop"
+    abandoned_customers = "abandoned_customers"
+    declining_repeat_purchases = "declining_repeat_purchases"
+    payment_failures = "payment_failures"
+    inactive_high_value = "inactive_high_value"
+    unusual_order_behavior = "unusual_order_behavior"
+    product_demand_change = "product_demand_change"
+    campaign_opportunity = "campaign_opportunity"
+    discount_opportunity = "discount_opportunity"
+    segment_opportunity = "segment_opportunity"
+    payment_recovery_opportunity = "payment_recovery_opportunity"
+    emerging_growth = "emerging_growth"
+
+
+class SignalStatus(str, enum.Enum):
+    active = "active"
+    resolved = "resolved"
+    stale = "stale"
+
+
+class InsightType(str, enum.Enum):
+    vip = "vip"
+    high_value = "high_value"
+    churn_risk = "churn_risk"
+    dormant = "dormant"
+    new_customer = "new_customer"
+    repeat_customer = "repeat_customer"
+    discount_sensitive = "discount_sensitive"
+    payment_failure = "payment_failure"
+
+
+class ChurnRiskLevel(str, enum.Enum):
+    minimal = "minimal"
+    low = "low"
+    medium = "medium"
+    high = "high"
+    critical = "critical"
+
+
+class AgentName(str, enum.Enum):
+    growth_discovery = "GrowthDiscoveryAgent"
+    customer_intelligence = "CustomerIntelligenceAgent"
+    revenue_optimization = "RevenueOptimizationAgent"
+    campaign_strategist = "CampaignStrategistAgent"
+    payment_recovery = "PaymentRecoveryAgent"
+    opportunity_prioritization = "OpportunityPrioritizationAgent"
+    experiment = "ExperimentAgent"
+    growth_memory = "GrowthMemoryAgent"
+
+
+class AgentRunStatus(str, enum.Enum):
+    running = "running"
+    completed = "completed"
+    failed = "failed"
+    skipped = "skipped"
+
+
+class MemoryType(str, enum.Enum):
+    strategy_outcome = "strategy_outcome"
+    recommendation = "recommendation"
+    action_result = "action_result"
+    merchant_preference = "merchant_preference"
+    campaign_performance = "campaign_performance"
+    opportunity_history = "opportunity_history"
+
+
+class ExperimentStatus(str, enum.Enum):
+    proposed = "proposed"
+    running = "running"
+    completed = "completed"
+    measurement_pending = "measurement_pending"
+    cancelled = "cancelled"

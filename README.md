@@ -6,9 +6,10 @@ RazorGrowth AI analyses merchant commerce data, detects revenue growth opportuni
 explains them with evidence-grounded reasoning, and enforces a human-approval gate before
 any money-touching action could ever execute — with a full audit trail on every step.
 
-> **Status:** active development (backend v0.2.0). The analysis, knowledge/RAG,
-> guardrail, and audit layers are implemented. Action execution, authentication, and
-> live Razorpay integration are planned (see [Current Status](#current-status)).
+> **Status:** active development (backend v0.3.0). Phase 5 Agentic Growth Intelligence is
+> implemented: specialised agents, growth radar, opportunity scoring, customer/churn
+> intelligence, what-if simulation, honest experiments, growth memory, explainability,
+> and the Agentic Growth Control Center dashboard. See [docs/PHASE_5.md](docs/PHASE_5.md).
 
 ---
 
@@ -390,15 +391,18 @@ backend, `POST /api/ai/ingest`, then `POST /api/ai/analyze`.
 
 ## Roadmap
 
-Reasonable next steps that follow from the current architecture (none are implemented yet):
+Phase 5 (implemented — see docs/PHASE_5.md): multi-agent system, scoring engine,
+growth radar, customer intelligence, churn risk, payment recovery intelligence,
+campaign strategist, simulation, experiments, growth memory, learning loop,
+deduplication, agent permissions, agent audit + observability, explainability,
+do-nothing baseline, Growth Control Center UI, daily brief.
 
-1. Approval endpoints backed by `agent_actions` (approve/reject with actor identity), enforcing `ApprovalStatus`.
-2. Bounded execution adapters (campaign dispatch, discount creation, payment retry) gated by the existing guardrail chain.
-3. Campaign measurement: link outcomes back to `campaigns.actual_revenue` and close the Detect→Measure loop.
-4. Auth tokens + per-tenant merchant scoping across all APIs and repositories.
-5. Razorpay Test Mode adapter for simulated-then-real payment verification.
-6. CI pipeline running `pytest` and the frontend build; lint/type-check tooling configs.
-7. Vector index maintenance strategy (periodic IVFFlat reindexing as the corpus grows) and agent-quality evaluation harness.
+Remaining candidate next steps:
+
+1. Authentication / authorization / multi-tenancy tokens across all APIs.
+2. Razorpay Test-Mode adapter for simulated-then-real payment verification; live execution stays behind explicit flags.
+3. CI pipeline running `pytest` and the frontend build; lint/type-check configs.
+4. Vector index maintenance strategy and agent-quality evaluation harness.
 
 ## Security
 

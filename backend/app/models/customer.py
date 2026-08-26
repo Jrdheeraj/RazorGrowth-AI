@@ -22,6 +22,7 @@ from backend.app.models.enums import CustomerSegment
 if TYPE_CHECKING:
     from backend.app.models.merchant import Merchant
     from backend.app.models.order import Order
+    from backend.app.models.customer_insight import CustomerInsight
 
 
 class Customer(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -61,6 +62,9 @@ class Customer(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     merchant: Mapped[Merchant] = relationship("Merchant", back_populates="customers")
     orders: Mapped[list[Order]] = relationship(
         "Order", back_populates="customer"
+    )
+    insights: Mapped[list[CustomerInsight]] = relationship(
+        "CustomerInsight", back_populates="customer", cascade="all, delete-orphan"
     )
 
     __table_args__ = (

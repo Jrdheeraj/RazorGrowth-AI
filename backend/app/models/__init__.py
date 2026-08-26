@@ -33,3 +33,14 @@ from backend.app.models.campaign import Campaign  # noqa: F401
 from backend.app.models.agent_action import AgentAction  # noqa: F401
 from backend.app.models.audit_event import AuditEvent  # noqa: F401
 from backend.app.models.knowledge import KnowledgeDocument, KnowledgeChunk  # noqa: F401
+
+# Phase 5 — Agentic Growth Intelligence
+from backend.app.models.growth_signal import GrowthSignal  # noqa: F401
+from backend.app.models.customer_insight import CustomerInsight  # noqa: F401
+from backend.app.models.experiment import (  # noqa: F401
+    Simulation,
+    Experiment,
+    ExperimentResult,
+)
+from backend.app.models.agent_run import AgentRun  # noqa: F401
+from backend.app.models.agent_memory import AgentMemory  # noqa: F401

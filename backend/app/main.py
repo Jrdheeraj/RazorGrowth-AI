@@ -57,6 +57,17 @@ from backend.app.api.routes.orders import router as orders_router
 from backend.app.api.routes.payments import router as payments_router
 from backend.app.api.routes.ai import router as ai_router
 from backend.app.api.routes.actions import router as actions_router
+# Phase 5 — Agentic Growth Intelligence
+from backend.app.api.routes.agents import router as agents_router
+from backend.app.api.routes.radar import router as radar_router
+from backend.app.api.routes.phase5 import (
+    insights_router,
+    customer_insights_router,
+    simulations_router,
+    experiments_router,
+    memory_router,
+    brief_router,
+)
 
 app.include_router(health_router, prefix="/api")
 app.include_router(opportunities_router, prefix="/api")
@@ -67,6 +78,15 @@ app.include_router(orders_router, prefix="/api")
 app.include_router(payments_router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
 app.include_router(actions_router, prefix="/api")
+# Phase 5 routes (each declared WITHOUT /api here — prefix added exactly once)
+app.include_router(agents_router, prefix="/api")
+app.include_router(radar_router, prefix="/api")
+app.include_router(insights_router, prefix="/api")
+app.include_router(customer_insights_router, prefix="/api")
+app.include_router(simulations_router, prefix="/api")
+app.include_router(experiments_router, prefix="/api")
+app.include_router(memory_router, prefix="/api")
+app.include_router(brief_router, prefix="/api")
 
 
 @app.get("/")

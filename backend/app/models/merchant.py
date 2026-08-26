@@ -19,6 +19,11 @@ if TYPE_CHECKING:
     from backend.app.models.campaign import Campaign
     from backend.app.models.agent_action import AgentAction
     from backend.app.models.audit_event import AuditEvent
+    from backend.app.models.growth_signal import GrowthSignal
+    from backend.app.models.customer_insight import CustomerInsight
+    from backend.app.models.experiment import Simulation, Experiment
+    from backend.app.models.agent_run import AgentRun
+    from backend.app.models.agent_memory import AgentMemory
 
 
 class Merchant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -72,6 +77,28 @@ class Merchant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     audit_events: Mapped[list[AuditEvent]] = relationship(
         "AuditEvent", back_populates="merchant", cascade="all, delete-orphan"
+    )
+    # Phase 5 relationships
+    growth_signals: Mapped[list[GrowthSignal]] = relationship(
+        "GrowthSignal", back_populates="merchant", cascade="all, delete-orphan"
+    )
+    customer_insights: Mapped[list[CustomerInsight]] = relationship(
+        "CustomerInsight",
+        foreign_keys="[CustomerInsight.merchant_id]",
+        back_populates="merchant",
+        cascade="all, delete-orphan",
+    )
+    simulations: Mapped[list[Simulation]] = relationship(
+        "Simulation", back_populates="merchant", cascade="all, delete-orphan"
+    )
+    experiments: Mapped[list[Experiment]] = relationship(
+        "Experiment", back_populates="merchant", cascade="all, delete-orphan"
+    )
+    agent_runs: Mapped[list[AgentRun]] = relationship(
+        "AgentRun", back_populates="merchant", cascade="all, delete-orphan"
+    )
+    agent_memories: Mapped[list[AgentMemory]] = relationship(
+        "AgentMemory", back_populates="merchant", cascade="all, delete-orphan"
     )
 
     __table_args__ = (
