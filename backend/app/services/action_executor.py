@@ -182,7 +182,13 @@ class CreateDiscountExecutor(BaseActionExecutor):
 
 
 class RetryPaymentExecutor(BaseActionExecutor):
-    """Executor for retry_payment actions."""
+    """Executor for retry_payment actions.
+
+    Delegates to the Razorpay integration adapter (integrations/razorpay.py).
+    Default state: RAZORPAY_DISABLED — an honest non-success, never a fake
+    payment success. Test mode produces clearly-labelled simulated outcomes;
+    the live path refuses honestly until deliberately implemented.
+    """
 
     action_type = "retry_payment"
     payload_schema = "retry_payment"
@@ -191,41 +197,45 @@ class RetryPaymentExecutor(BaseActionExecutor):
         ok, err = _validated_payload(self.payload_schema, action)
         if not ok:
             return ExecutorResult(success=False, error=f"INVALID_PAYLOAD: {err}")
+        payload = RetryPaymentPayload.model_validate(ok.model_dump())
         payment_id = ok.payment_id
 
+        from backend.app.integrations.razorpay import build_razorpay_client
+
         settings = get_settings()
-        if not settings.RAZORPAY_ENABLED:
-            # Disabled → clear, safe NON-success. No fake payment success is
-            # recorded anywhere; the action transitions to failed upstream.
+        result = build_razorpay_client().retry_payment(
+            payment_id, amount_inr=None
+        )
+
+        if not result.ok:
             return ExecutorResult(
                 success=False,
-                error="RAZORPAY_DISABLED",
+                error=result.error or "RAZORPAY_FAILED",
                 result_metadata={
                     "payment_id": payment_id,
-                    "razorpay_enabled": False,
-                    "note": "Real Razorpay execution is disabled "
-                    "(RAZORPAY_ENABLED=false). Nothing was charged or retried.",
+                    **result.metadata,
                 },
             )
 
-        if not settings.RAZORPAY_KEY_ID or not settings.RAZORPAY_KEY_SECRET:
-            return ExecutorResult(
-                success=False,
-                error="RAZORPAY_NOT_CONFIGURED",
-                result_metadata={
-                    "payment_id": payment_id,
-                    "note": "RAZORPAY_ENABLED=true but RAZORPAY_KEY_ID/"
-                    "RAZORPAY_KEY_SECRET are not configured. Nothing was retried.",
-                },
-            )
-
-        # Live retry path intentionally unimplemented until Phase 5+.
-        # Returning fake success here would fabricate a real-world payment —
-        # refuse honestly instead.
+        # Test-mode simulated success: executed=False, simulated=True.
+        # Nothing upstream may mistake this for a real external effect.
         return ExecutorResult(
-            success=False,
-            error="RAZORPAY_LIVE_RETRY_NOT_IMPLEMENTED",
-            result_metadata={"payment_id": payment_id},
+            success=True,
+            result_metadata={
+                "payment_id": payment_id,
+                "mode": result.mode,
+                "executed": result.executed,
+                "simulated": result.simulated,
+                **{
+                    k: v
+                    for k, v in result.metadata.items()
+                    if k != "payment_id"
+                },
+                "note": (
+                    "Razorpay test mode — simulated outcome only; "
+                    "no real payment was retried."
+                ),
+            },
         )
 
 

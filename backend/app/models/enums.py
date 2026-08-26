@@ -229,3 +229,32 @@ class ExperimentStatus(str, enum.Enum):
     completed = "completed"
     measurement_pending = "measurement_pending"
     cancelled = "cancelled"
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Phase 6 — Authentication, Multi-Tenancy & Production Security
+# ────────────────────────────────────────────────────────────────────────────
+
+
+class UserStatus(str, enum.Enum):
+    active = "active"
+    disabled = "disabled"
+
+
+class UserRole(str, enum.Enum):
+    """
+    Human roles within a merchant membership.
+
+    Roles NEVER bypass guardrails: even an owner's approved action must pass
+    Guardrail #2 immediately before execution. Agents are not users and hold
+    no role.
+    """
+    owner = "owner"
+    admin = "admin"
+    operator = "operator"
+    analyst = "analyst"
+
+
+class MembershipStatus(str, enum.Enum):
+    active = "active"
+    disabled = "disabled"

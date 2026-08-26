@@ -39,9 +39,11 @@ class AuditEvent(UUIDPrimaryKeyMixin, Base):
     """
     __tablename__ = "audit_events"
 
-    merchant_id: Mapped[uuid.UUID] = mapped_column(
+    # Phase 6: nullable to allow platform-level events (e.g. Razorpay
+    # webhook deliveries) that are not attributable to a single merchant.
+    merchant_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("merchants.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     actor_type: Mapped[ActorType] = mapped_column(String(30), nullable=False)

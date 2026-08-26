@@ -16,12 +16,15 @@ from backend.app.models.enums import (  # noqa: F401
     CampaignType,
     Currency,
     CustomerSegment,
+    MembershipStatus,
     MerchantStatus,
     OpportunityStatus,
     OpportunityType,
     OrderStatus,
     PaymentProvider,
     PaymentStatus,
+    UserRole,
+    UserStatus,
 )
 from backend.app.models.merchant import Merchant  # noqa: F401
 from backend.app.models.product import Product  # noqa: F401
@@ -44,3 +47,7 @@ from backend.app.models.experiment import (  # noqa: F401
 )
 from backend.app.models.agent_run import AgentRun  # noqa: F401
 from backend.app.models.agent_memory import AgentMemory  # noqa: F401
+
+# Phase 6 — Authentication, Multi-Tenancy & Production Security
+from backend.app.models.user import User  # noqa: F401
+from backend.app.models.membership import MerchantMembership  # noqa: F401

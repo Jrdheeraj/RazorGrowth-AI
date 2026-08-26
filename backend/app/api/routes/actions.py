@@ -2,24 +2,23 @@
 Action API endpoints — Phase 4 human-in-the-loop approval and execution.
 
 Endpoints (final paths after the /api application prefix):
-  GET    /api/actions
-  GET    /api/actions/{action_id}
-  POST   /api/actions/{action_id}/approve
-  POST   /api/actions/{action_id}/reject
-  POST   /api/actions/{action_id}/execute
-  GET    /api/actions/{action_id}/audit
+  GET    /api/actions                                  — analyst+
+  GET    /api/actions/{action_id}                      — analyst+
+  POST   /api/actions/{action_id}/approve              — owner/admin ONLY
+  POST   /api/actions/{action_id}/reject               — owner/admin ONLY
+  POST   /api/actions/{action_id}/execute              — operator+ (still guardrailed)
+  GET    /api/actions/{action_id}/audit                — analyst+
 
 The router below declares prefix="/actions" ONLY; the "/api" prefix is added
-exactly once in main.py via include_router(prefix="/api") — matching every
-other router in this project. Never declare "/api" here.
+exactly once in main.py via include_router(prefix="/api").
 
-Approval/rejection are HUMAN-ONLY operations. They are plain HTTP endpoints,
-deliberately NOT exposed as AI agent tools.
+Approval/rejection are HUMAN-ONLY operations, restricted to admin/owner
+roles via merchant membership. Agents are not users and can never hold a
+membership or role; there is no agent login path.
 
-All single-action routes accept an optional ``merchant_id`` query parameter.
-When provided it must match the action's owning merchant, otherwise the
-request is rejected with 403 MERCHANT_ACCESS_DENIED. When omitted (single-
-tenant development mode) the action is served regardless of owner.
+All routes resolve tenant identity from the authenticated security context.
+A supplied merchant_id that does not match an active membership of the
+caller is rejected with 403 MERCHANT_ACCESS_DENIED (Phase 4 contract).
 """
 
 from __future__ import annotations
@@ -33,6 +32,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.api.deps import (
+    MerchantContext,
+    approver_ctx,
+    merchant_ctx,
+    operator_ctx,
+)
 from backend.app.db.session import get_db
 from backend.app.services.action_service import (
     approve_action,
@@ -52,7 +57,7 @@ from backend.app.schemas.action import (
     AuditEventListResponse,
     ExecutionResponse,
 )
-from backend.app.models.enums import AgentActionStatus
+from backend.app.models.enums import AgentActionStatus, ActorType
 from backend.app.models.agent_action import AgentAction
 
 log = logging.getLogger(__name__)
@@ -76,15 +81,29 @@ def _enum_value(v: object) -> str:
     return v.value if isinstance(v, enum.Enum) else str(v)
 
 
-def _verify_merchant_access(action: AgentAction, merchant_id: str | None) -> None:
-    """Enforce merchant ownership when a merchant context is supplied."""
-    if merchant_id is None:
+def _actor_label(ctx: MerchantContext) -> str:
+    """Audit actor identity: user id when authenticated, dev actor otherwise."""
+    if ctx.authenticated and ctx.user is not None:
+        return f"user:{ctx.user.id}"
+    return DEVELOPMENT_ACTOR
+
+
+def _verify_tenant_access(action: AgentAction, ctx: MerchantContext) -> None:
+    """
+    Enforce merchant ownership.
+
+    Authenticated: the action MUST belong to the caller's membership
+    merchant. Anonymous (optional dev mode): legacy behaviour — reject only
+    when an explicit non-matching merchant_id was supplied; otherwise the
+    action is served regardless of owner (pre-auth development semantics).
+    """
+    if ctx.authenticated:
+        if action.merchant_id != ctx.merchant_id:
+            # Do not disclose existence of other tenants' actions.
+            raise HTTPException(status_code=403, detail="MERCHANT_ACCESS_DENIED")
         return
-    try:
-        claimed = uuid.UUID(merchant_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid merchant_id format")
-    if action.merchant_id != claimed:
+    # Legacy anonymous path preserved for development tooling.
+    if ctx.explicit_merchant and action.merchant_id != ctx.merchant_id:
         raise HTTPException(status_code=403, detail="MERCHANT_ACCESS_DENIED")
 
 
@@ -106,30 +125,33 @@ def _action_to_response(action: AgentAction) -> dict[str, Any]:
 
 
 # -------------------------------------------------------------------------
-# GET /api/actions — list actions, optionally filtered by merchant/status
+# GET /api/actions — list actions, optionally filtered by status
 # -------------------------------------------------------------------------
 
 
 @router.get("", response_model=ActionListResponse)
 def list_actions(
-    merchant_id: str | None = None,
     status: str | None = None,
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(merchant_ctx),
 ) -> Any:
-    """List actions for a merchant, optionally filtered by status."""
-    mid: uuid.UUID | None = None
-    if merchant_id is not None:
-        try:
-            mid = uuid.UUID(merchant_id)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid merchant_id format")
+    """
+    List actions for the caller's merchant (tenant-isolated).
 
+    Anonymous optional-mode callers without an explicit merchant keep the
+    legacy unfiltered listing for development tooling.
+    """
     status_enum: AgentActionStatus | None = None
     if status is not None:
         try:
             status_enum = AgentActionStatus(status)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+
+    if not ctx.authenticated and not ctx.explicit_merchant:
+        mid: uuid.UUID | None = None  # legacy development behaviour
+    else:
+        mid = ctx.merchant_id
 
     actions = list_actions_by_status(db, mid, status_enum)
 
@@ -144,46 +166,47 @@ def list_actions(
 @router.get("/{action_id}", response_model=ActionResponse)
 def get_action_route(
     action_id: str,
-    merchant_id: str | None = None,
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(merchant_ctx),
 ) -> Any:
-    """Retrieve a single action by ID."""
+    """Retrieve a single action by ID (tenant-isolated)."""
     aid = _parse_action_id(action_id)
 
     action = get_action(db, aid)
     if not action:
         raise HTTPException(status_code=404, detail="ACTION_NOT_FOUND")
 
-    _verify_merchant_access(action, merchant_id)
+    _verify_tenant_access(action, ctx)
     return _action_to_response(action)
 
 
 # -------------------------------------------------------------------------
-# POST /api/actions/{action_id}/approve — HUMAN ONLY
+# POST /api/actions/{action_id}/approve — HUMAN OWNER/ADMIN ONLY
 # -------------------------------------------------------------------------
 
 
 @router.post("/{action_id}/approve", response_model=ActionTransitionResponse)
 def approve_action_route(
     action_id: str,
-    merchant_id: str | None = None,
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(approver_ctx),
 ) -> Any:
     """
     Transition action from 'requested' to 'approved'.
 
-    Human-only operation. Guardrails are evaluated before approval;
-    a guardrail rejection blocks approval with 400 GUARDRAIL_REJECTED.
+    HUMAN-ONLY and restricted to owner/admin roles. Guardrails are evaluated
+    before approval; a guardrail rejection blocks approval with 400.
+    No role and no token can bypass this endpoint's guardrail evaluation.
     """
     aid = _parse_action_id(action_id)
 
     action = get_action(db, aid)
     if not action:
         raise HTTPException(status_code=404, detail="ACTION_NOT_FOUND")
-    _verify_merchant_access(action, merchant_id)
+    _verify_tenant_access(action, ctx)
 
     try:
-        action = approve_action(db, aid)
+        action = approve_action(db, aid, actor=_actor_label(ctx))
     except ActionNotFoundError:
         db.rollback()
         raise HTTPException(status_code=404, detail="ACTION_NOT_FOUND")
@@ -207,26 +230,26 @@ def approve_action_route(
 
 
 # -------------------------------------------------------------------------
-# POST /api/actions/{action_id}/reject — HUMAN ONLY
+# POST /api/actions/{action_id}/reject — HUMAN OWNER/ADMIN ONLY
 # -------------------------------------------------------------------------
 
 
 @router.post("/{action_id}/reject", response_model=ActionTransitionResponse)
 def reject_action_route(
     action_id: str,
-    merchant_id: str | None = None,
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(approver_ctx),
 ) -> Any:
-    """Transition action from 'requested' to 'rejected'. Human-only."""
+    """Transition action from 'requested' to 'rejected'. Human owner/admin only."""
     aid = _parse_action_id(action_id)
 
     action = get_action(db, aid)
     if not action:
         raise HTTPException(status_code=404, detail="ACTION_NOT_FOUND")
-    _verify_merchant_access(action, merchant_id)
+    _verify_tenant_access(action, ctx)
 
     try:
-        action = reject_action(db, aid)
+        action = reject_action(db, aid, actor=_actor_label(ctx))
     except ActionNotFoundError:
         db.rollback()
         raise HTTPException(status_code=404, detail="ACTION_NOT_FOUND")
@@ -241,32 +264,32 @@ def reject_action_route(
         "status": _enum_value(action.status),
         "requested_by": action.requested_by,
         "approved_by": None,
-        "rejected_by": DEVELOPMENT_ACTOR,
+        "rejected_by": _actor_label(ctx),
         "merchant_id": str(action.merchant_id),
         "created_at": str(action.created_at),
     }
 
 
 # -------------------------------------------------------------------------
-# POST /api/actions/{action_id}/execute
+# POST /api/actions/{action_id}/execute — operator+ behind double guardrail
 # -------------------------------------------------------------------------
 
 
 @router.post("/{action_id}/execute", response_model=ExecutionResponse)
 def execute_action_route(
     action_id: str,
-    merchant_id: str | None = None,
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(operator_ctx),
 ) -> Any:
     """
-    Execute an approved action.
+    Execute an approved action (operator role or above).
 
-    Enforced by action_service.execute_action:
+    Enforced by action_service.execute_action regardless of who calls:
       1. Action exists
-      2. Merchant ownership
+      2. Tenant ownership
       3. Idempotency / terminal-state checks (never re-executes)
-      4. status == approved (approval cannot be bypassed)
-      5. Double guardrail immediately before execution
+      4. status == approved (approval cannot be bypassed by ANY role)
+      5. Double guardrail immediately before execution (cannot be bypassed)
       6. Status → executing → completed / failed
       7. Audit events at each stage
     """
@@ -275,9 +298,9 @@ def execute_action_route(
     action = get_action(db, aid)
     if not action:
         raise HTTPException(status_code=404, detail="ACTION_NOT_FOUND")
-    _verify_merchant_access(action, merchant_id)
+    _verify_tenant_access(action, ctx)
 
-    result = execute_action(db, aid)
+    result = execute_action(db, aid, actor=_actor_label(ctx))
 
     # Persist the terminal transition (completed/failed/idempotent-skip)
     # and its audit events before responding.
@@ -317,16 +340,16 @@ def execute_action_route(
 @router.get("/{action_id}/audit", response_model=AuditEventListResponse)
 def get_action_audit(
     action_id: str,
-    merchant_id: str | None = None,
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(merchant_ctx),
 ) -> Any:
-    """Retrieve the audit trail for an action."""
+    """Retrieve the audit trail for an action (tenant-isolated)."""
     aid = _parse_action_id(action_id)
 
     action = get_action(db, aid)
     if not action:
         raise HTTPException(status_code=404, detail="ACTION_NOT_FOUND")
-    _verify_merchant_access(action, merchant_id)
+    _verify_tenant_access(action, ctx)
 
     from backend.app.models.audit_event import AuditEvent
 

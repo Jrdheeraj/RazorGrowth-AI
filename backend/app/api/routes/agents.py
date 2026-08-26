@@ -1,13 +1,15 @@
 """Agent observability + orchestration APIs — Phase 5 Feature 21.
 
 Endpoints (final paths after the single /api application prefix):
-  GET  /api/agents
-  GET  /api/agents/runs
-  GET  /api/agents/runs/{run_id}
-  POST /api/agents/run
+  GET  /api/agents                 — analyst+ (registry + observability)
+  GET  /api/agents/runs            — analyst+, tenant-scoped
+  GET  /api/agents/runs/{run_id}   — analyst+, tenant-scoped
+  POST /api/agents/run             — operator+ (proposals only)
 
 The POST endpoint drives GrowthAgentOrchestrator. It can only CREATE
-proposals — approval and execution remain Phase 4 human-only operations.
+proposals — approval and execution remain Phase 4 human-only operations
+restricted to owner/admin roles. Agents are not users: no token, role,
+or membership path exists for them.
 """
 from __future__ import annotations
 
@@ -18,6 +20,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from backend.app.api.deps import (
+    MerchantContext,
+    merchant_ctx,
+    operator_ctx,
+    resolve_claimed_merchant,
+)
 from backend.app.agents.orchestrator import (
     GrowthAgentOrchestrator,
     MerchantNotFoundError,
@@ -38,23 +46,10 @@ log = logging.getLogger(__name__)
 router = APIRouter(tags=["agents"])
 
 
-def _resolve_merchant(db: Session, merchant_id: uuid.UUID | None) -> uuid.UUID:
-    if merchant_id is not None:
-        from backend.app.models.merchant import Merchant
-
-        if db.get(Merchant, merchant_id) is None:
-            raise HTTPException(status_code=404, detail="MERCHANT_NOT_FOUND")
-        return merchant_id
-    from backend.app.repositories.merchant import MerchantRepository
-
-    merchants = MerchantRepository(db).list_all(limit=1)
-    if not merchants:
-        raise HTTPException(status_code=404, detail="MERCHANT_NOT_FOUND")
-    return merchants[0].id
-
-
 @router.get("/agents", response_model=AgentsListResponse)
-def list_agents(db: Session = Depends(get_db)) -> Any:
+def list_agents(
+    db: Session = Depends(get_db),
+) -> Any:
     """Agent registry with capability transparency (Feature 13/15)."""
     runs = AgentRunService(db)
     return {
@@ -65,14 +60,14 @@ def list_agents(db: Session = Depends(get_db)) -> Any:
 
 @router.get("/agents/runs", response_model=AgentRunsResponse)
 def list_agent_runs(
-    merchant_id: uuid.UUID | None = None,
-    orchestrator_run_id: str | None = None,
     limit: int = Query(default=50, ge=1, le=200),
+    orchestrator_run_id: str | None = None,
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(merchant_ctx),
 ) -> Any:
-    claimed_mid = _resolve_merchant(db, merchant_id)
+    """List agent runs for the caller's merchant (tenant-isolated)."""
     runs = AgentRunService(db).list_runs(
-        claimed_mid,
+        ctx.merchant_id,
         orchestrator_run_id=orchestrator_run_id,
         limit=limit,
     )
@@ -104,17 +99,17 @@ def list_agent_runs(
 @router.get("/agents/runs/{run_id}", response_model=AgentRunRecord)
 def get_agent_run(
     run_id: str,
-    merchant_id: uuid.UUID | None = None,
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(merchant_ctx),
 ) -> Any:
+    """Retrieve one agent run; other tenants' runs are indistinguishable
+    from nonexistent ones (404 — no existence leak)."""
     try:
         rid = uuid.UUID(run_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid run_id format")
-    claimed_mid = _resolve_merchant(db, merchant_id)
-    run = AgentRunService(db).get_run(rid, merchant_id=claimed_mid)
+    run = AgentRunService(db).get_run(rid, merchant_id=ctx.merchant_id)
     if run is None:
-        # either nonexistent or owned by another merchant — same answer (no leak)
         raise HTTPException(status_code=404, detail="RUN_NOT_FOUND")
     return {
         "id": str(run.id),
@@ -138,16 +133,20 @@ def get_agent_run(
 
 
 @router.post("/agents/run", response_model=OrchestratorRunResponse)
-def run_agents(request: AgentRunRequest, db: Session = Depends(get_db)) -> Any:
+def run_agents(
+    request: AgentRunRequest,
+    db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(operator_ctx),
+) -> Any:
     """
-    Trigger a controlled orchestration run.
+    Trigger a controlled orchestration run (operator role or above).
 
     Produces opportunities/signals/proposals only. Nothing executes and
-    nothing is approved without a human (Phase 4 invariants preserved).
+    nothing is approved without a human owner/admin (Phase 4 invariants).
     """
     if request.mode not in ("fast", "deep"):
         raise HTTPException(status_code=422, detail="mode must be 'fast' or 'deep'")
-    merchant_id = _resolve_merchant(db, request.merchant_id)
+    merchant_id = resolve_claimed_merchant(ctx, request.merchant_id)
 
     settings = get_settings()
     llm = None
@@ -184,9 +183,13 @@ def run_agents(request: AgentRunRequest, db: Session = Depends(get_db)) -> Any:
     try:
         summary = orchestrator.run(merchant_id, mode=request.mode, params=params)
     except MerchantNotFoundError:
+        # Body-supplied ids are validated here (Phase 4/5 contract preserved):
+        # unknown merchant → 404, indistinguishable across tenants.
+        db.rollback()
         raise HTTPException(status_code=404, detail="MERCHANT_NOT_FOUND")
     except Exception as exc:  # central safety net; log details server-side only
         log.exception("Orchestration failed")
+        db.rollback()
         raise HTTPException(status_code=500, detail="AGENT_RUN_FAILED")
 
     try:

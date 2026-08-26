@@ -105,3 +105,6 @@ $RECYCLE.BIN/
 # - Migrations (`migrations/versions/*.py`), tests (`tests/`) and both
 #   `.env.example` templates remain fully trackable.
 # ============================================================================
+
+# TypeScript incremental build artifacts
+tsconfig.tsbuildinfo

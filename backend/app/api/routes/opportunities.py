@@ -3,17 +3,18 @@ Growth opportunity routes.
 
 GET /api/opportunities preserves the exact Phase 1 response contract so
 all existing tests continue to pass. It falls back to the in-memory
-engine when no DB merchant is found, ensuring the endpoint always returns
-at least one opportunity regardless of DB state.
+engine only for anonymous development-mode callers when no DB merchant
+is found. Authenticated callers are strictly tenant-scoped.
 """
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from backend.app.api.deps import MerchantContext, merchant_ctx
 from backend.app.db.session import get_db
 from backend.app.services.opportunity_service import GrowthOpportunityService
 
@@ -58,30 +59,34 @@ def _opportunity_to_legacy(opp: Any) -> dict:
 
 
 @router.get("")
-def list_opportunities(db: Session = Depends(get_db)) -> dict:
+def list_opportunities(
+    db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(merchant_ctx),
+) -> dict:
     """
-    Return growth opportunities.
+    Return growth opportunities for the caller's merchant.
 
-    Attempts to use the DB-backed engine. Falls back to in-memory synthetic
-    data if the DB has no merchants yet (e.g. before seeding).
+    Authenticated: strictly scoped to the caller's membership — never any
+    other tenant's data, never the synthetic fallback engine.
+    Anonymous (optional dev mode): legacy behaviour including the DB-less
+    in-memory fallback so early clients keep working.
     """
     try:
-        # Find the first available merchant
-        from backend.app.repositories.merchant import MerchantRepository
-        merchant_repo = MerchantRepository(db)
-        merchants = merchant_repo.list_all(limit=1)
-
-        if merchants:
-            svc = GrowthOpportunityService(db)
-            db_opps = svc.analyse_and_persist(merchants[0].id)
-            db.commit()
-            items = [_opportunity_to_legacy(o) for o in db_opps]
-            if items:
-                return {"items": items}
+        svc = GrowthOpportunityService(db)
+        db_opps = svc.analyse_and_persist(ctx.merchant_id)
+        db.commit()
+        items = [_opportunity_to_legacy(o) for o in db_opps]
+        if items:
+            return {"items": items}
 
     except Exception as exc:
-        log.warning("DB opportunity engine failed, falling back to in-memory: %s", exc)
+        log.warning("DB opportunity engine failed: %s", exc)
         db.rollback()
+        if ctx.authenticated:
+            # Never leak another tenant's synthetic data on failure.
+            raise
 
-    # Phase 1 fallback — always works without a DB
-    return {"items": generate_opportunities()}
+    # Phase 1 fallback — anonymous/optional mode only, works without a DB.
+    if not ctx.authenticated:
+        return {"items": generate_opportunities()}
+    return {"items": []}

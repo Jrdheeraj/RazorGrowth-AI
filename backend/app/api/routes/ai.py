@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from backend.app.api.deps import MerchantContext, operator_ctx, resolve_claimed_merchant
 from backend.app.core.config import get_settings
 from backend.app.db.session import get_db
 from backend.app.schemas.analysis import AnalysisResponse, AnalysisInsight, AnalysisToolCallSummary
@@ -146,9 +147,13 @@ def _state_to_response(state, merchant_id: uuid.UUID) -> AnalysisResponse:
 def analyze(
     request: AnalyzeRequest,
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(operator_ctx),
 ) -> AnalysisResponse:
     """
     Run an agentic growth analysis for a merchant.
+
+    Requires operator role or above. The merchant is the authenticated
+    caller's membership merchant; a body merchant_id must match it.
 
     The agent:
       1. Selects appropriate retrieval tools (max 3 steps)
@@ -160,10 +165,12 @@ def analyze(
 
     Returns:
       200 — analysis completed (or insufficient evidence)
+      401 — missing/invalid credentials
+      403 — insufficient role / cross-tenant access
       404 — merchant not found
       503 — LLM/embedding provider not configured
     """
-    merchant_id = _resolve_merchant(db, request.merchant_id)
+    merchant_id = resolve_claimed_merchant(ctx, request.merchant_id)
     llm = _get_llm()
     embedder = _get_embedder()
 
@@ -187,9 +194,13 @@ def analyze(
 def ingest(
     request: IngestRequest,
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(operator_ctx),
 ) -> IngestResponse:
     """
     Ingest production commerce data into the knowledge store.
+
+    Requires operator role or above; tenant-isolated to the caller's
+    membership merchant.
 
     Reads real records from Phase 2 production tables:
       merchants · products · customers · orders · payments
@@ -199,10 +210,12 @@ def ingest(
 
     Returns:
       200 — ingestion completed
+      401 — missing/invalid credentials
+      403 — insufficient role / cross-tenant access
       404 — merchant not found
       503 — embedding provider not configured
     """
-    merchant_id = _resolve_merchant(db, request.merchant_id)
+    merchant_id = resolve_claimed_merchant(ctx, request.merchant_id)
     embedder = _get_embedder()
 
     connector = ProductionDataConnector(db=db, embedding_provider=embedder)

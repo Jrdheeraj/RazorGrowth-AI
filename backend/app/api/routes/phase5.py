@@ -1,4 +1,9 @@
-"""Customer intelligence + simulation + experiment + memory + brief routes."""
+"""Customer intelligence + simulation + experiment + memory + brief routes.
+
+Phase 6: every endpoint is tenant-scoped to the authenticated caller's
+membership. Writes/refreshes require operator role or above; analyst is
+read-only.
+"""
 from __future__ import annotations
 
 import logging
@@ -6,9 +11,15 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import ValidationError as PydValidationError
 from sqlalchemy.orm import Session
 
+from backend.app.api.deps import (
+    MerchantContext,
+    merchant_ctx,
+    operator_ctx,
+    resolve_claimed_merchant,
+)
+from backend.app.core.roles import can_run_operations
 from backend.app.db.session import get_db
 from backend.app.schemas.phase5 import (
     ExperimentCreateRequest,
@@ -32,29 +43,10 @@ from backend.app.services.experiment_service import (
 from backend.app.services.memory import GrowthMemoryService
 from backend.app.services.simulation import (
     SimulationEngine,
-    SimulationEngine as _SimEngine,  # noqa: F401 (alias kept for clarity)
     SimulationValidationError,
 )
 
 log = logging.getLogger(__name__)
-
-# ── shared helpers ──────────────────────────────────────────────────────────
-
-
-def _resolve_merchant(db: Session, merchant_id: uuid.UUID | None) -> uuid.UUID:
-    if merchant_id is not None:
-        from backend.app.models.merchant import Merchant
-
-        if db.get(Merchant, merchant_id) is None:
-            raise HTTPException(status_code=404, detail="MERCHANT_NOT_FOUND")
-        return merchant_id
-    from backend.app.repositories.merchant import MerchantRepository
-
-    merchants = MerchantRepository(db).list_all(limit=1)
-    if not merchants:
-        raise HTTPException(status_code=404, detail="MERCHANT_NOT_FOUND")
-    return merchants[0].id
-
 
 insights_router = APIRouter(prefix="/customer-insights", tags=["customer-intelligence"])
 customer_insights_router = APIRouter(prefix="/customers", tags=["customer-intelligence"])
@@ -62,9 +54,6 @@ simulations_router = APIRouter(prefix="/simulations", tags=["simulations"])
 experiments_router = APIRouter(prefix="/experiments", tags=["experiments"])
 memory_router = APIRouter(prefix="/growth-memory", tags=["growth-memory"])
 brief_router = APIRouter(prefix="/growth-brief", tags=["growth-brief"])
-
-
-# ── customer insights ───────────────────────────────────────────────────────
 
 
 def _insight_out(i: Any) -> dict[str, Any]:
@@ -85,15 +74,22 @@ def _insight_out(i: Any) -> dict[str, Any]:
     }
 
 
+# ── customer insights ───────────────────────────────────────────────────────
+
+
 @insights_router.get("", response_model=CustomerInsightsResponse)
 def list_customer_insights(
-    merchant_id: uuid.UUID | None = None,
     segment: str | None = None,
     refresh: bool = False,
     limit: int = Query(default=200, ge=1, le=500),
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(merchant_ctx),
 ) -> Any:
-    mid = _resolve_merchant(db, merchant_id)
+    if refresh and ctx.authenticated and not (
+        ctx.membership and can_run_operations(ctx.membership.role)
+    ):
+        raise HTTPException(status_code=403, detail="INSUFFICIENT_ROLE")
+    mid = ctx.merchant_id
     if refresh:
         try:
             CustomerIntelligenceService(db).refresh(mid)
@@ -114,16 +110,18 @@ def list_customer_insights(
 @customer_insights_router.get("/{customer_id}/insights", response_model=CustomerInsightOut)
 def get_customer_insight(
     customer_id: str,
-    merchant_id: uuid.UUID | None = None,
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(merchant_ctx),
 ) -> Any:
-    mid = _resolve_merchant(db, merchant_id)
     try:
         cid = uuid.UUID(customer_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid customer_id format")
-    insight = CustomerIntelligenceService(db).get_customer_insight(mid, cid)
+    insight = CustomerIntelligenceService(db).get_customer_insight(
+        ctx.merchant_id, cid
+    )
     if insight is None:
+        # Cross-tenant customers are indistinguishable from nonexistent ones.
         raise HTTPException(status_code=404, detail="INSIGHT_NOT_FOUND")
     return _insight_out(insight)
 
@@ -133,16 +131,16 @@ def get_customer_insight(
 
 @simulations_router.get("", response_model=SimulationsResponse)
 def list_simulations(
-    merchant_id: uuid.UUID | None = None,
     scenario_type: str | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(merchant_ctx),
 ) -> Any:
     from sqlalchemy import select
 
     from backend.app.models.experiment import Simulation
 
-    mid = _resolve_merchant(db, merchant_id)
+    mid = ctx.merchant_id
     stmt = (
         select(Simulation)
         .where(Simulation.merchant_id == mid)
@@ -176,8 +174,13 @@ def list_simulations(
 
 
 @simulations_router.post("", response_model=SimulationOut, status_code=201)
-def create_simulation(request: SimulationRequest, db: Session = Depends(get_db)) -> Any:
-    mid = _resolve_merchant(db, request.merchant_id)
+def create_simulation(
+    request: SimulationRequest,
+    db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(operator_ctx),
+) -> Any:
+    """Create a what-if simulation (operator+). Tenant-isolated."""
+    mid = resolve_claimed_merchant(ctx, request.merchant_id)
     engine = SimulationEngine(db)
     kwargs: dict[str, Any] = {}
     if request.scenario_type == "discount":
@@ -237,10 +240,10 @@ def create_simulation(request: SimulationRequest, db: Session = Depends(get_db))
 
 @experiments_router.get("", response_model=ExperimentsResponse)
 def list_experiments(
-    merchant_id: uuid.UUID | None = None,
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(merchant_ctx),
 ) -> Any:
-    mid = _resolve_merchant(db, merchant_id)
+    mid = ctx.merchant_id
     svc = ExperimentService(db)
     out = []
     for exp in svc.list_experiments(mid):
@@ -275,9 +278,12 @@ def list_experiments(
 
 @experiments_router.post("", response_model=ExperimentOut, status_code=201)
 def create_experiment(
-    request: ExperimentCreateRequest, db: Session = Depends(get_db)
+    request: ExperimentCreateRequest,
+    db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(operator_ctx),
 ) -> Any:
-    mid = _resolve_merchant(db, request.merchant_id)
+    """Create an honest experiment (operator+). Tenant-isolated."""
+    mid = resolve_claimed_merchant(ctx, request.merchant_id)
     svc = ExperimentService(db)
     try:
         exp = svc.create_experiment(
@@ -308,13 +314,13 @@ def create_experiment(
 
 @memory_router.get("", response_model=GrowthMemoryResponse)
 def list_growth_memory(
-    merchant_id: uuid.UUID | None = None,
     query: str | None = Query(default=None, max_length=300),
     memory_type: str | None = None,
     k: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(merchant_ctx),
 ) -> Any:
-    mid = _resolve_merchant(db, merchant_id)
+    mid = ctx.merchant_id
     svc = GrowthMemoryService(db, embedding_provider=None)
     if query:
         hits = svc.retrieve(mid, query, k=k, memory_type=memory_type)
@@ -340,10 +346,9 @@ def list_growth_memory(
 
 @brief_router.get("", response_model=GrowthBriefResponse)
 def get_growth_brief(
-    merchant_id: uuid.UUID | None = None,
     window_days: int = Query(default=30, ge=1, le=365),
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(merchant_ctx),
 ) -> Any:
-    mid = _resolve_merchant(db, merchant_id)
-    brief = GrowthBriefService(db).build(mid, window_days=window_days)
+    brief = GrowthBriefService(db).build(ctx.merchant_id, window_days=window_days)
     return brief

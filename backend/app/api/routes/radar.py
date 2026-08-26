@@ -1,4 +1,8 @@
-"""Growth Radar + Ranked Opportunities routes — Phase 5."""
+"""Growth Radar + Ranked Opportunities routes — Phase 5.
+
+All endpoints are tenant-scoped to the authenticated caller's membership.
+Refresh operations mutate signal state and require operator role or above.
+"""
 from __future__ import annotations
 
 import uuid
@@ -7,12 +11,13 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from backend.app.api.deps import MerchantContext, merchant_ctx
+from backend.app.core.roles import can_run_operations
 from backend.app.db.session import get_db
 from backend.app.models.opportunity import GrowthOpportunity
 from backend.app.schemas.phase5 import (
     RadarResponse,
     RankedOpportunitiesResponse,
-    SignalOut,
 )
 from backend.app.services.radar import GrowthRadarService
 from backend.app.services.scoring import OpportunityScoringEngine
@@ -21,33 +26,23 @@ from sqlalchemy import select
 router = APIRouter(tags=["radar"])
 
 
-def _resolve_merchant(db: Session, merchant_id: uuid.UUID | None) -> uuid.UUID:
-    if merchant_id is not None:
-        from backend.app.models.merchant import Merchant
-
-        if db.get(Merchant, merchant_id) is None:
-            raise HTTPException(status_code=404, detail="MERCHANT_NOT_FOUND")
-        return merchant_id
-    from backend.app.repositories.merchant import MerchantRepository
-
-    merchants = MerchantRepository(db).list_all(limit=1)
-    if not merchants:
-        raise HTTPException(status_code=404, detail="MERCHANT_NOT_FOUND")
-    return merchants[0].id
-
-
 @router.get("/radar", response_model=RadarResponse)
 def get_radar(
-    merchant_id: uuid.UUID | None = None,
     window_days: int = Query(default=30, ge=1, le=365),
     refresh: bool = False,
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(merchant_ctx),
 ) -> Any:
     """
-    Growth Radar signals. Reads persisted active signals; with
-    ?refresh=true re-runs deterministic detection first.
+    Growth Radar signals for the caller's merchant. Reads persisted active
+    signals; ?refresh=true re-runs deterministic detection first and is
+    restricted to operator role and above.
     """
-    mid = _resolve_merchant(db, merchant_id)
+    if refresh and ctx.authenticated and not (
+        ctx.membership and can_run_operations(ctx.membership.role)
+    ):
+        raise HTTPException(status_code=403, detail="INSUFFICIENT_ROLE")
+    mid = ctx.merchant_id
     if refresh:
         try:
             GrowthRadarService(db).detect(mid, window_days=window_days)
@@ -81,16 +76,17 @@ def get_radar(
 
 @router.get("/opportunities/ranked", response_model=RankedOpportunitiesResponse)
 def get_ranked_opportunities(
-    merchant_id: uuid.UUID | None = None,
     limit: int = Query(default=10, ge=1, le=50),
     status: str = "pending_approval",
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(merchant_ctx),
 ) -> Any:
     """
     Deterministically ranked opportunities with full score breakdowns —
     the data behind 'Why did the AI rank this opportunity #1?'.
+    Strictly tenant-scoped to the authenticated membership.
     """
-    mid = _resolve_merchant(db, merchant_id)
+    mid = ctx.merchant_id
 
     stmt = (
         select(GrowthOpportunity)

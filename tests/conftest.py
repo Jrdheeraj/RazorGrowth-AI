@@ -17,8 +17,26 @@ All 16 Phase 1 tests pass because:
 """
 from __future__ import annotations
 
+import os
+
+# ---------------------------------------------------------------------------
+# Test-environment defaults (set BEFORE any backend import).
+# Real environment variables take precedence over .env in pydantic-settings.
+#
+# AUTH_MODE=optional preserves pre-Phase-6 behaviour for the legacy suites:
+# unauthenticated requests fall back to single-tenant development semantics.
+# The Phase 6 security suite explicitly switches to AUTH_MODE=required where
+# needed (see tests/test_auth_login.py fixtures).
+# Production deployments are unaffected: code default is AUTH_MODE=required
+# and validate_production_safety() refuses insecure production boots.
+# ---------------------------------------------------------------------------
+os.environ.setdefault("AUTH_MODE", "optional")
+os.environ.setdefault("AUTH_ENABLE_REGISTRATION", "true")
+os.environ.setdefault("AUTH_SECRET_KEY", "test-only-secret-key-do-not-use-in-production")
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+
 import pytest
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
 from starlette.testclient import TestClient
 

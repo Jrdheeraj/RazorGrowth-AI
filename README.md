@@ -6,10 +6,12 @@ RazorGrowth AI analyses merchant commerce data, detects revenue growth opportuni
 explains them with evidence-grounded reasoning, and enforces a human-approval gate before
 any money-touching action could ever execute — with a full audit trail on every step.
 
-> **Status:** active development (backend v0.3.0). Phase 5 Agentic Growth Intelligence is
-> implemented: specialised agents, growth radar, opportunity scoring, customer/churn
-> intelligence, what-if simulation, honest experiments, growth memory, explainability,
-> and the Agentic Growth Control Center dashboard. See [docs/PHASE_5.md](docs/PHASE_5.md).
+> **Status:** active development (backend v0.6.0). Phase 5 Agentic Growth Intelligence is
+> implemented (specialised agents, growth radar, scoring, simulation, memory). Phase 6
+> Authentication & Multi-Tenancy is implemented: JWT login, merchant-scoped roles,
+> tenant isolation on every endpoint, agent privilege hardening, a Razorpay test-mode
+> boundary with signed webhooks, security hardening middleware, and a full security
+> test suite. See [docs/PHASE_6.md](docs/PHASE_6.md).
 
 ---
 
@@ -36,6 +38,19 @@ any money-touching action could ever execute — with a full audit trail on ever
 - REST API for health, opportunities, merchants, products, customers, orders, payments.
 - Knowledge store (`knowledge_documents` / `knowledge_chunks`) with pgvector embeddings,
   SHA-256 checksum-based idempotent ingestion of production-table rows.
+- **Authentication & multi-tenancy (Phase 6):** JWT access tokens, scrypt password
+  hashing, user ↔ merchant memberships with `owner` / `admin` / `operator` / `analyst`
+  roles, and strict tenant isolation derived from the authenticated security context on
+  every merchant-scoped endpoint.
+- **Agent security:** capability model with forbidden capabilities
+  (`approve_action`, `execute_action`, `reject_action`, `bypass_guardrails`,
+  `direct_database_mutation`, `send_money`) — agents are never users and can never
+  authenticate.
+- **Razorpay boundary (Phase 6):** adapter abstraction with test-mode simulation,
+  honest disabled/live refusals, HMAC-SHA256 webhook signature validation, and a
+  production-wide execution kill switch.
+- **Security hardening:** configurable CORS/trusted hosts, rate limiting, secret-safe
+  log redaction, security headers, production fail-fast startup checks.
 - **Agentic RAG pipeline**: the LLM selects which read-only tool to call next, evidence is
   accumulated over a bounded loop (max 3 steps), sufficiency is evaluated, and a structured,
   schema-validated analysis is synthesised.
@@ -45,11 +60,7 @@ any money-touching action could ever execute — with a full audit trail on ever
 
 **Planned / scaffolded (not functional yet)**
 
-- Action execution after merchant approval (Phase 4+; guardrails currently never execute anything).
-- Approval endpoints — the frontend "Review & Approve" button is display-only today.
-- Campaign measurement pipeline (`campaigns.estimated_revenue` / `actual_revenue` columns exist; no measurement logic yet).
-- Authentication / multi-tenancy (merchant currently resolved from the first DB record when omitted).
-- Live Razorpay integration (`RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` are placeholders only).
+- Live Razorpay payment execution (test-mode simulation only; live client refuses honestly).
 
 ## Architecture
 
@@ -257,13 +268,22 @@ Key variables (see `.env.example` for the full annotated list):
 |---|---|
 | `APP_ENV` | `development` \| `testing` \| `production` |
 | `DATABASE_URL` | PostgreSQL connection string (default matches `docker-compose.yml`) |
+| `AUTH_MODE` | `required` (default, secure) \| `optional` (dev convenience — anonymous requests fall back to single-tenant legacy behaviour) |
+| `AUTH_SECRET_KEY` | **Secret.** JWT signing key; production requires ≥ 32 chars or the server refuses to start |
+| `AUTH_ACCESS_TOKEN_EXPIRE_MINUTES` | Access-token lifetime (default 60) |
+| `AUTH_ENABLE_REGISTRATION` | Allow public self-registration (default true) |
+| `PASSWORD_MIN_LENGTH` | Minimum password length (default 12; letters + digits enforced) |
+| `CORS_ORIGINS` / `TRUSTED_HOSTS` | Comma-separated CORS origins and trusted hosts |
+| `RATE_LIMIT_*` | Sliding-window rate limits (auth, webhook buckets) |
 | `LLM_PROVIDER` / `LLM_MODEL` | Currently `openai` / `gpt-4o-mini` |
 | `LLM_API_KEY` | **Secret.** Required for `/api/ai/*`; leave empty otherwise |
-| `LLM_REQUEST_TIMEOUT` / `LLM_MAX_RETRIES` / `LLM_MAX_TOKENS` | LLM call tuning |
 | `EMBEDDING_PROVIDER` / `EMBEDDING_MODEL` / `EMBEDDING_DIMENSIONS` | Currently `openai` / `text-embedding-3-small` / `1536` |
 | `GUARDRAIL_MAX_AMOUNT_INR` | Max allowed single-action amount (default 50000) |
 | `GUARDRAIL_REQUIRE_APPROVAL` | Always require human approval (default true) |
-| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | Placeholders — not used yet |
+| `EXECUTION_ENABLED` | Global execution switch (production blocks all execution when false — default) |
+| `RAZORPAY_ENABLED` / `RAZORPAY_TEST_MODE` | Razorpay boundary switches (both default false = disabled) |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | **Secrets.** Environment only, never logged, never returned by APIs |
+| `RAZORPAY_WEBHOOK_SECRET` | **Secret.** Webhook HMAC signing secret; endpoint fails closed without it |
 
 A minimal variant also exists at `backend/.env.example` (SQLite URL for quick local runs).
 
@@ -319,23 +339,37 @@ no PostgreSQL container required. AI-dependent tests mock/fake providers; see
 ## API
 
 All routes are prefixed with `/api`. Interactive docs at `/docs`.
+Every merchant-scoped route requires `Authorization: Bearer <token>` unless
+`AUTH_MODE=optional` (development convenience). See [docs/PHASE_6.md](docs/PHASE_6.md).
 
 | Method | Path | Description |
 |---|---|---|
 | GET | `/` | Service identity (name, status, version) |
-| GET | `/api/health` | Health check |
-| GET | `/api/opportunities` | Growth opportunities; DB-backed when seeded, falls back to the in-memory engine otherwise |
-| GET | `/api/merchants` | List merchants |
-| GET | `/api/products` | List products |
-| GET | `/api/customers` | List customers |
-| GET | `/api/orders` | List orders |
-| GET | `/api/payments` | List payments |
-| POST | `/api/ai/ingest` | Ingest production-table rows into the knowledge store as embedded documents (idempotent via checksums) |
-| POST | `/api/ai/analyze` | Run agentic growth analysis for a merchant; returns insights + tool-call trace + evidence summary |
+| GET | `/api/health` | Health check (public) |
+| POST | `/api/auth/register` | Create a user (toggleable; public) |
+| POST | `/api/auth/login` | Credential exchange → JWT (rate limited) |
+| GET | `/api/auth/me` | Current user + memberships (auth) |
+| GET | `/api/auth/merchants` | Merchants the caller can access (auth) |
+| GET/POST/PATCH/DELETE | `/api/auth/merchants/{id}/members…` | Membership administration (admin/owner) |
+| POST | `/api/webhooks/razorpay` | Razorpay webhook — HMAC signature validated, fails closed |
+| GET | `/api/opportunities` | Growth opportunities (tenant-scoped) |
+| GET | `/api/opportunities/ranked` | Deterministically ranked opportunities with score breakdowns |
+| GET | `/api/merchants` | Merchants visible to the caller |
+| GET | `/api/products` · `/api/customers` · `/api/orders` · `/api/payments` | Tenant-scoped entity lists |
+| POST | `/api/ai/ingest` | Knowledge-store ingestion (operator+) |
+| POST | `/api/ai/analyze` | Agentic growth analysis (operator+) |
+| GET | `/api/actions` · `/api/actions/{id}` · `/api/actions/{id}/audit` | Action reads (analyst+) |
+| POST | `/api/actions/{id}/approve` · `/reject` | **Human-only** approval/rejection (owner/admin) |
+| POST | `/api/actions/{id}/execute` | Execute approved action behind Guardrail #2 (operator+) |
+| GET | `/api/agents` · `/api/agents/runs` | Agent registry + run observability |
+| POST | `/api/agents/run` | Controlled orchestration — proposals only (operator+) |
+| GET | `/api/radar` · `/api/customer-insights` · `/api/customers/{id}/insights` | Phase 5 intelligence (read) |
+| GET/POST | `/api/simulations` · `/api/experiments` | What-if simulation & honest experiments (write: operator+) |
+| GET | `/api/growth-memory` · `/api/growth-brief` | Growth memory + daily brief |
 
-`POST /api/ai/analyze` and `POST /api/ai/ingest` accept an optional `merchant_id`;
-when omitted, the first merchant in the DB is used (single-tenant mode).
-Both return `503` if `LLM_API_KEY` is not configured, `404` if no merchant exists.
+Roles: **owner/admin** manage users and approve actions; **operator** runs
+operational workflows (agent runs, ingest, execution of approved actions);
+**analyst** is read-only. No role bypasses guardrails.
 
 ## Configuration
 
@@ -397,27 +431,48 @@ campaign strategist, simulation, experiments, growth memory, learning loop,
 deduplication, agent permissions, agent audit + observability, explainability,
 do-nothing baseline, Growth Control Center UI, daily brief.
 
+Phase 6 (implemented — see docs/PHASE_6.md): authentication, multi-tenancy,
+roles, protected Phase 3/4/5 APIs, agent security hardening, Razorpay test-mode
+boundary with signed webhooks, security hardening, security test suite, CI.
+
 Remaining candidate next steps:
 
-1. Authentication / authorization / multi-tenancy tokens across all APIs.
-2. Razorpay Test-Mode adapter for simulated-then-real payment verification; live execution stays behind explicit flags.
-3. CI pipeline running `pytest` and the frontend build; lint/type-check configs.
+1. Refresh-token rotation and password-reset flow (email delivery).
+2. Razorpay live execution behind explicit review + per-merchant execution policy.
+3. Frontend login/membership switcher wired to the new auth APIs.
 4. Vector index maintenance strategy and agent-quality evaluation harness.
+5. Distributed rate limiting / audit-log streaming for horizontal deployments.
 
 ## Security
 
+- **Authentication:** HS256 JWT access tokens with mandatory expiry; passwords hashed
+  with salted scrypt (RFC 7914) and verified in constant time; plaintext secrets are
+  never stored, logged, or returned.
+- **Tenant isolation:** the merchant identity of every request is derived from the
+  authenticated user's active memberships. Client-supplied merchant ids are accepted
+  only when they match a membership; cross-tenant access is rejected without disclosing
+  existence.
+- **Roles:** `owner` / `admin` / `operator` / `analyst` attached to memberships.
+  Approval and rejection are restricted to owner/admin; execution to operator+ — and
+  always behind Guardrail #2. No role bypasses guardrails. Agents hold no role and no
+  login path; a forged agent token fails closed at authentication.
+- **Agent permissions:** capability registry with forbidden capabilities
+  (`approve_action`, `execute_action`, `reject_action`, `bypass_guardrails`,
+  `direct_database_mutation`, `send_money`) enforced by construction and by tests.
+- **Razorpay boundary:** credentials come only from the environment; test mode is an
+  explicit opt-in simulated adapter; live execution refuses honestly until deliberately
+  implemented; webhooks require HMAC-SHA256 signature validation (fail closed when the
+  secret is not configured); production blocks ALL execution unless
+  `EXECUTION_ENABLED=true`.
+- **Hardening:** configurable CORS + trusted hosts, sliding-window rate limiting on
+  credential/webhook endpoints, security headers on every response, secret-redacting
+  log filter, generic error payloads without stack traces, and production fail-fast
+  startup validation.
 - All secrets are supplied via environment variables; `.env` is git-ignored while
-  `.env.example` templates remain tracked.
-- Agent tools are **read-only** — there is no code path today that creates payments,
-  refunds, links, orders, or campaigns.
-- Every proposed monetary action passes the guardrail chain and ends as
-  `requires_approval` or `rejected`; nothing auto-executes.
-- Immutable `audit_events` record analysis and ingestion lifecycles; the audit writer
-  deliberately excludes API keys, passwords, customer PII, and raw LLM reasoning.
-- Centralised error handling returns generic client-safe messages; full context is
-  logged server-side only.
-- No authentication/authorization exists yet — the API is currently suitable for local
-  development and testing only. Do not expose it publicly.
+  `.env.example` templates remain tracked. A CI secret scan guards against accidental
+  commits.
+
+Full details: [docs/PHASE_6.md](docs/PHASE_6.md).
 
 ## Contributing
 

@@ -34,6 +34,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.core.config import get_settings
 from backend.app.models.enums import AgentActionType, AgentActionStatus, ActorType, AuditEventType
 from backend.app.models.agent_action import AgentAction
 from backend.app.models.audit_event import AuditEvent
@@ -395,6 +396,25 @@ def execute_action(
         return ExecutorResult(
             success=False,
             error=f"INVALID_ACTION_STATE: action is '{_enum_value(action.status)}', expected 'approved'",
+        )
+
+    # ─── Environment kill-switch (Phase 6 defence in depth) ──────────────
+    # In production nothing may execute unless EXECUTION_ENABLED was
+    # explicitly set. No role, token, or approval can bypass this.
+    settings = get_settings()
+    if settings.is_production and not settings.EXECUTION_ENABLED:
+        log.warning(
+            "Execution refused — EXECUTION_ENABLED=false in production. "
+            "id=%s merchant=%s",
+            str(action.id), action.merchant_id,
+        )
+        return ExecutorResult(
+            success=False,
+            error="EXECUTION_DISABLED_BY_ENVIRONMENT",
+            result_metadata={
+                "note": "Execution is disabled by environment configuration "
+                "(EXECUTION_ENABLED=false in production).",
+            },
         )
 
     # ─── Double guardrail: re-evaluate immediately before execution ──────

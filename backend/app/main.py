@@ -9,11 +9,14 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 
 from backend.app.core.config import get_settings
 from backend.app.core.logging import configure_logging, get_logger
 from backend.app.core.errors import unhandled_exception_handler
+from backend.app.core.middleware import SecurityHeadersMiddleware, validate_production_safety
 
 log = get_logger(__name__)
 
@@ -23,7 +26,19 @@ async def lifespan(app: FastAPI):
     """Initialise the database connection pool at startup."""
     settings = get_settings()
     configure_logging("DEBUG" if settings.APP_ENV == "development" else "INFO")
-    log.info("Starting RazorGrowth AI [%s]", settings.APP_ENV)
+    from backend.app.core.logfilter import install_secret_redaction
+
+    install_secret_redaction()
+    validate_production_safety()
+
+    log.info(
+        "Starting RazorGrowth AI [%s] auth_mode=%s execution=%s razorpay=%s",
+        settings.APP_ENV,
+        settings.AUTH_MODE,
+        "enabled" if settings.EXECUTION_ENABLED else "disabled",
+        "test" if settings.RAZORPAY_TEST_MODE and settings.RAZORPAY_ENABLED
+        else ("enabled" if settings.RAZORPAY_ENABLED else "disabled"),
+    )
 
     from backend.app.db.engine import build_engine
     from backend.app.db.session import init_db
@@ -38,11 +53,41 @@ async def lifespan(app: FastAPI):
     log.info("Shutting down.")
 
 
-app = FastAPI(
-    title="RazorGrowth AI",
-    version="0.2.0",
-    description="AI Growth & Agentic Commerce platform for Razorpay merchants.",
-    lifespan=lifespan,
+def _build_app() -> FastAPI:
+    settings = get_settings()
+    return FastAPI(
+        title="RazorGrowth AI",
+        version="0.6.0",
+        description=(
+            "AI Growth & Agentic Commerce platform for Razorpay merchants. "
+            "Authenticated, tenant-isolated, human-in-the-loop."
+        ),
+        lifespan=lifespan,
+        # Interactive docs are disabled in production by default (ENABLE_DOCS).
+        docs_url="/docs" if settings.docs_enabled else None,
+        redoc_url=None,
+        openapi_url="/openapi.json" if settings.docs_enabled else None,
+    )
+
+
+app = _build_app()
+
+# ------------------------------------------------------------------ #
+# HTTP hardening (order matters: outermost first)
+# ------------------------------------------------------------------ #
+app.add_middleware(SecurityHeadersMiddleware)
+
+_settings = get_settings()
+if _settings.trusted_host_list and _settings.trusted_host_list != ["*"]:
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=_settings.trusted_host_list)
+
+_cors_origins = _settings.cors_origin_list
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=bool(_cors_origins),
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # ------------------------------------------------------------------ #
@@ -68,6 +113,9 @@ from backend.app.api.routes.phase5 import (
     memory_router,
     brief_router,
 )
+# Phase 6 — Authentication & security
+from backend.app.api.routes.auth import router as auth_router
+from backend.app.api.routes.webhooks import router as webhooks_router
 
 app.include_router(health_router, prefix="/api")
 app.include_router(opportunities_router, prefix="/api")
@@ -87,6 +135,9 @@ app.include_router(simulations_router, prefix="/api")
 app.include_router(experiments_router, prefix="/api")
 app.include_router(memory_router, prefix="/api")
 app.include_router(brief_router, prefix="/api")
+# Phase 6 routes
+app.include_router(auth_router, prefix="/api")
+app.include_router(webhooks_router, prefix="/api")
 
 
 @app.get("/")
