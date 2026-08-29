@@ -108,3 +108,5 @@ $RECYCLE.BIN/
 
 # TypeScript incremental build artifacts
 tsconfig.tsbuildinfo
+
+frontend/.edge-hiw-profile/
