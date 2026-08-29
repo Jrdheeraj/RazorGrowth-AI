@@ -1,0 +1,283 @@
+/* ==========================================================================
+   SHARED WORKSPACE — Workspace visualization + Architecture principles
+   ========================================================================== */
+
+.shared-workspace__layout {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 26px;
+  align-items: start;
+}
+
+.workspace-visual-win {
+  min-height: 580px;
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.workspace-header__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workspace-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  flex: 1;
+}
+
+.workspace-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.workspace-agent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.workspace-agent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  background: var(--paper-bright);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.workspace-agent:hover {
+  border-color: var(--line);
+  box-shadow: var(--shadow-float-card);
+}
+
+.workspace-agent--working {
+  border-color: rgba(169, 79, 56, 0.4);
+  background: var(--coral-wash);
+}
+
+.workspace-agent--human {
+  border-color: rgba(169, 79, 56, 0.4);
+  background: var(--coral-wash);
+}
+
+.workspace-agent__main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.workspace-agent__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.workspace-agent__name {
+  font-size: var(--text-small);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.workspace-agent__role {
+  font-size: var(--text-meta);
+  color: var(--ink-faint);
+}
+
+.workspace-agent__side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+  min-width: 140px;
+}
+
+.workspace-agent__activity {
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Shared context grid */
+.shared-context-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.shared-context-section {
+  background: var(--paper-bright);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  padding: 14px;
+}
+
+.shared-context-section__label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-weight: 500;
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--coral-deep);
+  margin-bottom: 10px;
+}
+
+.shared-context-section__items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 16px;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+/* Principles panel */
+.workspace-principles-win {
+  min-height: 580px;
+  display: flex;
+  flex-direction: column;
+}
+
+.principles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+}
+
+.principle-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  background: var(--paper-bright);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.principle-card:hover {
+  border-color: var(--line);
+  box-shadow: var(--shadow-float-card);
+}
+
+.principle-card--highlight {
+  border-color: rgba(169, 79, 56, 0.4);
+  background: var(--coral-wash);
+}
+
+.principle-card__header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.principle-card__num {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-weight: 500;
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--coral-deep);
+  background: var(--coral-wash);
+  border: 1px solid rgba(169, 79, 56, 0.3);
+  border-radius: var(--radius-control);
+  padding: 4px 10px;
+}
+
+.principle-card__title {
+  font-size: var(--text-title);
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.principle-card__desc {
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .shared-workspace__layout {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-visual-win,
+  .workspace-principles-win {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .workspace-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .workspace-agent {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .workspace-agent__side {
+    width: 100%;
+    align-items: flex-start;
+  }
+
+  .workspace-agent__activity {
+    text-align: left;
+  }
+
+  .shared-context-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .principle-card {
+    padding: 16px;
+  }
+}

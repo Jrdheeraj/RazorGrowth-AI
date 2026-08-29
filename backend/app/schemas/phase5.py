@@ -33,11 +33,12 @@ class AgentsListResponse(BaseModel):
 
 
 class AgentRunRequest(BaseModel):
-    goal: str | None = Field(default=None, max_length=500)
-    mode: str = Field(default="fast", description="'fast' or 'deep'")
+    objective: str | None = Field(default=None, max_length=500)
+    mode: str = Field(default="fast", description="'fast', 'deep', or 'growth_team'")
     window_days: int = Field(default=30, ge=1, le=365)
     merchant_id: uuid.UUID | None = None
     propose_actions: bool = True
+    params: dict[str, Any] | None = None
 
 
 class AgentRunSummary(BaseModel):

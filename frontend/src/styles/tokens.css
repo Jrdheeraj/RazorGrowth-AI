@@ -1,0 +1,99 @@
+/* ==========================================================================
+   RazorGrowth AI — design tokens
+   Single source of truth for the warm editorial / retro-computing system.
+   ========================================================================== */
+
+:root {
+  /* ── Paper (light surfaces) ──────────────────────────────────────────── */
+  --paper: #f7ebd7;            /* primary warm cream background            */
+  --paper-bright: #fff3df;     /* raised panels / hero paper               */
+  --paper-deep: #f5e6cf;       /* recessed strips, table heads, hovers     */
+  --paper-dim: #efe0c8;        /* pressed / disabled fills                 */
+
+  /* ── Chocolate (dark surfaces & text) ───────────────────────────────── */
+  --choc-900: #21130e;         /* deepest brown — window title bars, footer */
+  --choc-800: #301b12;         /* dark surfaces                            */
+  --choc-700: #3a2117;         /* elevated dark surfaces                   */
+  --ink: #2a1810;              /* primary text — never pure black          */
+  --ink-soft: #5b4232;         /* secondary text on paper                  */
+  --ink-faint: #8a6f5c;        /* tertiary / metadata on paper             */
+  --cream-text: #f7ebd7;       /* text on dark surfaces                    */
+  --cream-muted: #cdb49a;      /* secondary text on dark surfaces          */
+
+  /* ── Coral (accent) ─────────────────────────────────────────────────── */
+  --coral: #d97757;
+  --coral-strong: #c85f43;
+  --coral-deep: #a94f38;
+  --coral-wash: rgba(217, 119, 87, 0.14);
+
+  /* ── Muted green (success / online / active) ────────────────────────── */
+  --green: #70b88a;
+  --green-deep: #3e7d58;
+  --green-wash: rgba(112, 184, 138, 0.16);
+
+  /* ── Deep navy (selected dark storytelling sections) ────────────────── */
+  --navy-900: #10182b;
+  --navy-800: #121a2e;
+
+  /* ── White ──────────────────────────────────────────────────────────── */
+  --white: #ffffff;
+
+  /* ── Lines ──────────────────────────────────────────────────────────── */
+  --line: #2a1810;                        /* hard thin border               */
+  --line-strong: #1c0f0a;
+  --line-soft: rgba(42, 24, 16, 0.28);    /* dividers on paper              */
+  --line-on-dark: rgba(247, 235, 215, 0.22);
+  --line-on-dark-soft: rgba(247, 235, 215, 0.12);
+
+  /* ── Typography ─────────────────────────────────────────────────────── */
+  --font-display: "Archivo Variable", "Archivo", "Helvetica Neue", Arial,
+    sans-serif;
+  --font-body: var(--font-display);
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
+
+  /* Display scale — heavy, compact, editorial */
+  --text-display-xl: clamp(2.6rem, 6.4vw, 4.9rem);   /* hero statements     */
+  --text-display-lg: clamp(2.1rem, 4.6vw, 3.4rem);   /* section headlines   */
+  --text-display-md: clamp(1.45rem, 2.6vw, 2rem);    /* panel headlines     */
+  --text-title: 1.15rem;                              /* card titles        */
+  --text-body: 0.98rem;
+  --text-small: 0.86rem;
+  --text-meta: 0.72rem;                               /* mono labels        */
+
+  --leading-display: 0.96;      /* tight editorial line-height              */
+  --leading-body: 1.62;
+  --tracking-display: -0.025em;
+  --tracking-meta: 0.14em;      /* generous mono letter-spacing             */
+
+  /* ── Shape ──────────────────────────────────────────────────────────── */
+  --radius-window: 3px;         /* square or only very subtle rounding      */
+  --radius-control: 2px;
+
+  /* ── Elevation — restrained, print-like offset shadows ──────────────── */
+  --shadow-window: 7px 7px 0 rgba(33, 19, 14, 0.10);
+  --shadow-window-lift: 9px 9px 0 rgba(33, 19, 14, 0.14);
+  --shadow-float-card: 5px 5px 0 rgba(33, 19, 14, 0.10);
+  --shadow-button: 3px 3px 0 rgba(33, 19, 14, 0.18);
+  --shadow-button-hover: 4px 4px 0 rgba(33, 19, 14, 0.22);
+
+  /* ── Layout ─────────────────────────────────────────────────────────── */
+  --shell-max: 1200px;
+  --gutter: clamp(16px, 4vw, 40px);
+  --section-gap: clamp(56px, 9vw, 120px);
+  --header-height: 64px;
+
+  /* ── Motion ─────────────────────────────────────────────────────────── */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 140ms;
+  --dur-med: 260ms;
+
+  /* ── Z-index ────────────────────────────────────────────────────────── */
+  --z-header: 40;
+  --z-mobile-menu: 39;
+}
+
+/* Dark section context — applied via .theme-dark wrapper */
+.theme-dark {
+  --line: var(--line-on-dark);
+}

@@ -1,0 +1,194 @@
+/* ==========================================================================
+   RAZORGROWTH LIVING WORLD v3.1
+   A calm, cinematic merchant street. Geometry is spatially stable;
+   scroll drives TIME (atmosphere) only.
+   Content sits on SOLID printed-paper sheets — no translucency,
+   no backdrop blur, no frosted veils.
+   ========================================================================== */
+
+.world-env {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Page scaffolding: keep the content column clearly above the fixed world. */
+.world-page   { position: relative; }
+.world-column {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: clamp(28px, 5vw, 64px);
+  padding: clamp(28px, 5vw, 64px) clamp(10px, 2.5vw, 28px) 0;
+}
+
+/* Pre-JS defaults — a valid calm morning world on first paint. */
+:root {
+  --sky-t: #F4DDB6; --sky-m: #F5CC9E; --sky-l: #F0BC92;
+  --sun-x: 24%; --sun-y: 58%; --sun-o: 0.9;
+  --moon-o: 0.12; --stars: 0.05;
+  --city-c: #C99A76;
+  --daylight: 0.85; --lamps: 0.3;
+  --walk-a: #EBD9AE; --walk-b: #DEC79A;
+  --road-a: #8C7A66; --road-b: #77675A;
+  --grass-a: #7BA57F; --grass-b: #587F5E;
+  --cloud-c: #FFF3DF; --cloud-c2: #F7E7C8;
+  --stock: 0; --stock-extra: 0; --store-open: 1;
+  --par-city: 0; --par-street: 0; --par-front: 0;
+}
+
+.env-stack,
+.env-layer {
+  position: absolute;
+  inset: 0;
+}
+
+/* ── Sky ──────────────────────────────────────────────────────────────── */
+.env-sky {
+  background: linear-gradient(
+    180deg,
+    var(--sky-t) 0%,
+    var(--sky-m) 46%,
+    var(--sky-l) 100%
+  );
+}
+
+/* ── Parallax — deliberately minimal. Depth you feel, not notice. ────── */
+.env-city      { transform: translate3d(0, calc(var(--par-city)   * var(--par-scale) * -10px), 0); }
+.env-district,
+.env-street,
+.env-commerce,
+.env-delivery  { transform: translate3d(0, calc(var(--par-street) * var(--par-scale) * -14px), 0); }
+.env-foreground{ transform: translate3d(0, calc(var(--par-front)  * var(--par-scale) * -24px), 0); }
+
+:root { --par-scale: 1; }
+@media (max-width: 900px) { :root { --par-scale: 0.5; } }
+@media (prefers-reduced-motion: reduce) { :root { --par-scale: 0; } }
+
+/* ── Sun & moon ───────────────────────────────────────────────────────── */
+.env-celestial .env-sun,
+.env-celestial .env-sun-halo,
+.env-celestial .env-moon {
+  position: absolute;
+  left: var(--sun-x);
+  top: var(--sun-y);
+  border-radius: 50%;
+  margin-left: calc(clamp(76px, 8vw, 112px) / -2);
+  margin-top: calc(clamp(76px, 8vw, 112px) / -2);
+}
+
+.env-sun-halo {
+  width: clamp(180px, 21vw, 300px);
+  height: clamp(180px, 21vw, 300px);
+  background: #EEB98C;
+  opacity: calc(var(--sun-o) * 0.28);
+}
+
+.env-sun {
+  width: clamp(76px, 8vw, 112px);
+  height: clamp(76px, 8vw, 112px);
+  background: #E8936B;
+  opacity: var(--sun-o);
+  box-shadow: inset -9px -11px 0 rgba(255, 226, 178, 0.5);
+}
+
+.env-moon {
+  width: clamp(42px, 4.2vw, 58px);
+  height: clamp(42px, 4.2vw, 58px);
+  background: transparent;
+  box-shadow: -13px 8px 0 0 #F1E6C8;
+  opacity: var(--moon-o);
+}
+
+/* ── Clouds ───────────────────────────────────────────────────────────── */
+.env-clouds { opacity: calc(0.55 + var(--daylight) * 0.35); }
+
+.drift { animation: cloud-drift 96s ease-in-out infinite alternate; }
+
+@keyframes cloud-drift {
+  from { transform: translateX(-22px); }
+  to   { transform: translateX(26px); }
+}
+
+/* ── Stars ────────────────────────────────────────────────────────────── */
+.tw { animation: twinkle 3.6s ease-in-out infinite alternate; }
+
+@keyframes twinkle {
+  from { opacity: 1; }
+  to   { opacity: 0.35; }
+}
+
+/* ── Store lights warm up; a couple flicker briefly at night ─────────── */
+.win-glow { transition: opacity 0.5s linear; }
+
+.win-flicker { animation: win-flicker-simple 7s ease-in-out infinite; }
+
+@keyframes win-flicker-simple {
+  0%, 84%, 100% { opacity: inherit; }
+  88%, 93% { opacity: 0.25; }
+}
+
+/* leaves sway almost imperceptibly */
+.leaf-sway { transform-box: fill-box; transform-origin: bottom center;
+  animation: leaf-sway 7s ease-in-out infinite alternate; }
+@keyframes leaf-sway {
+  from { transform: rotate(-0.8deg); }
+  to   { transform: rotate(0.8deg); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   READABILITY — solid printed-paper sheets.
+   Each content section sits on an opaque cream card with clean edges,
+   like an editorial plate laid over the illustration. The world remains
+   visible around and BETWEEN the sheets. No blur, no translucency.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.readable {
+  --sheet-pad: clamp(20px, 4vw, 52px);
+  position: relative;
+  width: min(100%, calc(var(--shell-max) + 2 * var(--sheet-pad)));
+  margin-inline: auto;
+  padding: clamp(24px, 4vw, 48px) var(--sheet-pad);
+  background: var(--paper);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  box-shadow: 6px 6px 0 rgba(33, 19, 14, 0.08);
+}
+
+/* Remove top border from the first readable section that directly follows the hero to eliminate the harsh visual separation */
+.hero + .world-column > .readable:first-child,
+.audience-hero + .world-column > .readable:first-child {
+  border-top-color: transparent;
+  box-shadow: 6px 0 0 rgba(33, 19, 14, 0.08), 6px 6px 0 rgba(33, 19, 14, 0.08);
+}
+
+.readable > * { position: relative; z-index: 1; }
+
+/* headings become small editorial title-cards on the sheet */
+.readable .page-hero {
+  display: inline-block;
+  background: var(--paper-bright);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  box-shadow: 5px 5px 0 rgba(33, 19, 14, 0.12);
+  padding: 18px 26px;
+}
+
+/* mobile: tighter margins, sheets keep their solid ground */
+@media (max-width: 768px) {
+  :root { --par-scale: 0.4; }
+
+  .world-column {
+    gap: 20px;
+    padding: 20px 8px 0;
+  }
+
+  .readable {
+    --sheet-pad: 16px;
+    box-shadow: 4px 4px 0 rgba(33, 19, 14, 0.08);
+  }
+
+  .env-district { opacity: 0.85; }
+}

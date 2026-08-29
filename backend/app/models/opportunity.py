@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     CheckConstraint,
+    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -45,7 +46,9 @@ class GrowthOpportunity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         String(100), nullable=True, index=True
     )
     type: Mapped[OpportunityType] = mapped_column(
-        String(40), nullable=False, index=True
+        Enum(OpportunityType, native_enum=False, validate_strings=True),
+        nullable=False,
+        index=True,
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -57,7 +60,7 @@ class GrowthOpportunity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # JSON list of reasoning strings / structured objects
     reasoning: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     status: Mapped[OpportunityStatus] = mapped_column(
-        String(30),
+        Enum(OpportunityStatus, native_enum=False, validate_strings=True),
         nullable=False,
         default=OpportunityStatus.pending_approval,
         server_default=OpportunityStatus.pending_approval.value,

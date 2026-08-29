@@ -1,0 +1,293 @@
+/* ==========================================================================
+   HOME WHO IT'S FOR - compact audience selector
+   ========================================================================== */
+
+.home-whoitsfor__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
+  gap: 18px;
+  width: 100%;
+  margin-top: 28px;
+}
+
+.who-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  flex-direction: column;
+  padding: 18px;
+  overflow: hidden;
+  background: var(--paper-bright);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  box-shadow: var(--shadow-float-card);
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    opacity var(--dur-med) var(--ease-out);
+}
+
+.who-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 2px;
+  background: var(--coral-deep);
+  opacity: 0.72;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--dur-med) var(--ease-out);
+}
+
+.who-card:hover {
+  border-color: rgba(169, 79, 56, 0.62);
+  box-shadow: var(--shadow-window);
+  transform: translateY(-2px);
+}
+
+.who-card:hover::before {
+  transform: scaleX(1);
+}
+
+.reveal.is-visible .who-card {
+  opacity: 1;
+  transform: none;
+}
+
+.reveal.is-visible .who-card:hover {
+  transform: translateY(-2px);
+}
+
+.who-card__eyebrow {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+  color: var(--ink-faint);
+  text-transform: lowercase;
+  overflow-wrap: anywhere;
+}
+
+.who-card__divider {
+  width: 100%;
+  height: 1px;
+  margin: 10px 0 13px;
+  background: linear-gradient(
+    90deg,
+    rgba(169, 79, 56, 0.48) 0,
+    rgba(42, 24, 16, 0.18) 36%,
+    rgba(42, 24, 16, 0.08) 100%
+  );
+}
+
+.who-card__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  margin-bottom: 10px;
+}
+
+.who-card__number {
+  flex: 0 0 auto;
+  padding-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  color: var(--coral-deep);
+}
+
+.who-card__title {
+  min-width: 0;
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(1rem, 1.1vw, 1.15rem);
+  font-weight: 820;
+  letter-spacing: 0;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.who-card__primary {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.93rem;
+  font-weight: 650;
+  line-height: 1.42;
+}
+
+.who-card__support {
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+  font-size: var(--text-small);
+  line-height: 1.52;
+}
+
+.who-card__activity {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 15px;
+  padding-top: 3px;
+  border-top: 1px solid rgba(42, 24, 16, 0.16);
+}
+
+.who-activity {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 9px 0;
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.who-activity + .who-activity {
+  border-top: 1px solid rgba(42, 24, 16, 0.12);
+}
+
+.who-activity .status-dot {
+  margin-top: 5px;
+}
+
+.who-activity__copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.who-activity__label {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  line-height: 1.18;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+
+.who-activity__text {
+  color: var(--ink);
+  font-size: 0.82rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.who-card:hover .who-activity {
+  color: var(--ink);
+}
+
+.who-card:hover .who-activity:nth-child(2) {
+  transform: translateX(2px);
+}
+
+.who-card__cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 38px;
+  margin-top: auto;
+  padding: 10px 12px;
+  color: var(--choc-900);
+  background: var(--coral);
+  border: 1px solid var(--coral-deep);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-button);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  line-height: 1.1;
+  text-align: left;
+  text-transform: uppercase;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.who-card__cta span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.who-card__cta-arrow {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  letter-spacing: 0;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.who-card__cta:hover {
+  background: var(--coral-strong);
+  border-color: var(--coral-strong);
+  box-shadow: var(--shadow-button-hover);
+  transform: translate(-1px, -1px);
+}
+
+.who-card__cta:hover .who-card__cta-arrow {
+  transform: translateX(3px);
+}
+
+.who-card__cta:active {
+  box-shadow: var(--shadow-button);
+  transform: translate(1px, 1px);
+}
+
+@media (max-width: 1100px) {
+  .home-whoitsfor__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+  }
+
+  .who-card {
+    padding: 20px;
+  }
+
+  .who-card__activity {
+    margin-top: 16px;
+  }
+}
+
+@media (max-width: 700px) {
+  .home-whoitsfor__grid {
+    grid-template-columns: 1fr;
+    grid-auto-rows: auto;
+    gap: 16px;
+    margin-top: 24px;
+  }
+
+  .who-card {
+    height: auto;
+  }
+}
+
+@media (max-width: 375px) {
+  .who-card {
+    padding: 17px;
+  }
+
+  .who-card__header {
+    gap: 8px;
+  }
+
+  .who-card__cta {
+    font-size: 0.62rem;
+  }
+}

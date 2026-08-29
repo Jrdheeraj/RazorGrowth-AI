@@ -158,6 +158,35 @@ class TestAgentPermissions:
             assert "approve_action" not in entry["permissions"]
             assert "execute_action" not in entry["permissions"]
 
+    def test_catalog_has_all_13_agents(self):
+        """Verify all 13 agents (8 domain + 5 main) are in catalog."""
+        catalog = agent_catalog()
+        assert len(catalog) == 13
+        names = {entry["name"] for entry in catalog}
+        # 8 domain specialists
+        assert "GrowthDiscoveryAgent" in names
+        assert "CustomerIntelligenceAgent" in names
+        assert "RevenueOptimizationAgent" in names
+        assert "CampaignStrategistAgent" in names
+        assert "PaymentRecoveryAgent" in names
+        assert "OpportunityPrioritizationAgent" in names
+        assert "ExperimentAgent" in names
+        assert "GrowthMemoryAgent" in names
+        # 5 main growth team
+        assert "ManagerAgent" in names
+        assert "MarketingAgent" in names
+        assert "ProductAgent" in names
+        assert "DesignerAgent" in names
+        assert "SoftwareAgent" in names
+
+    def test_catalog_categories_correct(self):
+        """Verify agent categories are correctly assigned."""
+        catalog = agent_catalog()
+        main_team = [e for e in catalog if e["category"] == "main_growth_team"]
+        domain = [e for e in catalog if e["category"] == "domain_specialist"]
+        assert len(main_team) == 5
+        assert len(domain) == 8
+
     def test_assert_permission_blocks_unauthorised(self):
         with pytest.raises(AgentPermissionError):
             assert_permission("OpportunityPrioritizationAgent", "propose_action")

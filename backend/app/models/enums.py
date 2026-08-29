@@ -144,6 +144,30 @@ class ApprovalStatus(str, enum.Enum):
     expired = "expired"
 
 
+class RecommendationStatus(str, enum.Enum):
+    draft = "draft"
+    pending_approval = "pending_approval"
+    changes_requested = "changes_requested"
+    approved = "approved"
+    rejected = "rejected"
+    executing = "executing"
+    completed = "completed"
+    failed = "failed"
+
+
+class RecommendationType(str, enum.Enum):
+    upsell = "upsell"
+    cross_sell = "cross_sell"
+    win_back = "win_back"
+    retention = "retention"
+    campaign = "campaign"
+    discount = "discount"
+    checkout_optimization = "checkout_optimization"
+    failed_payment_recovery = "failed_payment_recovery"
+    product_affinity = "product_affinity"
+    segment_expansion = "segment_expansion"
+
+
 class RiskLevel(str, enum.Enum):
     low = "low"
     medium = "medium"
@@ -229,6 +253,42 @@ class ExperimentStatus(str, enum.Enum):
     completed = "completed"
     measurement_pending = "measurement_pending"
     cancelled = "cancelled"
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Phase 7 — AI Growth Team & Agent Debate
+# ────────────────────────────────────────────────────────────────────────────
+
+
+class AgentSpecialty(str, enum.Enum):
+    manager = "manager"
+    marketing = "marketing"
+    product = "product"
+    designer = "designer"
+    software = "software"
+
+
+class DebateStatus(str, enum.Enum):
+    initiated = "initiated"
+    investigating = "investigating"
+    debating = "debating"
+    synthesizing = "synthesizing"
+    concluded = "concluded"
+    failed = "failed"
+
+
+class FindingType(str, enum.Enum):
+    supporting = "supporting"
+    opposing = "opposing"
+    neutral = "neutral"
+    uncertainty = "uncertainty"
+
+
+class TaskStatus(str, enum.Enum):
+    assigned = "assigned"
+    in_progress = "in_progress"
+    completed = "completed"
+    failed = "failed"
 
 
 # ────────────────────────────────────────────────────────────────────────────

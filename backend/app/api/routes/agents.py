@@ -144,8 +144,8 @@ def run_agents(
     Produces opportunities/signals/proposals only. Nothing executes and
     nothing is approved without a human owner/admin (Phase 4 invariants).
     """
-    if request.mode not in ("fast", "deep"):
-        raise HTTPException(status_code=422, detail="mode must be 'fast' or 'deep'")
+    if request.mode not in ("fast", "deep", "growth_team"):
+        raise HTTPException(status_code=422, detail="mode must be 'fast', 'deep', or 'growth_team'")
     merchant_id = resolve_claimed_merchant(ctx, request.merchant_id)
 
     settings = get_settings()
@@ -179,7 +179,11 @@ def run_agents(
     params = {
         "window_days": request.window_days,
         "propose_retry_action": request.propose_actions,
+        "objective": request.objective,
     }
+    # Merge any additional params from the request body
+    if request.params:
+        params.update(request.params)
     try:
         summary = orchestrator.run(merchant_id, mode=request.mode, params=params)
     except MerchantNotFoundError:

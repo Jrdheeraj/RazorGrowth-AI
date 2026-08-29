@@ -50,6 +50,9 @@ class AgentRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     tools_used: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     opportunities_created: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     actions_proposed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    insights_generated: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    signals_detected: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    experiments_proposed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     errors: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
 
     # Observability latency metrics (milliseconds)

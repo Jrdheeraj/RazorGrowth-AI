@@ -1,0 +1,87 @@
+/* ==========================================================================
+   AGENTS — Team roster with robust card layout
+   ========================================================================== */
+
+.agents-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  margin-top: 26px;
+}
+
+.agent-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agent-card .window__body {
+  padding: clamp(18px, 3vw, 28px);
+}
+
+.agent-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.agent-card__name {
+  font-size: var(--text-title);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 6px 0 0;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-card__line {
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: 1.55;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.agent-card__meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0;
+  white-space: nowrap;
+}
+
+/* Mobile adjustments */
+@media (max-width: 480px) {
+  .agents-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .agent-card .window__titlebar {
+    padding: 8px 10px;
+  }
+
+  .agent-card .window__filename {
+    font-size: 0.65rem;
+    padding-left: 4px;
+  }
+
+  .agent-card__header {
+    gap: 8px;
+  }
+
+  .agent-card__name {
+    font-size: var(--text-small);
+  }
+}

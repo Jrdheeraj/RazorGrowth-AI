@@ -9,9 +9,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "axios": "^1.7.9",
+    "@fontsource-variable/archivo": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.18.2"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

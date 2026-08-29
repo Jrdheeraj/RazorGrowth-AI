@@ -44,6 +44,7 @@ class AgentPermissionError(PermissionError):
 
 
 AGENT_PERMISSIONS: dict[str, frozenset[str]] = {
+    # ── Domain Specialist Agents (existing) ─────────────────────────────────
     "GrowthDiscoveryAgent": frozenset(
         {
             READ_MERCHANT, READ_CUSTOMERS, READ_ORDERS,
@@ -65,6 +66,23 @@ AGENT_PERMISSIONS: dict[str, frozenset[str]] = {
     "OpportunityPrioritizationAgent": frozenset({READ_OPPORTUNITIES}),
     "ExperimentAgent": frozenset({READ_OPPORTUNITIES, READ_CUSTOMERS}),
     "GrowthMemoryAgent": frozenset({READ_MEMORY, WRITE_MEMORY}),
+
+    # ── Main AI Growth Team Agents (Phase E) ────────────────────────────────
+    "ManagerAgent": frozenset({
+        READ_MERCHANT, READ_CUSTOMERS, READ_ORDERS, READ_PAYMENTS, SIMULATE,
+    }),
+    "MarketingAgent": frozenset({
+        READ_MERCHANT, READ_CUSTOMERS, READ_ORDERS, READ_CAMPAIGNS, READ_OPPORTUNITIES, SIMULATE, PROPOSE_ACTION,
+    }),
+    "ProductAgent": frozenset({
+        READ_MERCHANT, READ_PRODUCTS, READ_ORDERS, READ_CUSTOMERS, READ_OPPORTUNITIES, SIMULATE, PROPOSE_ACTION,
+    }),
+    "DesignerAgent": frozenset({
+        READ_MERCHANT, READ_CAMPAIGNS, READ_CUSTOMERS,
+    }),
+    "SoftwareAgent": frozenset({
+        READ_MERCHANT, READ_ORDERS, READ_CUSTOMERS,
+    }),
 }
 
 

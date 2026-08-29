@@ -18,11 +18,15 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from backend.app.models.opportunity import GrowthOpportunity
-from backend.app.models.enums import OpportunityStatus, OpportunityType
+from backend.app.models.enums import OpportunityStatus, OpportunityType, AuditEventType
 from backend.app.repositories.opportunity import GrowthOpportunityRepository
 from backend.app.repositories.order import OrderRepository
 from backend.app.repositories.payment import PaymentRepository
 from backend.app.repositories.customer import CustomerRepository
+from backend.app.models.audit_event import AuditEvent
+from backend.app.core.logging import get_logger
+
+log = get_logger(__name__)
 from backend.app.repositories.product import ProductRepository
 from backend.app.core.logging import get_logger
 
@@ -83,7 +87,7 @@ class GrowthOpportunityService:
         existing = self._opp_repo.get_by_key(merchant_id, key)
         if existing:
             return existing
-        return self._opp_repo.create(
+        opp = self._opp_repo.create(
             merchant_id=merchant_id,
             opportunity_key=key,
             type=type,
@@ -94,6 +98,24 @@ class GrowthOpportunityService:
             target_customer_count=target_customer_count,
             reasoning=reasoning,
         )
+        # Create audit event for new opportunity
+        self._db.add(
+            AuditEvent(
+                merchant_id=merchant_id,
+                actor_type="system",
+                actor_id="opportunity_engine",
+                event_type=AuditEventType.opportunity_created,
+                entity_type="growth_opportunity",
+                entity_id=str(opp.id),
+                payload={
+                    "opportunity_key": key,
+                    "type": type.value if hasattr(type, 'value') else str(type),
+                    "title": title,
+                    "expected_revenue": float(expected_revenue),
+                },
+            )
+        )
+        return opp
 
     def _analyse_cross_sell_case(self, merchant_id: uuid.UUID) -> None:
         """

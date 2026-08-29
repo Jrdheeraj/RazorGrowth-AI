@@ -51,3 +51,13 @@ from backend.app.models.agent_memory import AgentMemory  # noqa: F401
 # Phase 6 — Authentication, Multi-Tenancy & Production Security
 from backend.app.models.user import User  # noqa: F401
 from backend.app.models.membership import MerchantMembership  # noqa: F401
+
+# Phase 7 — Recommendation & Approval
+from backend.app.models.recommendation import Recommendation  # noqa: F401
+from backend.app.models.approval import Approval  # noqa: F401
+from backend.app.models.agent_debate import (  # noqa: F401
+    AgentDebate,
+    AgentTask,
+    AgentFinding,
+    AgentMessage,
+)

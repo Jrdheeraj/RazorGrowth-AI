@@ -116,6 +116,12 @@ from backend.app.api.routes.phase5 import (
 # Phase 6 — Authentication & security
 from backend.app.api.routes.auth import router as auth_router
 from backend.app.api.routes.webhooks import router as webhooks_router
+# Phase 7 — Recommendations & Approvals
+from backend.app.api.routes.recommendations import router as recommendations_router
+# Phase F — Agent Debate
+from backend.app.api.routes.debate import router as debate_router
+# Phase M — Analytics
+from backend.app.api.routes.analytics import router as analytics_router
 
 app.include_router(health_router, prefix="/api")
 app.include_router(opportunities_router, prefix="/api")
@@ -138,6 +144,12 @@ app.include_router(brief_router, prefix="/api")
 # Phase 6 routes
 app.include_router(auth_router, prefix="/api")
 app.include_router(webhooks_router, prefix="/api")
+# Phase 7 routes
+app.include_router(recommendations_router, prefix="/api")
+# Phase F routes
+app.include_router(debate_router, prefix="/api")
+# Phase M routes
+app.include_router(analytics_router, prefix="/api")
 
 
 @app.get("/")

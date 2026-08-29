@@ -5,6 +5,14 @@ from backend.app.repositories.customer import CustomerRepository
 from backend.app.repositories.order import OrderRepository
 from backend.app.repositories.payment import PaymentRepository
 from backend.app.repositories.opportunity import GrowthOpportunityRepository
+from backend.app.repositories.recommendation import RecommendationRepository
+from backend.app.repositories.approval import ApprovalRepository
+from backend.app.repositories.agent_debate import (
+    AgentDebateRepository,
+    AgentTaskRepository,
+    AgentFindingRepository,
+    AgentMessageRepository,
+)
 
 __all__ = [
     "MerchantRepository",
@@ -13,4 +21,10 @@ __all__ = [
     "OrderRepository",
     "PaymentRepository",
     "GrowthOpportunityRepository",
+    "RecommendationRepository",
+    "ApprovalRepository",
+    "AgentDebateRepository",
+    "AgentTaskRepository",
+    "AgentFindingRepository",
+    "AgentMessageRepository",
 ]

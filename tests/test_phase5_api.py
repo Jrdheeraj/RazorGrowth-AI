@@ -98,7 +98,7 @@ class TestAgentsApi:
         res = api.get("/api/agents")
         assert res.status_code == 200
         body = res.json()
-        assert len(body["agents"]) == 8
+        assert len(body["agents"]) == 13  # 8 domain specialists + 5 main growth team
         for agent in body["agents"]:
             assert agent["can_approve"] is False and agent["can_execute"] is False
 

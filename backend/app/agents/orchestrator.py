@@ -9,10 +9,13 @@ agent, and returns partial results.
 
 Orchestration strategy (Feature 26):
   mode="fast"  → memory(load) · discovery · payment_recovery · prioritization
-                 (cheap signal-level pass; no LLM required)
+                  (cheap signal-level pass; no LLM required)
   mode="deep"  → full pipeline including customer intelligence, campaign
-                 strategy, revenue optimization, experiments, and a final
-                 memory write.
+                  strategy, revenue optimization, experiments, and a final
+                  memory write.
+  mode="growth_team" → Main AI Growth Team: Manager delegates to
+                  Marketing, Product, Designer, Software agents, then
+                  synthesizes via Agent Debate.
 
 The orchestrator NEVER approves, rejects, executes, or bypasses
 guardrails. Its only bridge to execution is Phase 4's create_action()
@@ -29,7 +32,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from backend.app.agents.base import AgentContext, AgentResult
-from backend.app.agents.registry import AGENT_INSTANCES
+from backend.app.agents.registry import AGENT_INSTANCES, MAIN_GROWTH_TEAM_AGENTS
 from backend.app.models.merchant import Merchant
 
 log = logging.getLogger(__name__)
@@ -50,6 +53,18 @@ DEEP_PLAN = (
     ("RevenueOptimizationAgent", {}),
     ("ExperimentAgent", {}),
     ("OpportunityPrioritizationAgent", {}),
+)
+
+# Phase E: Main AI Growth Team orchestration
+GROWTH_TEAM_PLAN = (
+    ("GrowthMemoryAgent", {"phase": "load"}),
+    ("ManagerAgent", {"phase": "delegate"}),
+    ("MarketingAgent", {}),
+    ("ProductAgent", {}),
+    ("DesignerAgent", {}),
+    ("SoftwareAgent", {}),
+    ("ManagerAgent", {"phase": "synthesize"}),
+    ("GrowthMemoryAgent", {"phase": "persist"}),
 )
 
 
@@ -106,8 +121,8 @@ class GrowthAgentOrchestrator:
         mode: str = "deep",
         params: dict[str, Any] | None = None,
     ) -> OrchestrationSummary:
-        if mode not in ("fast", "deep"):
-            raise ValueError("mode must be 'fast' or 'deep'")
+        if mode not in ("fast", "deep", "growth_team"):
+            raise ValueError("mode must be 'fast', 'deep', or 'growth_team'")
         merchant = self.db.get(Merchant, merchant_id)
         if merchant is None:
             raise MerchantNotFoundError(f"Merchant {merchant_id} not found")
@@ -127,7 +142,13 @@ class GrowthAgentOrchestrator:
             mode=mode,
         )
 
-        plan = FAST_PLAN if mode == "fast" else DEEP_PLAN
+        if mode == "fast":
+            plan = FAST_PLAN
+        elif mode == "deep":
+            plan = DEEP_PLAN
+        else:  # growth_team
+            plan = GROWTH_TEAM_PLAN
+
         for agent_name, step_params in plan:
             agent = AGENT_INSTANCES.get(agent_name)
             if agent is None:
@@ -135,6 +156,18 @@ class GrowthAgentOrchestrator:
             step_ctx_params = dict(ctx.params)
             step_ctx_params.update(step_params)
             step_ctx_params["orchestrator_run_id"] = orchestrator_run_id
+
+            # For growth_team mode, pass debate_id and task_id from ManagerAgent to specialist agents
+            if mode == "growth_team" and agent_name in {"MarketingAgent", "ProductAgent", "DesignerAgent", "SoftwareAgent"}:
+                # Get debate_id from ManagerAgent's output (stored in shared by _share_findings)
+                if "manager_delegations" in ctx.shared:
+                    delegations = ctx.shared["manager_delegations"]
+                    for delegation in delegations:
+                        if delegation["assigned_to"].lower() == agent_name.lower().replace("agent", ""):
+                            step_ctx_params["debate_id"] = ctx.shared.get("manager_debate_id")
+                            step_ctx_params["task_id"] = delegation["task_id"]
+                            break
+
             step_ctx = AgentContext(
                 db=self.db,
                 merchant_id=merchant_id,
@@ -179,6 +212,10 @@ class GrowthAgentOrchestrator:
             if "ranked_opportunities" in result.output:
                 ctx.shared["ranked_opportunities"] = result.output["ranked_opportunities"]
 
+            # Share findings between main growth team agents
+            if mode == "growth_team" and agent_name in MAIN_GROWTH_TEAM_AGENTS:
+                self._share_findings(agent_name, result, ctx.shared)
+
         summary.ranked_opportunities = list(ctx.shared.get("ranked_opportunities", []))
         summary.totals = {
             "opportunities_created": sum(a["opportunities_created"] for a in summary.agents_run),
@@ -196,10 +233,28 @@ class GrowthAgentOrchestrator:
         elif failed_agents:
             summary.status = "partial_success"
 
-        # Final memory write (deep mode only) — remember what was decided
-        if mode == "deep":
+        # Final memory write (deep and growth_team modes) — remember what was decided
+        if mode in ("deep", "growth_team"):
             self._remember_run(ctx, summary)
         return summary
+
+    def _share_findings(self, agent_name: str, result: AgentResult, shared: dict[str, Any]) -> None:
+        """Share findings between main growth team agents via shared context."""
+        key_map = {
+            "MarketingAgent": "marketing_findings",
+            "ProductAgent": "product_findings",
+            "DesignerAgent": "designer_findings",
+            "SoftwareAgent": "software_findings",
+        }
+        if agent_name in key_map:
+            shared[key_map[agent_name]] = result.output
+
+        # Store ManagerAgent's debate_id and delegations for specialist agents
+        if agent_name == "ManagerAgent":
+            if "debate_id" in result.output:
+                shared["manager_debate_id"] = result.output["debate_id"]
+            if "delegations" in result.output:
+                shared["manager_delegations"] = result.output["delegations"]
 
     # ── helpers ──────────────────────────────────────────────────────────
 

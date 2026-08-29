@@ -1,0 +1,111 @@
+/* ==========================================================================
+   AUDIENCE OVERVIEW — Four audience cards in a responsive grid
+   ========================================================================== */
+
+.audience-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  margin-top: 26px;
+}
+
+.audience-card {
+  background: var(--paper-bright);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  padding: clamp(20px, 3vw, 28px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.audience-card:hover {
+  border-color: var(--line);
+  box-shadow: var(--shadow-float-card);
+}
+
+.audience-card__header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.audience-card__number {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-weight: 500;
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--coral-deep);
+  background: var(--coral-wash);
+  border: 1px solid rgba(169, 79, 56, 0.3);
+  border-radius: var(--radius-control);
+  padding: 4px 10px;
+}
+
+.audience-card__title {
+  font-size: var(--text-title);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0;
+}
+
+.audience-card__problem,
+.audience-card__solution,
+.audience-card__agents {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.audience-card__problem p,
+.audience-card__solution p {
+  color: var(--ink-soft);
+  font-size: var(--text-small);
+  line-height: 1.55;
+  margin: 0;
+}
+
+.audience-card__agent-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.audience-card__protection {
+  padding-top: 4px;
+  border-top: 1px solid var(--line-soft);
+  margin-top: auto;
+}
+
+.audience-card__protection p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+/* Mobile adjustments */
+@media (max-width: 1024px) {
+  .audience-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .audience-card {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 640px) {
+  .audience-grid {
+    gap: 16px;
+  }
+
+  .audience-card {
+    padding: 18px;
+  }
+}

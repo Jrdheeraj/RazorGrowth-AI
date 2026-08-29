@@ -128,7 +128,7 @@ class TestCrossMerchantIsolation:
         w = two_merchants
         r = client.get("/api/customers", headers=_headers(w["u_a"]))
         assert r.status_code == 200
-        emails = [c["email"] for c in r.json()]
+        emails = [c["email"] for c in r.json()["customers"]]
         assert "b@tenant.test" not in emails
 
     def test_customers_cross_tenant_query_param_rejected(
