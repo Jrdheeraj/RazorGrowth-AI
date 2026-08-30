@@ -3,18 +3,48 @@ HTTP hardening middleware & production safety checks — Phase 9.
 
 - SecurityHeadersMiddleware: adds defensive headers to every response.
   HSTS is added only in production (TLS terminates at the reverse proxy).
+- RequestCorrelationMiddleware: propagates X-Request-ID through the stack.
 - validate_production_safety(): called from app lifespan. Refuses to boot
   production with insecure configuration, naming the violated requirement
   without ever echoing secret values.
 """
 from __future__ import annotations
 
+import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastapi import FastAPI
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
 
 from backend.app.core.config import get_settings
+
+
+class RequestCorrelationMiddleware(BaseHTTPMiddleware):
+    """
+    Propagate X-Request-ID through the request lifecycle.
+
+    - Accepts incoming X-Request-ID header or generates a new UUID.
+    - Attaches request_id to request.state for downstream access.
+    - Returns X-Request-ID in response headers for client correlation.
+    - Does NOT use request IDs for authorization (separate from auth).
+    """
+
+    HEADER_NAME = "x-request-id"
+
+    async def dispatch(self, request: Request, call_next: Callable[..., Awaitable[Response]]) -> Response:
+        # Extract or generate request ID
+        request_id = request.headers.get(self.HEADER_NAME)
+        if not request_id:
+            request_id = uuid.uuid4().hex
+        # Attach to request state for services/agents to access
+        request.state.request_id = request_id
+
+        response = await call_next(request)
+        response.headers[self.HEADER_NAME] = request_id
+        return response
 
 
 class SecurityHeadersMiddleware:

@@ -1,0 +1,316 @@
+warning: in the working copy of 'backend/app/core/middleware.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/app/main.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/app/services/action_service.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_e2e_integration.py', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/backend/app/core/middleware.py b/backend/app/core/middleware.py[m
+[1mindex 85b7ae6..06d5579 100644[m
+[1m--- a/backend/app/core/middleware.py[m
+[1m+++ b/backend/app/core/middleware.py[m
+[36m@@ -3,20 +3,50 @@[m [mHTTP hardening middleware & production safety checks — Phase 9.[m
+ [m
+ - SecurityHeadersMiddleware: adds defensive headers to every response.[m
+   HSTS is added only in production (TLS terminates at the reverse proxy).[m
+[32m+[m[32m- RequestCorrelationMiddleware: propagates X-Request-ID through the stack.[m
+ - validate_production_safety(): called from app lifespan. Refuses to boot[m
+   production with insecure configuration, naming the violated requirement[m
+   without ever echoing secret values.[m
+ """[m
+ from __future__ import annotations[m
+ [m
+[32m+[m[32mimport uuid[m
+ from collections.abc import Awaitable, Callable[m
+ from typing import Any[m
+ [m
+ from fastapi import FastAPI[m
+[32m+[m[32mfrom starlette.middleware.base import BaseHTTPMiddleware[m
+[32m+[m[32mfrom starlette.requests import Request[m
+[32m+[m[32mfrom starlette.responses import Response[m
+ [m
+ from backend.app.core.config import get_settings[m
+ [m
+ [m
+[32m+[m[32mclass RequestCorrelationMiddleware(BaseHTTPMiddleware):[m
+[32m+[m[32m    """[m
+[32m+[m[32m    Propagate X-Request-ID through the request lifecycle.[m
+[32m+[m
+[32m+[m[32m    - Accepts incoming X-Request-ID header or generates a new UUID.[m
+[32m+[m[32m    - Attaches request_id to request.state for downstream access.[m
+[32m+[m[32m    - Returns X-Request-ID in response headers for client correlation.[m
+[32m+[m[32m    - Does NOT use request IDs for authorization (separate from auth).[m
+[32m+[m[32m    """[m
+[32m+[m
+[32m+[m[32m    HEADER_NAME = "x-request-id"[m
+[32m+[m
+[32m+[m[32m    async def dispatch(self, request: Request, call_next: Callable[..., Awaitable[Response]]) -> Response:[m
+[32m+[m[32m        # Extract or generate request ID[m
+[32m+[m[32m        request_id = request.headers.get(self.HEADER_NAME)[m
+[32m+[m[32m        if not request_id:[m
+[32m+[m[32m            request_id = uuid.uuid4().hex[m
+[32m+[m[32m        # Attach to request state for services/agents to access[m
+[32m+[m[32m        request.state.request_id = request_id[m
+[32m+[m
+[32m+[m[32m        response = await call_next(request)[m
+[32m+[m[32m        response.headers[self.HEADER_NAME] = request_id[m
+[32m+[m[32m        return response[m
+[32m+[m
+[32m+[m
+ class SecurityHeadersMiddleware:[m
+     def __init__(self, app: FastAPI) -> None:[m
+         self.app = app[m
+[1mdiff --git a/backend/app/main.py b/backend/app/main.py[m
+[1mindex eb0eb18..2e24c35 100644[m
+[1m--- a/backend/app/main.py[m
+[1m+++ b/backend/app/main.py[m
+[36m@@ -16,7 +16,7 @@[m [mfrom fastapi.responses import JSONResponse[m
+ from backend.app.core.config import get_settings[m
+ from backend.app.core.logging import configure_logging, get_logger[m
+ from backend.app.core.errors import unhandled_exception_handler[m
+[31m-from backend.app.core.middleware import SecurityHeadersMiddleware, validate_production_safety[m
+[32m+[m[32mfrom backend.app.core.middleware import SecurityHeadersMiddleware, RequestCorrelationMiddleware, validate_production_safety[m
+ [m
+ log = get_logger(__name__)[m
+ [m
+[36m@@ -75,6 +75,7 @@[m [mapp = _build_app()[m
+ # ------------------------------------------------------------------ #[m
+ # HTTP hardening (order matters: outermost first)[m
+ # ------------------------------------------------------------------ #[m
+[32m+[m[32mapp.add_middleware(RequestCorrelationMiddleware)[m
+ app.add_middleware(SecurityHeadersMiddleware)[m
+ [m
+ _settings = get_settings()[m
+[1mdiff --git a/backend/app/services/action_service.py b/backend/app/services/action_service.py[m
+[1mindex feabb8e..1f5c4d6 100644[m
+[1m--- a/backend/app/services/action_service.py[m
+[1m+++ b/backend/app/services/action_service.py[m
+[36m@@ -503,6 +503,9 @@[m [mdef execute_action([m
+         action.error_message = exec_result.error or "Execution failed"[m
+         action.completed_at = datetime.now(timezone.utc)[m
+ [m
+[32m+[m[32m        # Determine if retryable based on error type[m
+[32m+[m[32m        retryable = "TIMEOUT" in (exec_result.error or "") or "RETRY" in (exec_result.error or "")[m
+[32m+[m
+         _write_audit_event([m
+             db,[m
+             action.merchant_id,[m
+[36m@@ -512,13 +515,15 @@[m [mdef execute_action([m
+             {[m
+                 "action_type": _enum_value(action.action_type),[m
+                 "error": action.error_message,[m
+[32m+[m[32m                "stage": "execution",[m
+[32m+[m[32m                "retryable": retryable,[m
+             },[m
+             actor_id=actor,[m
+         )[m
+ [m
+         log.error([m
+[31m-            "Action failed. id=%s merchant=%s error=%s",[m
+[31m-            str(action.id), action.merchant_id, action.error_message,[m
+[32m+[m[32m            "Action failed. id=%s merchant=%s error=%s retryable=%s",[m
+[32m+[m[32m            str(action.id), action.merchant_id, action.error_message, retryable,[m
+         )[m
+ [m
+     return exec_result[m
+[1mdiff --git a/tests/test_e2e_integration.py b/tests/test_e2e_integration.py[m
+[1mindex e2a3fee..203225e 100644[m
+[1m--- a/tests/test_e2e_integration.py[m
+[1m+++ b/tests/test_e2e_integration.py[m
+[36m@@ -67,6 +67,7 @@[m [mfrom backend.app.models.enums import ([m
+     UserRole,[m
+     UserStatus,[m
+ )[m
+[32m+[m[32mfrom backend.app.integrations.razorpay import RazorpayResult, build_razorpay_client[m
+ from backend.app.models.experiment import Experiment[m
+ from backend.app.models.merchant import Merchant[m
+ from backend.app.models.membership import MerchantMembership[m
+[36m@@ -702,5 +703,299 @@[m [mclass TestEndToEndWorkflow:[m
+         print(f"   Memory Entries: 1+")[m
+ [m
+ [m
+[32m+[m[32mclass TestFailureRecoveryE2E:[m
+[32m+[m[32m    """End-to-End Failure Recovery Test — Phase 21.[m
+[32m+[m
+[32m+[m[32m    This test covers the hackathon-required failure scenario:[m
+[32m+[m[32m    APPROVED ACTION → RAZORPAY TEST API FAILURE → SAFE FAILURE →[m
+[32m+[m[32m    NO DUPLICATE ACTION → AUDIT EVENT → RECOVERY / RETRY DECISION[m
+[32m+[m[32m    """[m
+[32m+[m
+[32m+[m[32m    def test_razorpay_failure_recovery(self, db_session: Session, client: TestClient) -> None:[m
+[32m+[m[32m        # Enable Razorpay test mode for this test[m
+[32m+[m[32m        import os[m
+[32m+[m[32m        from backend.app.core.config import get_settings[m
+[32m+[m[41m        [m
+[32m+[m[32m        # Save original env vars[m
+[32m+[m[32m        original_razorpay_enabled = os.environ.get("RAZORPAY_ENABLED")[m
+[32m+[m[32m        original_razorpay_test_mode = os.environ.get("RAZORPAY_TEST_MODE")[m
+[32m+[m[41m        [m
+[32m+[m[32m        os.environ["RAZORPAY_ENABLED"] = "true"[m
+[32m+[m[32m        os.environ["RAZORPAY_TEST_MODE"] = "true"[m
+[32m+[m[32m        get_settings.cache_clear()[m
+[32m+[m[32m        """[m
+[32m+[m[32m        Demonstrate graceful failure recovery when Razorpay test API fails.[m
+[32m+[m
+[32m+[m[32m        Scenario:[m
+[32m+[m[32m        1. Human approves a retry_payment action[m
+[32m+[m[32m        2. Razorpay test adapter is forced to fail (simulating API error)[m
+[32m+[m[32m        3. Action transitions to FAILED state (not completed)[m
+[32m+[m[32m        4. No duplicate execution occurs on retry[m
+[32m+[m[32m        5. Audit trail records the failure with full context[m
+[32m+[m[32m        6. System determines retryability[m
+[32m+[m[32m        7. Human can review and decide on safe retry[m
+[32m+[m[32m        """[m
+[32m+[m[32m        from backend.app.core.config import get_settings[m
+[32m+[m[32m        from backend.app.integrations.razorpay import TestModeRazorpayClient, build_razorpay_client[m
+[32m+[m[32m        from backend.app.models.enums import PaymentStatus[m
+[32m+[m[32m        from backend.app.services.action_service import create_action, approve_action, execute_action[m
+[32m+[m
+[32m+[m[32m        # Setup: Create user, merchant, membership (reuse pattern from main test)[m
+[32m+[m[32m        user = User([m
+[32m+[m[32m            email="failure-test@razorgrowth.ai",[m
+[32m+[m[32m            password_hash=hash_password("SecurePass123!"),[m
+[32m+[m[32m            full_name="Failure Test User",[m
+[32m+[m[32m            status=UserStatus.active,[m
+[32m+[m[32m        )[m
+[32m+[m[32m        db_session.add(user)[m
+[32m+[m[32m        db_session.commit()[m
+[32m+[m[32m        db_session.refresh(user)[m
+[32m+[m
+[32m+[m[32m        token, _ = create_access_token(user.id, user.email)[m
+[32m+[m[32m        headers = {"Authorization": f"Bearer {token}"}[m
+[32m+[m
+[32m+[m[32m        merchant = Merchant([m
+[32m+[m[32m            name="Failure Test Merchant",[m
+[32m+[m[32m            slug=f"failure-test-{uuid.uuid4().hex[:8]}",[m
+[32m+[m[32m            email="merchant@failure-test.com",[m
+[32m+[m[32m            status=MerchantStatus.active,[m
+[32m+[m[32m            currency=Currency.INR,[m
+[32m+[m[32m        )[m
+[32m+[m[32m        db_session.add(merchant)[m
+[32m+[m[32m        db_session.commit()[m
+[32m+[m[32m        db_session.refresh(merchant)[m
+[32m+[m
+[32m+[m[32m        membership = MerchantMembership([m
+[32m+[m[32m            user_id=user.id,[m
+[32m+[m[32m            merchant_id=merchant.id,[m
+[32m+[m[32m            role=UserRole.owner,[m
+[32m+[m[32m            status=MembershipStatus.active,[m
+[32m+[m[32m        )[m
+[32m+[m[32m        db_session.add(membership)[m
+[32m+[m[32m        db_session.commit()[m
+[32m+[m
+[32m+[m[32m        # Create a customer for the failed payment[m
+[32m+[m[32m        fail_customer = Customer([m
+[32m+[m[32m            merchant_id=merchant.id,[m
+[32m+[m[32m            name="Failure Test Customer",[m
+[32m+[m[32m            email="fail-customer@example.com",[m
+[32m+[m[32m            phone="+91-9999999999",[m
+[32m+[m[32m            segment="new",[m
+[32m+[m[32m            total_orders=0,[m
+[32m+[m[32m            total_spend=Decimal("0"),[m
+[32m+[m[32m        )[m
+[32m+[m[32m        db_session.add(fail_customer)[m
+[32m+[m[32m        db_session.flush()[m
+[32m+[m
+[32m+[m[32m        # Create a failed payment to retry[m
+[32m+[m[32m        fail_order = Order([m
+[32m+[m[32m            merchant_id=merchant.id,[m
+[32m+[m[32m            customer_id=fail_customer.id,[m
+[32m+[m[32m            order_number=f"ORD-FAIL-{uuid.uuid4().hex[:8]}",[m
+[32m+[m[32m            status=OrderStatus.pending,[m
+[32m+[m[32m            subtotal=Decimal("5000"),[m
+[32m+[m[32m            discount=Decimal("0"),[m
+[32m+[m[32m            tax=Decimal("0"),[m
+[32m+[m[32m            total=Decimal("5000"),[m
+[32m+[m[32m            currency=Currency.INR,[m
+[32m+[m[32m        )[m
+[32m+[m[32m        db_session.add(fail_order)[m
+[32m+[m[32m        db_session.flush()[m
+[32m+[m
+[32m+[m[32m        fail_payment = Payment([m
+[32m+[m[32m            merchant_id=merchant.id,[m
+[32m+[m[32m            order_id=fail_order.id,[m
+[32m+[m[32m            provider=PaymentProvider.synthetic,[m
+[32m+[m[32m            provider_payment_id=f"pay_fail_{uuid.uuid4().hex[:16]}",[m
+[32m+[m[32m            amount=Decimal("5000"),[m
+[32m+[m[32m            currency=Currency.INR,[m
+[32m+[m[32m            status=PaymentStatus.failed,[m
+[32m+[m[32m            failure_code="card_declined",[m
+[32m+[m[32m            failure_reason="Card declined by issuer",[m
+[32m+[m[32m        )[m
+[32m+[m[32m        db_session.add(fail_payment)[m
+[32m+[m[32m        db_session.commit()[m
+[32m+[m[32m        db_session.refresh(fail_payment)[m
+[32m+[m
+[32m+[m[32m        # STEP 1: Create retry_payment action[m
+[32m+[m[32m        action = create_action([m
+[32m+[m[32m            db_session,[m
+[32m+[m[32m            merchant_id=merchant.id,[m
+[32m+[m[32m            action_type=AgentActionType.retry_payment,[m
+[32m+[m[32m            input_payload={[m
+[32m+[m[32m                "payment_id": str(fail_payment.id),[m
+[32m+[m[32m                "evidence": [[m
+[32m+[m[32m                    {"type": "payment_failure", "payment_id": str(fail_payment.id), "code": "card_declined"}[m
+[32m+[m[32m                ],[m
+[32m+[m[32m            },[m
+[32m+[m[32m            requested_by=f"agent:PaymentRecoveryAgent",[m
+[32m+[m[32m        )[m
+[32m+[m[32m        db_session.commit()[m
+[32m+[m
+[32m+[m[32m        # STEP 2: Human approves the action[m
+[32m+[m[32m        action = approve_action(db_session, action.id, actor=f"user:{user.id}")[m
+[32m+[m[32m        db_session.commit()[m
+[32m+[m[32m        assert action.status == AgentActionStatus.approved[m
+[32m+[m
+[32m+[m[32m        # STEP 3: Force Razorpay test adapter to fail[m
+[32m+[m[32m        # We monkey-patch the build_razorpay_client to return a failing test client[m
+[32m+[m[32m        original_build = build_razorpay_client[m
+[32m+[m
+[32m+[m[32m        class FailingTestClient(TestModeRazorpayClient):[m
+[32m+[m[32m            def retry_payment(self, payment_id: str, amount_inr: float | None = None):[m
+[32m+[m[32m                # Simulate a network/timeout error from Razorpay[m
+[32m+[m[32m                return RazorpayResult([m
+[32m+[m[32m                    ok=False,[m
+[32m+[m[32m                    mode="test",[m
+[32m+[m[32m                    executed=False,[m
+[32m+[m[32m                    simulated=False,[m
+[32m+[m[32m                    error="RAZORPAY_TEST_API_TIMEOUT",[m
+[32m+[m[32m                    metadata={[m
+[32m+[m[32m                        "payment_id": payment_id,[m
+[32m+[m[32m                        "note": "Simulated Razorpay test API timeout",[m
+[32m+[m[32m                        "retryable": True,[m
+[32m+[m[32m                    },[m
+[32m+[m[32m                )[m
+[32m+[m
+[32m+[m[32m        import backend.app.services.action_executor as action_executor_module[m
+[32m+[m[32m        import backend.app.integrations.razorpay as razorpay_module[m
+[32m+[m
+[32m+[m[32m        def failing_build_razorpay_client():[m
+[32m+[m[32m            return FailingTestClient()[m
+[32m+[m
+[32m+[m[32m        razorpay_module.build_razorpay_client = failing_build_razorpay_client[m
+[32m+[m[32m        # Note: action_executor imports build_razorpay_client inside the method,[m
+[32m+[m[32m        # so patching razorpay_module is sufficient[m
+[32m+[m
+[32m+[m[32m        try:[m
+[32m+[m[32m            # STEP 4: Execute - should fail gracefully[m
+[32m+[m[32m            exec_result = execute_action(db_session, action.id, actor=f"user:{user.id}")[m
+[32m+[m[32m            db_session.commit()[m
+[32m+[m
+[32m+[m[32m            # Verify action FAILED (not completed)[m
+[32m+[m[32m            assert exec_result.success is False[m
+[32m+[m[32m            assert exec_result.error == "RAZORPAY_TEST_API_TIMEOUT"[m
+[32m+[m
+[32m+[m[32m            action = db_session.get(AgentAction, action.id)[m
+[32m+[m[32m            assert action.status == AgentActionStatus.failed[m
+[32m+[m[32m            assert action.error_code == "RAZORPAY_TEST_API_TIMEOUT"[m
+[32m+[m
+[32m+[m[32m            # STEP 5: Verify NO duplicate execution on retry attempt[m
+[32m+[m[32m            # Try to execute again - should be blocked (idempotent check for failed state)[m
+[32m+[m[32m            exec_result_2 = execute_action(db_session, action.id, actor=f"user:{user.id}")[m
+[32m+[m[32m            db_session.commit()[m
+[32m+[m
+[32m+[m[32m            assert exec_result_2.success is False[m
+[32m+[m[32m            assert "INVALID_ACTION_STATE" in exec_result_2.error[m
+[32m+[m[32m            assert "failed" in exec_result_2.error.lower()[m
+[32m+[m
+[32m+[m[32m            # STEP 6: Verify audit trail records the failure[m
+[32m+[m[

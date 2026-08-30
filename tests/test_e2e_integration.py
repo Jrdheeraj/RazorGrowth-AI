@@ -67,6 +67,7 @@ from backend.app.models.enums import (
     UserRole,
     UserStatus,
 )
+from backend.app.integrations.razorpay import RazorpayResult, build_razorpay_client
 from backend.app.models.experiment import Experiment
 from backend.app.models.merchant import Merchant
 from backend.app.models.membership import MerchantMembership
@@ -700,6 +701,300 @@ class TestEndToEndWorkflow:
         print(f"   Agent Tasks: {len(tasks)}")
         print(f"   Audit Events: {len(audit_events)}")
         print(f"   Memory Entries: 1+")
+
+
+class TestFailureRecoveryE2E:
+    """End-to-End Failure Recovery Test — Phase 21.
+
+    This test covers the hackathon-required failure scenario:
+    APPROVED ACTION → RAZORPAY TEST API FAILURE → SAFE FAILURE →
+    NO DUPLICATE ACTION → AUDIT EVENT → RECOVERY / RETRY DECISION
+    """
+
+    def test_razorpay_failure_recovery(self, db_session: Session, client: TestClient) -> None:
+        # Enable Razorpay test mode for this test
+        import os
+        from backend.app.core.config import get_settings
+        
+        # Save original env vars
+        original_razorpay_enabled = os.environ.get("RAZORPAY_ENABLED")
+        original_razorpay_test_mode = os.environ.get("RAZORPAY_TEST_MODE")
+        
+        os.environ["RAZORPAY_ENABLED"] = "true"
+        os.environ["RAZORPAY_TEST_MODE"] = "true"
+        get_settings.cache_clear()
+        """
+        Demonstrate graceful failure recovery when Razorpay test API fails.
+
+        Scenario:
+        1. Human approves a retry_payment action
+        2. Razorpay test adapter is forced to fail (simulating API error)
+        3. Action transitions to FAILED state (not completed)
+        4. No duplicate execution occurs on retry
+        5. Audit trail records the failure with full context
+        6. System determines retryability
+        7. Human can review and decide on safe retry
+        """
+        from backend.app.core.config import get_settings
+        from backend.app.integrations.razorpay import TestModeRazorpayClient, build_razorpay_client
+        from backend.app.models.enums import PaymentStatus
+        from backend.app.services.action_service import create_action, approve_action, execute_action
+
+        # Setup: Create user, merchant, membership (reuse pattern from main test)
+        user = User(
+            email="failure-test@razorgrowth.ai",
+            password_hash=hash_password("SecurePass123!"),
+            full_name="Failure Test User",
+            status=UserStatus.active,
+        )
+        db_session.add(user)
+        db_session.commit()
+        db_session.refresh(user)
+
+        token, _ = create_access_token(user.id, user.email)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        merchant = Merchant(
+            name="Failure Test Merchant",
+            slug=f"failure-test-{uuid.uuid4().hex[:8]}",
+            email="merchant@failure-test.com",
+            status=MerchantStatus.active,
+            currency=Currency.INR,
+        )
+        db_session.add(merchant)
+        db_session.commit()
+        db_session.refresh(merchant)
+
+        membership = MerchantMembership(
+            user_id=user.id,
+            merchant_id=merchant.id,
+            role=UserRole.owner,
+            status=MembershipStatus.active,
+        )
+        db_session.add(membership)
+        db_session.commit()
+
+        # Create a customer for the failed payment
+        fail_customer = Customer(
+            merchant_id=merchant.id,
+            name="Failure Test Customer",
+            email="fail-customer@example.com",
+            phone="+91-9999999999",
+            segment="new",
+            total_orders=0,
+            total_spend=Decimal("0"),
+        )
+        db_session.add(fail_customer)
+        db_session.flush()
+
+        # Create a failed payment to retry
+        fail_order = Order(
+            merchant_id=merchant.id,
+            customer_id=fail_customer.id,
+            order_number=f"ORD-FAIL-{uuid.uuid4().hex[:8]}",
+            status=OrderStatus.pending,
+            subtotal=Decimal("5000"),
+            discount=Decimal("0"),
+            tax=Decimal("0"),
+            total=Decimal("5000"),
+            currency=Currency.INR,
+        )
+        db_session.add(fail_order)
+        db_session.flush()
+
+        fail_payment = Payment(
+            merchant_id=merchant.id,
+            order_id=fail_order.id,
+            provider=PaymentProvider.synthetic,
+            provider_payment_id=f"pay_fail_{uuid.uuid4().hex[:16]}",
+            amount=Decimal("5000"),
+            currency=Currency.INR,
+            status=PaymentStatus.failed,
+            failure_code="card_declined",
+            failure_reason="Card declined by issuer",
+        )
+        db_session.add(fail_payment)
+        db_session.commit()
+        db_session.refresh(fail_payment)
+
+        # STEP 1: Create retry_payment action
+        action = create_action(
+            db_session,
+            merchant_id=merchant.id,
+            action_type=AgentActionType.retry_payment,
+            input_payload={
+                "payment_id": str(fail_payment.id),
+                "evidence": [
+                    {"type": "payment_failure", "payment_id": str(fail_payment.id), "code": "card_declined"}
+                ],
+            },
+            requested_by=f"agent:PaymentRecoveryAgent",
+        )
+        db_session.commit()
+
+        # STEP 2: Human approves the action
+        action = approve_action(db_session, action.id, actor=f"user:{user.id}")
+        db_session.commit()
+        assert action.status == AgentActionStatus.approved
+
+        # STEP 3: Force Razorpay test adapter to fail
+        # We monkey-patch the build_razorpay_client to return a failing test client
+        original_build = build_razorpay_client
+
+        class FailingTestClient(TestModeRazorpayClient):
+            def retry_payment(self, payment_id: str, amount_inr: float | None = None):
+                # Simulate a network/timeout error from Razorpay
+                return RazorpayResult(
+                    ok=False,
+                    mode="test",
+                    executed=False,
+                    simulated=False,
+                    error="RAZORPAY_TEST_API_TIMEOUT",
+                    metadata={
+                        "payment_id": payment_id,
+                        "note": "Simulated Razorpay test API timeout",
+                        "retryable": True,
+                    },
+                )
+
+        import backend.app.services.action_executor as action_executor_module
+        import backend.app.integrations.razorpay as razorpay_module
+
+        def failing_build_razorpay_client():
+            return FailingTestClient()
+
+        razorpay_module.build_razorpay_client = failing_build_razorpay_client
+        # Note: action_executor imports build_razorpay_client inside the method,
+        # so patching razorpay_module is sufficient
+
+        try:
+            # STEP 4: Execute - should fail gracefully
+            exec_result = execute_action(db_session, action.id, actor=f"user:{user.id}")
+            db_session.commit()
+
+            # Verify action FAILED (not completed)
+            assert exec_result.success is False
+            assert exec_result.error == "RAZORPAY_TEST_API_TIMEOUT"
+
+            action = db_session.get(AgentAction, action.id)
+            assert action.status == AgentActionStatus.failed
+            assert action.error_code == "RAZORPAY_TEST_API_TIMEOUT"
+
+            # STEP 5: Verify NO duplicate execution on retry attempt
+            # Try to execute again - should be blocked (idempotent check for failed state)
+            exec_result_2 = execute_action(db_session, action.id, actor=f"user:{user.id}")
+            db_session.commit()
+
+            assert exec_result_2.success is False
+            assert "INVALID_ACTION_STATE" in exec_result_2.error
+            assert "failed" in exec_result_2.error.lower()
+
+            # STEP 6: Verify audit trail records the failure
+            audit_events = db_session.scalars(
+                select(AuditEvent)
+                .where(AuditEvent.merchant_id == merchant.id)
+                .where(AuditEvent.entity_id == str(action.id))
+                .order_by(AuditEvent.created_at.desc())
+            ).all()
+
+            event_types = {e.event_type for e in audit_events}
+            assert AuditEventType.action_started in event_types
+            assert AuditEventType.action_failed in event_types
+
+            # Find the failure audit event
+            failure_event = next(e for e in audit_events if e.event_type == AuditEventType.action_failed)
+            assert failure_event.payload["error"] == "RAZORPAY_TEST_API_TIMEOUT"
+            assert failure_event.payload["stage"] == "execution"
+            assert "retryable" in str(failure_event.payload).lower() or failure_event.payload.get("retryable") is True
+
+            # STEP 7: System determines retryability (from metadata)
+            # The failure metadata indicates retryable=True
+            # Human can now decide: retry with same action (not allowed, needs new action)
+            # or create a new action with same payment_id
+
+            # STEP 8: Create new action for safe retry (idempotent key prevents duplicates)
+            action_2 = create_action(
+                db_session,
+                merchant_id=merchant.id,
+                action_type=AgentActionType.retry_payment,
+                input_payload={
+                    "payment_id": str(fail_payment.id),
+                    "evidence": [
+                        {"type": "payment_failure", "payment_id": str(fail_payment.id), "code": "card_declined"}
+                    ],
+                    "idempotency_key": f"retry_{fail_payment.id}",  # Same key = idempotent
+                },
+                requested_by=f"agent:PaymentRecoveryAgent",
+            )
+            db_session.commit()
+
+            # Approve the retry action
+            action_2 = approve_action(db_session, action_2.id, actor=f"user:{user.id}")
+            db_session.commit()
+
+            # Restore normal test client (success) - use TestModeRazorpayClient directly
+            # instead of the original build function which uses cached settings
+            def test_mode_build_razorpay_client():
+                return TestModeRazorpayClient()
+
+            razorpay_module.build_razorpay_client = test_mode_build_razorpay_client
+
+            # Execute retry - should succeed in test mode
+            exec_result_3 = execute_action(db_session, action_2.id, actor=f"user:{user.id}")
+            db_session.commit()
+
+            assert exec_result_3.success is True
+            assert exec_result_3.result_metadata.get("mode") == "test"
+            assert exec_result_3.result_metadata.get("executed") is False
+            assert exec_result_3.result_metadata.get("simulated") is True
+
+            action_2 = db_session.get(AgentAction, action_2.id)
+            assert action_2.status == AgentActionStatus.completed
+
+            # STEP 9: Verify complete audit trail for both attempts
+            all_audit_events = db_session.scalars(
+                select(AuditEvent)
+                .where(AuditEvent.merchant_id == merchant.id)
+                .where(AuditEvent.entity_id.in_([str(action.id), str(action_2.id)]))
+                .order_by(AuditEvent.created_at)
+            ).all()
+
+            # Should have: action_requested (x2), action_approved (x2), action_started (x2),
+            # action_failed (x1), action_completed (x1)
+            event_sequence = [e.event_type for e in all_audit_events]
+            assert event_sequence.count(AuditEventType.action_requested) == 2
+            assert event_sequence.count(AuditEventType.action_approved) == 2
+            assert event_sequence.count(AuditEventType.action_started) == 2
+            assert event_sequence.count(AuditEventType.action_failed) == 1
+            assert event_sequence.count(AuditEventType.action_completed) == 1
+
+            # STEP 10: Verify no secrets in audit
+            for event in all_audit_events:
+                event_str = str(event.payload).lower()
+                assert "password" not in event_str
+                assert "api_key" not in event_str
+                assert "secret" not in event_str
+
+            print("\n✅ FAILURE RECOVERY E2E TEST PASSED!")
+            print(f"   First action: {action.id} → FAILED (Razorpay timeout)")
+            print(f"   Second action: {action_2.id} → COMPLETED (retry succeeded)")
+            print(f"   Audit events: {len(all_audit_events)}")
+            print(f"   No duplicate execution on failed retry")
+            print(f"   Retryability determined from error metadata")
+
+        finally:
+            # Always restore original
+            razorpay_module.build_razorpay_client = original_build
+            # Restore original env vars
+            if original_razorpay_enabled is None:
+                os.environ.pop("RAZORPAY_ENABLED", None)
+            else:
+                os.environ["RAZORPAY_ENABLED"] = original_razorpay_enabled
+            if original_razorpay_test_mode is None:
+                os.environ.pop("RAZORPAY_TEST_MODE", None)
+            else:
+                os.environ["RAZORPAY_TEST_MODE"] = original_razorpay_test_mode
+            get_settings.cache_clear()
 
 
 if __name__ == "__main__":

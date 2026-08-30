@@ -503,6 +503,9 @@ def execute_action(
         action.error_message = exec_result.error or "Execution failed"
         action.completed_at = datetime.now(timezone.utc)
 
+        # Determine if retryable based on error type
+        retryable = "TIMEOUT" in (exec_result.error or "") or "RETRY" in (exec_result.error or "")
+
         _write_audit_event(
             db,
             action.merchant_id,
@@ -512,13 +515,15 @@ def execute_action(
             {
                 "action_type": _enum_value(action.action_type),
                 "error": action.error_message,
+                "stage": "execution",
+                "retryable": retryable,
             },
             actor_id=actor,
         )
 
         log.error(
-            "Action failed. id=%s merchant=%s error=%s",
-            str(action.id), action.merchant_id, action.error_message,
+            "Action failed. id=%s merchant=%s error=%s retryable=%s",
+            str(action.id), action.merchant_id, action.error_message, retryable,
         )
 
     return exec_result

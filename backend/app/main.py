@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from backend.app.core.config import get_settings
 from backend.app.core.logging import configure_logging, get_logger
 from backend.app.core.errors import unhandled_exception_handler
-from backend.app.core.middleware import SecurityHeadersMiddleware, validate_production_safety
+from backend.app.core.middleware import SecurityHeadersMiddleware, RequestCorrelationMiddleware, validate_production_safety
 
 log = get_logger(__name__)
 
@@ -75,6 +75,7 @@ app = _build_app()
 # ------------------------------------------------------------------ #
 # HTTP hardening (order matters: outermost first)
 # ------------------------------------------------------------------ #
+app.add_middleware(RequestCorrelationMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
 _settings = get_settings()
