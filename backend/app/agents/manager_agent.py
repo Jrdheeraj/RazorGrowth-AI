@@ -113,6 +113,11 @@ class ManagerAgent(BaseGrowthAgent):
         debate_id = ctx.params.get("debate_id") or ctx.shared.get("manager_debate_id")
         if debate_id:
             debate = debate_service.get_debate(uuid.UUID(str(debate_id)))
+            if debate:
+                debate.context = {
+                    **(debate.context or {}),
+                    "rag_context": ctx.shared.get("rag_context", {}),
+                }
         else:
             debate = debate_service.create_debate(
                 merchant_id=merchant_id,
@@ -126,6 +131,7 @@ class ManagerAgent(BaseGrowthAgent):
             )
             debate_service.update_debate_status(debate.id, DebateStatus.investigating)
         result.output["debate_id"] = str(debate.id)
+        ctx.shared["manager_debate_id"] = str(debate.id)
 
         # Phase 5: Create tasks for each required specialist
         tasks = self._create_tasks(db, debate, required_specialists, objective, signals, top_opps, ctx.params)

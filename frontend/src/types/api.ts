@@ -576,8 +576,13 @@ export interface PaymentVerificationResponse {
 
 export interface AgentDebateListItem {
   id: string;
+  merchant_id?: string;
   objective: string;
   status: string;
+  manager_agent_id?: string | null;
+  context?: Record<string, unknown> | null;
+  final_synthesis?: string | null;
+  recommendation_id?: string | null;
   created_at: string;
   updated_at: string;
   current_round?: number;
@@ -585,6 +590,21 @@ export interface AgentDebateListItem {
 
 export interface AgentDebateListResponse {
   debates: AgentDebateListItem[];
+}
+
+export interface AgentDebateCreateRequest {
+  objective: string;
+  context?: Record<string, unknown> | null;
+}
+
+export type AgentDebateResponse = AgentDebateListItem;
+
+export interface RazorpayIngestResponse {
+  source: string;
+  customers: Record<string, number>;
+  orders: Record<string, number>;
+  payments: Record<string, number>;
+  errors: string[];
 }
 
 export interface AgentFinding {

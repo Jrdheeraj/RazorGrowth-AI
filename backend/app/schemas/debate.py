@@ -128,6 +128,10 @@ class AgentMessageListResponse(BaseModel):
     messages: list[AgentMessageResponse]
 
 
+class AgentDebateChatRequest(BaseModel):
+    question: str = Field(..., min_length=1, max_length=2000)
+
+
 class AgentDebateSummaryResponse(BaseModel):
     debate_id: str
     objective: str

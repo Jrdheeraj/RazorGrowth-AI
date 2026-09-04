@@ -1,10 +1,12 @@
 """Agent Debate API routes — Phase F."""
 from __future__ import annotations
 
+import json
+import logging
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import MerchantContext, merchant_ctx, operator_ctx, approver_ctx
@@ -23,6 +25,7 @@ from backend.app.schemas.debate import (
     AgentFindingListResponse,
     AgentFindingResponse,
     AgentMessageCreate,
+    AgentDebateChatRequest,
     AgentMessageListResponse,
     AgentMessageResponse,
     AgentTaskCreate,
@@ -33,8 +36,85 @@ from backend.app.schemas.debate import (
     DebateRoundStatus,
 )
 from backend.app.services.agent_debate_service import AgentDebateService
+from backend.app.db.session import get_session_factory
+from backend.app.core.config import get_settings
+from backend.app.agents.orchestrator import GrowthAgentOrchestrator
+from backend.app.services.razorpay_ingestion import RazorpayIngestionService
 
 router = APIRouter(prefix="/agent-debates", tags=["agent-debates"])
+log = logging.getLogger(__name__)
+
+
+def _run_debate_worker(debate_id: uuid.UUID, merchant_id: uuid.UUID, objective: str) -> None:
+    """Run only the Agent Debate workflow in an isolated background session."""
+    db = get_session_factory()()
+    try:
+        settings = get_settings()
+        if not settings.GROQ_API_KEY:
+            raise RuntimeError("GROQ_NOT_CONFIGURED")
+        if not (
+            settings.RAZORPAY_ENABLED
+            and settings.RAZORPAY_TEST_MODE
+            and settings.REAL_TEST_INTEGRATION_ENABLED
+            and settings.RAZORPAY_KEY_ID
+            and settings.RAZORPAY_KEY_SECRET
+        ):
+            raise RuntimeError("REAL_RAZORPAY_TEST_INTEGRATION_NOT_CONFIGURED")
+
+        # Refresh the same real TEST integration used by the rest of the app.
+        ingestion = RazorpayIngestionService(db, merchant_id).ingest_all()
+        if ingestion.errors:
+            raise RuntimeError("RAZORPAY_TEST_INGESTION_FAILED")
+        from backend.app.ai.llm.provider import build_llm_provider
+
+        llm = build_llm_provider(
+            provider="groq",
+            api_key=settings.GROQ_API_KEY,
+            model=settings.GROQ_MODEL,
+            timeout=settings.LLM_REQUEST_TIMEOUT,
+            max_retries=settings.LLM_MAX_RETRIES,
+            max_tokens=settings.LLM_MAX_TOKENS,
+        )
+        GrowthAgentOrchestrator(db, llm=llm).run(
+            merchant_id,
+            mode="growth_team",
+            params={
+                "objective": objective,
+                "window_days": 30,
+                "propose_retry_action": True,
+                "debate_id": str(debate_id),
+            },
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        log.exception("Agent Debate worker failed for %s", debate_id)
+        debate = AgentDebateService(db).get_debate(debate_id)
+        if debate and debate.merchant_id == merchant_id:
+            debate.status = DebateStatus.failed
+            db.commit()
+    finally:
+        db.close()
+
+
+@router.post("/start", response_model=AgentDebateResponse, status_code=202)
+def start_agent_debate(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(operator_ctx),
+) -> Any:
+    """Create and immediately start a standalone, live Groq-powered debate."""
+    objective = "Find the strongest growth opportunity using the latest Razorpay TEST data"
+    debate = AgentDebateService(db).create_debate(
+        merchant_id=ctx.merchant_id,
+        objective=objective,
+        manager_agent_id="ManagerAgent",
+        context={"source": "agent_debate", "data_source": "razorpay_test"},
+    )
+    debate.status = DebateStatus.investigating
+    db.commit()
+    background_tasks.add_task(_run_debate_worker, debate.id, ctx.merchant_id, objective)
+    return AgentDebateResponse.model_validate(debate, from_attributes=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -465,6 +545,72 @@ def list_messages(
             AgentMessageResponse.model_validate(m, from_attributes=True) for m in messages
         ]
     }
+
+
+@router.post("/{debate_id}/chat", response_model=AgentMessageResponse, status_code=201)
+def debate_chat(
+    debate_id: str,
+    payload: AgentDebateChatRequest,
+    db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(operator_ctx),
+) -> Any:
+    """Answer a merchant question using the same debate and Groq context."""
+    try:
+        did = uuid.UUID(debate_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid debate_id format")
+
+    svc = AgentDebateService(db)
+    debate = svc.get_debate(did)
+    if not debate or debate.merchant_id != ctx.merchant_id:
+        raise HTTPException(status_code=404, detail="DEBATE_NOT_FOUND")
+
+    settings = get_settings()
+    if not settings.GROQ_API_KEY:
+        raise HTTPException(status_code=503, detail="GROQ_NOT_CONFIGURED")
+
+    from backend.app.ai.llm.provider import build_llm_provider
+
+    llm = build_llm_provider(
+        provider="groq",
+        api_key=settings.GROQ_API_KEY,
+        model=settings.GROQ_MODEL,
+        timeout=settings.LLM_REQUEST_TIMEOUT,
+        max_retries=settings.LLM_MAX_RETRIES,
+        max_tokens=settings.LLM_MAX_TOKENS,
+    )
+    messages = svc.list_messages_by_debate(did)
+    findings = svc.list_findings_by_debate(did)
+    prompt = {
+        "objective": debate.objective,
+        "merchant_context": (debate.context or {}).get("rag_context", {}),
+        "findings": [
+            {"agent": f.agent_specialty, "title": f.title, "description": f.description, "evidence": f.evidence}
+            for f in findings
+        ],
+        "debate": [{"agent": m.from_agent, "content": m.content} for m in messages[-12:]],
+        "question": payload.question,
+    }
+    answer = llm.generate(
+        "Answer the merchant using only the real merchant data and the recorded Agent Debate. Do not invent facts or numbers.",
+        json.dumps(prompt, default=str),
+        temperature=0.3,
+        max_tokens=300,
+    ).strip()
+    if not answer:
+        raise HTTPException(status_code=502, detail="GROQ_EMPTY_RESPONSE")
+
+    message = svc.add_message(
+        debate_id=did,
+        merchant_id=ctx.merchant_id,
+        from_agent=AgentSpecialty.manager,
+        to_agent=None,
+        message_type="answer",
+        content=answer,
+        references=[{"type": "merchant_question"}],
+    )
+    db.commit()
+    return AgentMessageResponse.model_validate(message, from_attributes=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

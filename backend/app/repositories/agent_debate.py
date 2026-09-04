@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import uuid
-from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -139,7 +138,6 @@ class AgentFindingRepository(BaseRepository[AgentFinding]):
         uncertainty_notes: str | None = None,
         supports_recommendation: bool | None = None,
     ) -> AgentFinding:
-        import json
         from decimal import Decimal
         finding = AgentFinding(
             debate_id=debate_id,
@@ -149,7 +147,7 @@ class AgentFindingRepository(BaseRepository[AgentFinding]):
             finding_type=finding_type,
             title=title,
             description=description,
-            evidence=json.dumps(evidence) if evidence is not None else None,
+            evidence=evidence,
             confidence=Decimal(str(confidence)),
             uncertainty_notes=uncertainty_notes,
             supports_recommendation=supports_recommendation,
@@ -175,7 +173,6 @@ class AgentMessageRepository(BaseRepository[AgentMessage]):
         content: str,
         references: list | None = None,
     ) -> AgentMessage:
-        import json
         message = AgentMessage(
             debate_id=debate_id,
             merchant_id=merchant_id,
@@ -183,6 +180,6 @@ class AgentMessageRepository(BaseRepository[AgentMessage]):
             to_agent=to_agent,
             message_type=message_type,
             content=content,
-            references=json.dumps(references) if references is not None else None,
+            references=references,
         )
         return self.add(message)

@@ -351,3 +351,14 @@ export function fetchDebateRoundStatus(debateId: string): Promise<import("../typ
   return request(`/api/agent-debates/${debateId}/rounds`);
 }
 
+export function startAgentDebate(): Promise<import("../types/api").AgentDebateResponse> {
+  return request("/api/agent-debates/start", { method: "POST" });
+}
+
+export function askAgentDebate(debateId: string, question: string): Promise<import("../types/api").AgentMessage> {
+  return request(`/api/agent-debates/${debateId}/chat`, {
+    method: "POST",
+    body: { question },
+  });
+}
+

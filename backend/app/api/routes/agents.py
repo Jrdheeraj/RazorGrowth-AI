@@ -155,7 +155,7 @@ def run_agents(
         if settings.LLM_PROVIDER.lower() == "groq"
         else settings.LLM_API_KEY
     )
-    if request.mode in ("deep", "team") and api_key:
+    if request.mode in ("deep", "team", "growth_team") and api_key:
         from backend.app.ai.llm.provider import build_llm_provider
 
         llm = build_llm_provider(

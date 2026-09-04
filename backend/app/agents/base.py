@@ -13,6 +13,7 @@ Every specialised agent:
 from __future__ import annotations
 
 import logging
+import json
 import time
 import uuid
 from abc import ABC, abstractmethod
@@ -178,3 +179,52 @@ class BaseGrowthAgent(ABC):
         t0 = time.perf_counter()
         out = fn(*args, **kwargs)
         return out, int((time.perf_counter() - t0) * 1000)
+
+    def _generate_debate_message(
+        self,
+        ctx: AgentContext,
+        result: AgentResult,
+        *,
+        agent_label: str,
+        phase: str,
+        objective: str,
+        evidence: dict[str, Any],
+        instruction: str,
+        fallback: str,
+    ) -> str:
+        """Generate one merchant-facing debate message from grounded evidence."""
+        if ctx.llm is None:
+            result.errors.append("llm_not_configured")
+            return fallback
+
+        system_prompt = (
+            "You are a specialist in a concise business debate for a merchant. "
+            "Use only the supplied evidence. Do not invent numbers, customers, "
+            "orders, payments, products, revenue, or API details. Write as the "
+            f"{agent_label}. Mention agreement, disagreement, challenge, or "
+            "refinement when the phase calls for it. Keep it to 2-4 sentences "
+            "in plain business English."
+        )
+        user_prompt = json.dumps(
+            {
+                "agent": agent_label,
+                "phase": phase,
+                "objective": objective,
+                "evidence": evidence,
+                "instruction": instruction,
+            },
+            default=str,
+            indent=2,
+        )
+        generated, llm_ms = self._timed(
+            ctx.llm.generate,
+            system_prompt,
+            user_prompt,
+            temperature=0.35,
+            max_tokens=220,
+        )
+        result.llm_ms += llm_ms
+        content = generated.strip()
+        if not content:
+            raise RuntimeError("GROQ_ANALYSIS_EMPTY")
+        return content

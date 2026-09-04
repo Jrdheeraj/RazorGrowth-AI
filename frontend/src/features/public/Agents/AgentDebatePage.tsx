@@ -1,167 +1,300 @@
 /**
- * AgentDebatePage — full debate detail view.
+ * AgentDebatePage
  *
- * Shows:
- *  - Sidebar list of all debates (from /api/agent-debates)
- *  - Selected debate: AgentDashboard + evidence viewer + messages + rounds
- *  - Explicit INSUFFICIENT EVIDENCE state when data is absent
- *  - Real provenance: every finding links back to its source evidence
- *  - No invented findings — all data comes from the backend API
- *  - Auto-selects debate from ?id= URL param (set by AI Team investigation flow)
+ * Frontend-only redesign of the debate detail surface. All rendered content
+ * comes from the existing Agent Debate APIs.
  */
-import { useEffect, useState, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
-import { WindowPanel } from "../../../components/WindowPanel";
-import { StatusChip } from "../../../components/StatusIndicator";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   fetchAgentDashboard,
-  fetchDebateList,
   fetchDebateFindings,
+  fetchDebateList,
   fetchDebateMessages,
   fetchDebateRoundStatus,
+  startAgentDebate,
+  askAgentDebate,
 } from "../../../lib/api";
 import type {
   AgentDashboardResponse,
   AgentDebateListItem,
+  AgentDebateRoundStatus,
   AgentFinding,
   AgentMessage,
-  AgentDebateRoundStatus,
 } from "../../../types/api";
-import { AgentDashboard } from "./AgentDashboard";
 import "./AgentDebate.css";
 
-const ROUND_LABELS: Record<number, { name: string; desc: string }> = {
-  1: { name: "Round 1: Independent Analysis",  desc: "Each specialist agent analyses data independently — no cross-agent communication." },
-  2: { name: "Round 2: Cross-Agent Debate",     desc: "Specialists challenge each other's findings and propose alternatives." },
-  3: { name: "Round 3: Rebuttals & Refinements", desc: "Agents respond to challenges and refine their positions." },
-  4: { name: "Synthesis",                        desc: "Manager agent synthesises all evidence into a final recommendation." },
+const AGENT_LABELS: Record<string, string> = {
+  manager: "Growth Manager",
+  marketing: "Marketing Expert",
+  product: "Product Expert",
+  designer: "Design & UX Expert",
+  design: "Design & UX Expert",
+  software: "Technology Expert",
+  technology: "Technology Expert",
 };
 
-function debateStatusTone(status: string): "ok" | "accent" | "neutral" {
-  if (status === "concluded")                            return "ok";
-  if (status === "debating" || status === "synthesizing") return "accent";
-  return "neutral";
+const AGENT_TONES: Record<string, string> = {
+  manager: "green",
+  marketing: "warm",
+  product: "mist",
+  designer: "terracotta",
+  design: "terracotta",
+  software: "amber",
+  technology: "amber",
+};
+
+function normalizeKey(value: string | null | undefined) {
+  return (value ?? "").toLowerCase().replace(/[^a-z]/g, "");
 }
 
-/* ─────────────────────────────────────────────────────────────────────────── */
+function agentLabel(raw: string | null | undefined) {
+  const key = normalizeKey(raw);
+  return AGENT_LABELS[key] ?? prettify(raw ?? "AI Expert");
+}
+
+function agentInitials(raw: string | null | undefined) {
+  const label = agentLabel(raw);
+  const words = label.split(/\s+/).filter(Boolean);
+  return (words[0]?.[0] ?? "A") + (words[1]?.[0] ?? "");
+}
+
+function agentTone(raw: string | null | undefined) {
+  return AGENT_TONES[normalizeKey(raw)] ?? "neutral";
+}
+
+function prettify(value: string) {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatDate(value: string | null | undefined, options: Intl.DateTimeFormatOptions = {}) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", ...options });
+}
+
+function formatTime(value: string | null | undefined) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+function shortStatus(status: string | null | undefined) {
+  const value = status ?? "";
+  if (value === "concluded") return "Concluded";
+  if (value === "debating" || value === "synthesizing") return "Discussing";
+  if (value === "investigating") return "Investigating";
+  return prettify(value || "Working");
+}
+
+function firstSentence(text: string | null | undefined) {
+  if (!text) return "";
+  const match = text.trim().match(/^(.+?[.!?])(\s|$)/);
+  return match?.[1] ?? text.trim();
+}
+
+function remainingText(text: string | null | undefined, first: string) {
+  if (!text) return "";
+  return text.trim().slice(first.length).trim();
+}
+
+function pickRecommendationTitle(dashboard: AgentDashboardResponse, findings: AgentFinding[]) {
+  const supporting = findings.find((finding) => finding.supports_recommendation || finding.finding_type === "supporting");
+  return supporting?.title || firstSentence(dashboard.recommendation) || firstSentence(dashboard.final_synthesis) || dashboard.objective;
+}
+
+function pickRecommendationBody(dashboard: AgentDashboardResponse, title: string) {
+  const source = dashboard.recommendation || dashboard.final_synthesis || "";
+  const rest = remainingText(source, title);
+  return rest || source || "The team has completed its review of the current business data.";
+}
+
+function getRound(msg: AgentMessage): number {
+  if (!Array.isArray(msg.references)) return 0;
+  const first = msg.references[0] as Record<string, unknown> | undefined;
+  return typeof first?.round === "number" ? first.round : 0;
+}
+
+function parseArray(value: unknown): unknown[] | null {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeMessages(raw: AgentMessage[]) {
+  return raw.map((message) => ({
+    ...message,
+    references: parseArray(message.references),
+  }));
+}
+
+function normalizeFindings(raw: AgentFinding[]) {
+  return raw.map((finding) => ({
+    ...finding,
+    evidence: parseArray(finding.evidence) as Array<Record<string, unknown>> | null,
+  }));
+}
+
+function sortMessages(messages: AgentMessage[]) {
+  return [...messages].sort((a, b) => {
+    const aRound = getRound(a);
+    const bRound = getRound(b);
+    if (aRound !== bRound) return aRound - bRound;
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  });
+}
+
+function checklistItems(dashboard: AgentDashboardResponse, findings: AgentFinding[]) {
+  const fromFindings = findings
+    .filter((finding) => finding.finding_type === "supporting" || finding.supports_recommendation)
+    .map((finding) => finding.description || finding.title)
+    .filter(Boolean)
+    .slice(0, 4);
+
+  if (fromFindings.length > 0) return fromFindings;
+
+  const synthesis = dashboard.final_synthesis || dashboard.recommendation || "";
+  return synthesis
+    .split(/(?<=[.!?])\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+}
 
 export function AgentDebatePage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const urlDebateId = searchParams.get("id");
-
-  const [debates, setDebates]         = useState<AgentDebateListItem[]>([]);
-  const [selectedId, setSelectedId]   = useState<string | null>(urlDebateId);
+  const [debates, setDebates] = useState<AgentDebateListItem[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(urlDebateId);
   const [loadingList, setLoadingList] = useState(true);
-  const [listError, setListError]     = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [startingDebate, setStartingDebate] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
 
-  /* Load debate list ─────────────────────────────────────────────────────── */
+  const loadDebates = useCallback(async (preferredSelectedId?: string) => {
+    try {
+      setLoadingList(true);
+      const data = await fetchDebateList();
+      const list = data.debates ?? [];
+      setDebates(list);
+      setListError(null);
+      if (preferredSelectedId) setSelectedId(preferredSelectedId);
+      else if (!selectedId && list.length > 0) setSelectedId(list[0].id);
+      return list;
+    } finally {
+      setLoadingList(false);
+    }
+  }, [selectedId]);
+
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+
+    async function loadInitialDebates() {
       try {
-        setLoadingList(true);
-        const data = await fetchDebateList();
-        if (!cancelled) {
-          const list = data.debates ?? [];
-          setDebates(list);
-          setListError(null);
-          // If a URL param id was given but is not in the list yet, keep it selected anyway
-          // (the detail panel will fetch it directly)
-          if (!selectedId && list.length > 0) {
-            setSelectedId(list[0].id);
-          }
-        }
-      } catch (e) {
-        if (!cancelled)
-          setListError(e instanceof Error ? e.message : "Failed to load debates");
+        const list = await loadDebates();
+        if (cancelled) return;
+        if (!selectedId && list.length > 0) setSelectedId(list[0].id);
+      } catch (error) {
+        if (!cancelled) setListError(error instanceof Error ? error.message : "Failed to load debates");
       } finally {
         if (!cancelled) setLoadingList(false);
       }
-    })();
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    }
+
+    loadInitialDebates();
+    return () => {
+      cancelled = true;
+    };
+    // Initial load only; URL changes are handled below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // When URL param changes (e.g. a new investigation just completed), select that debate
   useEffect(() => {
     if (urlDebateId) setSelectedId(urlDebateId);
   }, [urlDebateId]);
 
+  const selectDebate = useCallback((debateId: string) => {
+    setSelectedId(debateId);
+    setSearchParams({ id: debateId });
+  }, [setSearchParams]);
+
+  const handleStartDebate = useCallback(async () => {
+    try {
+      setStartingDebate(true);
+      setStartError(null);
+      const result = await startAgentDebate();
+      selectDebate(result.id);
+      await loadDebates(result.id);
+    } catch (error) {
+      setStartError(error instanceof Error ? error.message : "Could not start a new debate");
+    } finally {
+      setStartingDebate(false);
+    }
+  }, [loadDebates, selectDebate]);
+
   return (
-    <section id="agent-debate" className="shell section agent-debate-page" aria-labelledby="debate-heading">
-      <div className="page-hero">
-        <p className="meta-label">YOUR BUSINESS · AI INVESTIGATIONS</p>
-        <h2 id="debate-heading" className="display-lg" style={{ marginTop: 10 }}>
-          AI Investigations
-        </h2>
-        <p className="page-subtitle" style={{ marginTop: 8 }}>
-          Your AI Growth Team has investigated your business and produced evidence-backed findings.
-          All conclusions are grounded in real data — no invented numbers.
-        </p>
-      </div>
+    <section id="agent-debate" className="agent-debate-page" aria-labelledby="debate-heading">
+      <div className="debate-shell">
+        <aside className="debate-sidebar" aria-label="Past discussions">
+          <div className="debate-sidebar__title">
+            <span className="debate-sidebar__icon" aria-hidden="true">[]</span>
+            <h1 id="debate-heading">Agent Debates</h1>
+          </div>
+          <h2>Past discussions</h2>
+          <p>Review how your AI experts analyzed your business.</p>
+          <button type="button" className="debate-new-button" onClick={handleStartDebate} disabled={startingDebate}>
+            {startingDebate ? "Starting debate..." : "+ Start a new debate"}
+          </button>
 
-      <div className="debate-layout">
-        {/* Sidebar */}
-        <aside className="debate-sidebar">
-          <WindowPanel title="debate-list.agent" className="sidebar-panel">
-            <div className="sidebar-header">
-              <h3>Recent Debates</h3>
-              {loadingList && <span className="loading-indicator">Loading…</span>}
-            </div>
+          {loadingList && <div className="debate-muted">Loading discussions...</div>}
+          {listError && <div className="debate-error">Error: {listError}</div>}
+          {startError && <div className="debate-error">Error: {startError}</div>}
+          {!loadingList && !listError && debates.length === 0 && (
+            <div className="debate-empty">No debates yet. Start a new debate to analyze the latest merchant data.</div>
+          )}
 
-            {listError && <div className="sidebar-error">Error: {listError}</div>}
-
-            {!loadingList && !listError && debates.length === 0 && (
-              <div className="sidebar-empty">
-                No investigations found yet. Visit the AI Team page to start your first analysis.
-              </div>
-            )}
-
-            <ul className="debate-list">
-              {debates.map((d) => (
-                <li
-                  key={d.id}
-                  className={`debate-list-item${selectedId === d.id ? " selected" : ""}`}
-                  onClick={() => setSelectedId(d.id)}
+          <ul className="debate-list">
+            {debates.map((debate) => (
+              <li key={debate.id}>
+                <button
+                  type="button"
+                  className={`debate-list-item${selectedId === debate.id ? " is-selected" : ""}`}
+                  onClick={() => selectDebate(debate.id)}
                 >
-                  <div className="debate-item-header">
-                    <span className="debate-objective">{d.objective}</span>
-                    <StatusChip tone={debateStatusTone(d.status)}>
-                      {d.status.toUpperCase()}
-                    </StatusChip>
-                  </div>
-                  <div className="debate-item-meta">
-                    <span>Created {new Date(d.created_at).toLocaleDateString()}</span>
-                    <span>Updated {new Date(d.updated_at).toLocaleDateString()}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </WindowPanel>
+                  <span className="debate-list-item__mark" aria-hidden="true">[]</span>
+                  <span className="debate-list-item__body">
+                    <strong>{debate.objective}</strong>
+                    <span>
+                      <i className={`status-dot status-dot--${debate.status}`} aria-hidden="true" />
+                      {shortStatus(debate.status)}
+                    </span>
+                  </span>
+                  <time dateTime={debate.updated_at}>{formatDate(debate.updated_at)}</time>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          <p className="debate-sidebar__note">Each debate brings multiple experts together to discuss your business and find the best opportunities.</p>
         </aside>
 
-        {/* Main content */}
         <main className="debate-main">
           {selectedId ? (
             <DebateDetail debateId={selectedId} />
           ) : (
-            <WindowPanel title="welcome.agent" className="welcome-panel">
-              <div className="welcome-content">
-                <span className="welcome-icon">DEBATE</span>
-                <h3>Select an Investigation</h3>
-                <p>Choose an investigation from the sidebar to review:</p>
-                <ul>
-                  <li>Which agents participated and what they found</li>
-                  <li>Evidence sources, confidence scores, and data quality</li>
-                  <li>How agents challenged each other's findings</li>
-                  <li>The Growth Manager's final synthesis</li>
-                  <li>What to do when evidence is insufficient</li>
-                </ul>
-                <div className="welcome-hint">
-                  <kbd>AI Team</kbd> → Start AI Investigation to create one
-                </div>
-              </div>
-            </WindowPanel>
+            <div className="debate-placeholder">
+              <h2>Select an investigation</h2>
+              <p>Choose a past discussion to review the team conversation and final recommendation.</p>
+            </div>
           )}
         </main>
       </div>
@@ -169,24 +302,21 @@ export function AgentDebatePage() {
   );
 }
 
-/* ─────────────────────────────────────────────────────────────────────────── */
-
-interface DebateDetailProps {
-  debateId: string;
-}
-
-function DebateDetail({ debateId }: DebateDetailProps) {
-  const [dashboard,  setDashboard]  = useState<AgentDashboardResponse | null>(null);
-  const [findings,   setFindings]   = useState<AgentFinding[]>([]);
-  const [messages,   setMessages]   = useState<AgentMessage[]>([]);
-  const [rounds,     setRounds]     = useState<AgentDebateRoundStatus | null>(null);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState<string | null>(null);
-  const [activeTab,  setActiveTab]  = useState<"overview" | "evidence" | "messages" | "rounds">("overview");
+function DebateDetail({ debateId }: { debateId: string }) {
+  const [dashboard, setDashboard] = useState<AgentDashboardResponse | null>(null);
+  const [findings, setFindings] = useState<AgentFinding[]>([]);
+  const [messages, setMessages] = useState<AgentMessage[]>([]);
+  const [rounds, setRounds] = useState<AgentDebateRoundStatus | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [question, setQuestion] = useState("");
+  const [sendingQuestion, setSendingQuestion] = useState(false);
+  const messageListRef = useRef<HTMLDivElement | null>(null);
+  const shouldStickToBottom = useRef(true);
 
   const load = useCallback(async () => {
     try {
-      setLoading(true);
       setError(null);
       const [dash, finds, msgs, rds] = await Promise.all([
         fetchAgentDashboard(debateId),
@@ -195,445 +325,357 @@ function DebateDetail({ debateId }: DebateDetailProps) {
         fetchDebateRoundStatus(debateId).catch(() => null),
       ]);
       setDashboard(dash);
-      setFindings(finds.findings ?? []);
-      setMessages(msgs.messages ?? []);
+      setFindings(normalizeFindings(finds.findings ?? []));
+      setMessages(normalizeMessages(msgs.messages ?? []));
       setRounds(rds);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load debate");
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Failed to load debate");
     } finally {
       setLoading(false);
     }
   }, [debateId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    setLoading(true);
+    load();
+  }, [load]);
+
+  const orderedMessages = useMemo(() => sortMessages(messages), [messages]);
+  const isActive = dashboard?.debate_status && !["concluded", "failed"].includes(dashboard.debate_status);
+
+  useEffect(() => {
+    if (!isActive) return;
+    const interval = window.setInterval(() => {
+      load();
+    }, 2500);
+    return () => window.clearInterval(interval);
+  }, [isActive, load]);
+
+  useEffect(() => {
+    const list = messageListRef.current;
+    if (!list || !shouldStickToBottom.current) return;
+    list.scrollTo({ top: list.scrollHeight, behavior: orderedMessages.length > 1 ? "smooth" : "auto" });
+  }, [orderedMessages.length, dashboard?.debate_status]);
+
+  const handleMessageScroll = useCallback(() => {
+    const list = messageListRef.current;
+    if (!list) return;
+    const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+    shouldStickToBottom.current = distanceFromBottom < 120;
+  }, []);
+
+  const handleQuestion = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmed = question.trim();
+    if (!trimmed || sendingQuestion) return;
+    try {
+      setSendingQuestion(true);
+      await askAgentDebate(debateId, trimmed);
+      setQuestion("");
+      await load();
+    } catch (questionError) {
+      setError(questionError instanceof Error ? questionError.message : "Could not send question");
+    } finally {
+      setSendingQuestion(false);
+    }
+  }, [debateId, load, question, sendingQuestion]);
 
   if (loading) {
-    return (
-      <WindowPanel title="debate-detail.agent">
-        <div className="dashboard-loading">Loading debate data…</div>
-      </WindowPanel>
-    );
+    return <div className="debate-loading">Loading debate data...</div>;
   }
 
   if (error || !dashboard) {
-    return (
-      <WindowPanel title="debate-detail.agent">
-        <div className="dashboard-error">{error ?? "No data available"}</div>
-      </WindowPanel>
-    );
+    return <div className="debate-error debate-error--panel">{error ?? "No debate data available"}</div>;
   }
 
+  const status = dashboard.debate_status;
+  const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+  const completedDate = formatDate(lastMessage?.created_at || undefined) || "";
+  const topTitle = pickRecommendationTitle(dashboard, findings);
+  const topBody = pickRecommendationBody(dashboard, topTitle);
+  const opportunities = findings.filter((finding) => finding.finding_type !== "uncertainty").slice(0, 5);
+  const agreedItems = checklistItems(dashboard, findings);
   const hasInsufficientData =
     dashboard.rag_context &&
     dashboard.rag_context.status !== "ready" &&
     !dashboard.rag_context.inference_allowed;
 
   return (
-    <div className="debate-detail">
-      {/* Insufficient-evidence banner — shown prominently, never hidden */}
-      {hasInsufficientData && (
-        <div className="insufficient-banner">
-          <span className="insufficient-icon">!</span>
-          <div className="insufficient-content">
-            <h4>More Data Needed</h4>
-            <p>
-              Your business doesn't have enough transaction history yet for reliable AI analysis.
-              Your agents have recorded what they found, but have flagged that more data is needed
-              before they can make a confident recommendation.
-            </p>
+    <div className="debate-workspace">
+      <section className="debate-chat-card" aria-label="Agent discussion">
+        <header className="debate-chat-header">
+          <div>
+            <Link to="/agents" className="debate-back-link">Back to Debates</Link>
+            <h2>{dashboard.objective}</h2>
+            <p>Our AI experts analyzed your business data and discussed the best opportunities for growth.</p>
           </div>
-        </div>
-      )}
-
-      {/* Synthesis / recommendation — only if concluded with real data */}
-      {dashboard.debate_status === "concluded" && dashboard.recommendation && (
-        <div className="synthesis-block">
-          <span className="synthesis-label">Growth Manager's Recommendation</span>
-          <p className="synthesis-text">{dashboard.recommendation}</p>
-        </div>
-      )}
-
-      {/* Tab strip */}
-      <DebateTabStrip active={activeTab} onChange={setActiveTab}
-        findingsCount={findings.length}
-        messagesCount={messages.length}
-        roundsCount={rounds?.current_round ?? 1}
-      />
-
-      {/* Tab content */}
-      {activeTab === "overview" && (
-        <AgentDashboard debateId={debateId} />
-      )}
-
-      {activeTab === "evidence" && (
-        <EvidenceViewer findings={findings} />
-      )}
-
-      {activeTab === "messages" && (
-        <MessagesViewer messages={messages} />
-      )}
-
-      {activeTab === "rounds" && rounds && (
-        <RoundsViewer rounds={rounds} />
-      )}
-
-      {/* Workflow footer — connects debate to next stage */}
-      {dashboard.debate_status === "concluded" && dashboard.recommendation && (
-        <div style={{
-          marginTop: 24,
-          paddingTop: 20,
-          borderTop: "1px solid var(--line-soft)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 12,
-        }}>
-          <p style={{ fontSize: "var(--text-small)", color: "var(--ink-soft)" }}>
-            Investigation concluded. The Growth Manager has produced a recommendation.
-          </p>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <a
-              href="/agents"
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "var(--text-meta)",
-                textTransform: "uppercase",
-                letterSpacing: "var(--tracking-meta)",
-                padding: "8px 14px",
-                border: "1px solid var(--line-soft)",
-                borderRadius: "var(--radius-control)",
-                background: "var(--paper-deep)",
-                color: "var(--ink-soft)",
-                textDecoration: "none",
-              }}
-            >
-              ← AI Team
-            </a>
-            <span style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "var(--text-meta)",
-              textTransform: "uppercase",
-              letterSpacing: "var(--tracking-meta)",
-              padding: "8px 14px",
-              border: "1px dashed var(--line-soft)",
-              borderRadius: "var(--radius-control)",
-              color: "var(--ink-faint)",
-            }}>
-              Simulation & Approval → coming next
+          <div className="debate-chat-status">
+            <span className={`debate-status-pill debate-status-pill--${status}`}>
+              <i aria-hidden="true" />
+              {shortStatus(status)}
             </span>
+            {completedDate && <span>{status === "concluded" ? "Completed" : "Updated"} on {completedDate}</span>}
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
+        </header>
 
-/* ── Tab strip ───────────────────────────────────────────────────────────── */
+        {hasInsufficientData && (
+          <div className="debate-data-note">
+            <strong>More data needed</strong>
+            <span>The team reviewed what is available, but flagged that more history would improve confidence.</span>
+          </div>
+        )}
 
-interface TabStripProps {
-  active: "overview" | "evidence" | "messages" | "rounds";
-  onChange: (t: "overview" | "evidence" | "messages" | "rounds") => void;
-  findingsCount: number;
-  messagesCount: number;
-  roundsCount: number;
-}
-
-function DebateTabStrip({ active, onChange, findingsCount, messagesCount, roundsCount }: TabStripProps) {
-  const tabs: Array<{ key: typeof active; label: string; count?: number }> = [
-    { key: "overview",  label: "Overview" },
-    { key: "evidence",  label: "Evidence",  count: findingsCount },
-    { key: "messages",  label: "Messages",  count: messagesCount },
-    { key: "rounds",    label: "Rounds",    count: roundsCount },
-  ];
-
-  return (
-    <nav className="debate-tabs" aria-label="Debate sections">
-      {tabs.map((t) => (
-        <button
-          key={t.key}
-          className={`debate-tab${active === t.key ? " active" : ""}`}
-          onClick={() => onChange(t.key)}
-          type="button"
+        <div
+          className="debate-message-list"
+          role="log"
+          aria-label="Debate messages"
+          ref={messageListRef}
+          onScroll={handleMessageScroll}
         >
-          {t.label}
-          {t.count !== undefined && t.count > 0 && (
-            <span className="tab-count">{t.count}</span>
+          {orderedMessages.length > 0 ? (
+            orderedMessages.map((message) => (
+              <article key={message.id} className={`debate-message debate-message--${agentTone(message.from_agent)}`}>
+                <div className="debate-avatar" aria-hidden="true">{agentInitials(message.from_agent)}</div>
+                <div className="debate-message__content">
+                  <div className="debate-message__meta">
+                    <strong>{agentLabel(message.from_agent)}</strong>
+                    {formatTime(message.created_at) && <time dateTime={message.created_at}>{formatTime(message.created_at)}</time>}
+                  </div>
+                  <p>{message.content}</p>
+                </div>
+              </article>
+            ))
+          ) : (
+            <DebateWorkingState dashboard={dashboard} />
           )}
-        </button>
-      ))}
-    </nav>
-  );
-}
-
-/* ── Evidence viewer ─────────────────────────────────────────────────────── */
-
-function EvidenceViewer({ findings }: { findings: AgentFinding[] }) {
-  if (findings.length === 0) {
-    return (
-      <WindowPanel title="evidence.agent" className="evidence-panel">
-        <div className="messages-empty">
-          No findings recorded yet — agents have not analysed this objective.
         </div>
-      </WindowPanel>
-    );
-  }
 
-  const supporting  = findings.filter(f => f.finding_type === "supporting");
-  const opposing    = findings.filter(f => f.finding_type === "opposing");
-  const uncertainty = findings.filter(f => f.finding_type === "uncertainty");
-  const neutral     = findings.filter(f => f.finding_type === "neutral");
+        <form className="debate-composer" onSubmit={handleQuestion}>
+          <input
+            type="text"
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            placeholder="Ask a question about this discussion..."
+            aria-label="Ask a question about this discussion"
+            disabled={sendingQuestion}
+          />
+          <button type="submit" aria-label="Send question" disabled={sendingQuestion || !question.trim()}>
+            {sendingQuestion ? "Sending..." : "Send"}
+          </button>
+        </form>
 
-  return (
-    <WindowPanel title="evidence.agent" className="evidence-panel">
-      {/* Summary row */}
-      <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
-        <EvidenceStat label="Supporting"  count={supporting.length}  tone="supporting" />
-        <EvidenceStat label="Opposing"    count={opposing.length}    tone="opposing" />
-        <EvidenceStat label="Uncertainty" count={uncertainty.length} tone="uncertainty" />
-        <EvidenceStat label="Neutral"     count={neutral.length}     tone="neutral" />
-      </div>
-
-      <div className="evidence-grid">
-        {[...supporting, ...opposing, ...uncertainty, ...neutral].map((f) => (
-          <FindingCard key={f.id} finding={f} />
-        ))}
-      </div>
-    </WindowPanel>
-  );
-}
-
-function EvidenceStat({ label, count, tone }: { label: string; count: number; tone: string }) {
-  return (
-    <div style={{
-      display: "flex", flexDirection: "column", alignItems: "center",
-      gap: 2, padding: "10px 16px",
-      background: "var(--paper-deep)",
-      border: "1px solid var(--line-soft)",
-      borderRadius: "var(--radius-window)",
-      minWidth: 80,
-    }}>
-      <span style={{
-        fontFamily: "var(--font-mono)",
-        fontSize: "var(--text-display-md)",
-        fontWeight: 700,
-        lineHeight: 1,
-        color: tone === "supporting" ? "var(--green-deep)"
-             : tone === "opposing"   ? "var(--coral-strong)"
-             : tone === "uncertainty" ? "var(--coral)"
-             : "var(--ink-soft)",
-      }}>{count}</span>
-      <span style={{
-        fontFamily: "var(--font-mono)",
-        fontSize: "var(--text-meta)",
-        textTransform: "uppercase",
-        letterSpacing: "var(--tracking-meta)",
-        color: "var(--ink-faint)",
-      }}>{label}</span>
-    </div>
-  );
-}
-
-function FindingCard({ finding }: { finding: AgentFinding }) {
-  const evidenceSources: string[] = [];
-  if (Array.isArray(finding.evidence)) {
-    finding.evidence.forEach((e) => {
-      if (typeof e === "object" && e !== null) {
-        const src = (e as Record<string, unknown>).source ?? (e as Record<string, unknown>).type;
-        if (typeof src === "string") evidenceSources.push(src);
-      }
-    });
-  }
-
-  return (
-    <div className={`evidence-item ${finding.finding_type}`}>
-      <div className="evidence-item-header">
-        <span className="evidence-agent">{finding.agent_specialty}</span>
-        <span className={`evidence-type-badge ${finding.finding_type}`}>
-          {finding.finding_type}
-        </span>
-        <span className="evidence-confidence">
-          {Math.round(finding.confidence * 100)}% confidence
-        </span>
-      </div>
-
-      <div className="evidence-title">{finding.title}</div>
-
-      {finding.description && (
-        <div className="evidence-description">{finding.description}</div>
-      )}
-
-      {finding.uncertainty_notes && (
-        <div style={{
-          marginTop: 6, padding: "8px 12px",
-          background: "var(--coral-wash)",
-          border: "1px solid var(--coral)",
-          borderRadius: "var(--radius-control)",
-          fontFamily: "var(--font-mono)",
-          fontSize: "var(--text-meta)",
-          color: "var(--coral-strong)",
-        }}>
-          ⚠ {finding.uncertainty_notes}
-        </div>
-      )}
-
-      {evidenceSources.length > 0 && (
-        <div className="evidence-sources-row">
-          {evidenceSources.map((src, i) => (
-            <span key={i} className="evidence-source-chip">{src}</span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ── Messages viewer ─────────────────────────────────────────────────────── */
-
-const AGENT_SHORT: Record<string, string> = {
-  manager: "Growth Manager",
-  marketing: "Marketing Analyst",
-  product: "Product Strategist",
-  designer: "Creative & UX Advisor",
-  software: "Technical Feasibility",
-};
-
-function agentLabel(raw: string) {
-  return AGENT_SHORT[raw?.toLowerCase()] ?? raw;
-}
-
-function getRound(msg: AgentMessage): number {
-  if (Array.isArray(msg.references)) {
-    const first = msg.references[0] as Record<string, unknown> | undefined;
-    if (first && typeof first.round === "number") return first.round;
-  }
-  return 0;
-}
-
-const ROUND_BADGE_LABELS: Record<number, string> = {
-  1: "R1 — Investigation",
-  2: "R2 — Challenge",
-  3: "R3 — Rebuttal",
-  4: "R4 — Synthesis",
-};
-
-function MessagesViewer({ messages }: { messages: AgentMessage[] }) {
-  if (messages.length === 0) {
-    return (
-      <WindowPanel title="messages.agent" className="messages-panel">
-        <div className="messages-empty">
-          No messages yet — agents have not exchanged debate messages.
-        </div>
-      </WindowPanel>
-    );
-  }
-
-  // Group by round
-  const byRound = new Map<number, AgentMessage[]>();
-  for (const m of messages) {
-    const r = getRound(m);
-    if (!byRound.has(r)) byRound.set(r, []);
-    byRound.get(r)!.push(m);
-  }
-  const rounds = Array.from(byRound.keys()).sort((a, b) => a - b);
-
-  return (
-    <WindowPanel title="messages.agent" className="messages-panel">
-      <div className="messages-list">
-        {rounds.map((r) => (
-          <div key={r}>
-            {r > 0 && (
-              <div style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "var(--text-meta)",
-                textTransform: "uppercase",
-                letterSpacing: "var(--tracking-meta)",
-                color: "var(--ink-faint)",
-                padding: "10px 0 6px",
-                borderBottom: "1px solid var(--line-soft)",
-                marginBottom: 10,
-              }}>
-                {ROUND_BADGE_LABELS[r] ?? `Round ${r}`}
+        {showDetails && (
+          <div className="debate-detail-drawer" aria-label="Full analysis details">
+            <h3>Full analysis details</h3>
+            <AnalysisDetails dashboard={dashboard} findings={findings} messages={orderedMessages} rounds={rounds} />
+            {rounds && (
+              <div className="debate-round-summary">
+                <span>Current round: {rounds.current_round}</span>
+                <span>Total findings: {rounds.findings_summary?.total ?? findings.length}</span>
               </div>
             )}
-            {byRound.get(r)!.map((m) => (
-              <div key={m.id} className="message-item">
-                <div className="message-header">
-                  <span className="message-from">{agentLabel(m.from_agent)}</span>
-                  {m.to_agent && (
-                    <>
-                      <span className="message-arrow">→</span>
-                      <span className="message-to">{agentLabel(m.to_agent)}</span>
-                    </>
-                  )}
-                  <span className={`message-type-badge ${m.message_type.toLowerCase()}`}>
-                    {m.message_type}
-                  </span>
+            <div className="debate-detail-grid">
+              {findings.map((finding) => (
+                <div key={finding.id} className="debate-detail-finding">
+                  <strong>{agentLabel(finding.agent_specialty)}: {finding.title}</strong>
+                  {finding.description && <span>{finding.description}</span>}
+                  <EvidenceList evidence={finding.evidence} />
                 </div>
-                <div className="message-content">{m.content}</div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        ))}
-      </div>
-    </WindowPanel>
+        )}
+      </section>
+
+      <aside className="debate-result-card" aria-label="Final recommendation">
+        <div className="debate-result-heading">
+          <span aria-hidden="true">*</span>
+          <div>
+            <h2>Final Recommendation</h2>
+            <p>Based on the discussion, here's what our team recommends.</p>
+          </div>
+        </div>
+
+        <div className="debate-featured-recommendation">
+          <span aria-hidden="true">O</span>
+          <div>
+            <strong>{topTitle}</strong>
+            <p>{topBody}</p>
+          </div>
+        </div>
+
+        <section className="debate-result-section">
+          <h3>Key Opportunities Discussed</h3>
+          <div className="debate-opportunity-list">
+            {opportunities.length > 0 ? (
+              opportunities.map((finding, index) => (
+                <article key={finding.id} className="debate-opportunity-card">
+                  <span>{index + 1}</span>
+                  <div>
+                    <strong>{finding.title}</strong>
+                    {finding.description && <p>{finding.description}</p>}
+                  </div>
+                </article>
+              ))
+            ) : (
+              <p className="debate-muted">No opportunities were returned for this debate.</p>
+            )}
+          </div>
+        </section>
+
+        <section className="debate-result-section">
+          <h3>What the Team Agreed On</h3>
+          <ul className="debate-checklist">
+            {agreedItems.length > 0 ? (
+              agreedItems.map((item, index) => (
+                <li key={`${item}-${index}`}>
+                  <span aria-hidden="true" />
+                  {item}
+                </li>
+              ))
+            ) : (
+              <li className="debate-muted">The team has not recorded shared conclusions yet.</li>
+            )}
+          </ul>
+        </section>
+
+        <div className="debate-result-actions">
+          <button type="button" className="debate-primary-action" onClick={() => setShowDetails((value) => !value)}>
+            View full analysis details
+          </button>
+          <button type="button" className="debate-secondary-action" onClick={() => window.location.assign("/debate")}>
+            Run a new investigation
+          </button>
+        </div>
+      </aside>
+    </div>
   );
 }
 
-/* ── Rounds viewer ───────────────────────────────────────────────────────── */
+function DebateWorkingState({ dashboard }: { dashboard: AgentDashboardResponse }) {
+  const activeAgents = dashboard.agents.filter((agent) => agent.status !== "completed");
+  if (["concluded", "failed"].includes(dashboard.debate_status)) {
+    return <div className="debate-empty debate-empty--chat">No messages were recorded for this debate.</div>;
+  }
 
-function RoundsViewer({ rounds }: { rounds: AgentDebateRoundStatus }) {
-  const current = rounds.current_round ?? 1;
+  const agents = activeAgents.length > 0 ? activeAgents : dashboard.agents;
+  return (
+    <div className="debate-agent-activity" aria-label="Agents are working">
+      {agents.slice(0, 5).map((agent) => (
+        <article key={agent.specialty} className={`debate-message debate-message--${agentTone(agent.specialty)}`}>
+          <div className="debate-avatar" aria-hidden="true">{agentInitials(agent.specialty)}</div>
+          <div className="debate-message__content">
+            <div className="debate-message__meta">
+              <strong>{agentLabel(agent.specialty)}</strong>
+            </div>
+            <p>{workingCopy(agent.specialty, dashboard.debate_status)}</p>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function workingCopy(agent: string, status: string) {
+  const key = normalizeKey(agent);
+  if (key === "manager") return status === "synthesizing" ? "Reviewing the team discussion and preparing the final recommendation..." : "Preparing the investigation and coordinating the specialists...";
+  if (key === "marketing") return "Reviewing customer behavior, repeat purchases, and payment recovery opportunities...";
+  if (key === "product") return "Analyzing orders, basket value, products, and cross-sell opportunities...";
+  if (key === "designer") return "Reviewing the customer experience and checkout messaging opportunities...";
+  if (key === "software") return "Checking implementation effort, automation paths, and technical risks...";
+  return "Working on this debate...";
+}
+
+function AnalysisDetails({
+  dashboard,
+  findings,
+  messages,
+  rounds,
+}: {
+  dashboard: AgentDashboardResponse;
+  findings: AgentFinding[];
+  messages: AgentMessage[];
+  rounds: AgentDebateRoundStatus | null;
+}) {
+  const facts = dashboard.rag_context?.verified_facts ?? [];
+  const supporting = findings.filter((finding) => finding.finding_type === "supporting" || finding.supports_recommendation);
+  const concerns = findings.filter((finding) => finding.finding_type === "opposing" || finding.finding_type === "uncertainty");
 
   return (
-    <WindowPanel title="rounds.agent" className="rounds-panel">
-      <div className="rounds-timeline">
-        {([1, 2, 3, 4] as const).map((n) => {
-          const meta = ROUND_LABELS[n] ?? { name: `Round ${n}`, desc: "" };
-          const isCompleted = n < current;
-          const isActive    = n === current;
-          const className   = isCompleted ? "round-row completed"
-                            : isActive    ? "round-row active"
-                            :               "round-row pending";
-
-          // Messages for this round
-          const roundMsgs = rounds.rounds?.[n] ?? [];
-
-          return (
-            <div key={n} className={className}>
-              <span className="round-badge">R{n}</span>
-              <div className="round-info">
-                <div className="round-name">{meta.name}</div>
-                <div className="round-desc">{meta.desc}</div>
-                {roundMsgs.length > 0 && (
-                  <div style={{ marginTop: 8, fontSize: "var(--text-small)", color: "var(--ink-soft)" }}>
-                    {roundMsgs.length} message{roundMsgs.length !== 1 ? "s" : ""} exchanged
-                  </div>
-                )}
-                {/* Agent positions for this round */}
-                {rounds.findings_summary?.by_agent && n === 1 && (
-                  <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {Object.entries(rounds.findings_summary.by_agent).map(([agent, count]) => (
-                      <span key={agent} style={{
-                        fontFamily: "var(--font-mono)",
-                        fontSize: "var(--text-meta)",
-                        padding: "2px 8px",
-                        background: "var(--paper-bright)",
-                        border: "1px solid var(--line-soft)",
-                        borderRadius: "var(--radius-control)",
-                        color: "var(--ink-soft)",
-                      }}>
-                        {agent}: {String(count)} findings
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <span className="round-indicator" />
-            </div>
-          );
-        })}
-      </div>
-    </WindowPanel>
+    <div className="debate-analysis-copy">
+      <p>We looked at your recent Razorpay TEST payments, orders, customers, products, and the growth signals available for this merchant.</p>
+      {facts.length > 0 && (
+        <section>
+          <h4>Evidence reviewed</h4>
+          <ul>
+            {facts.slice(0, 6).map((fact, index) => (
+              <li key={`${fact.fact}-${index}`}>{plainMetric(fact.fact, fact.value)}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {supporting.length > 0 && (
+        <section>
+          <h4>What the specialists found</h4>
+          <ul>
+            {supporting.slice(0, 6).map((finding) => (
+              <li key={finding.id}>{agentLabel(finding.agent_specialty)} found: {finding.description || finding.title}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {concerns.length > 0 && (
+        <section>
+          <h4>Concerns and open questions</h4>
+          <ul>
+            {concerns.slice(0, 5).map((finding) => (
+              <li key={finding.id}>{finding.uncertainty_notes || finding.description || finding.title}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {messages.length > 0 && (
+        <section>
+          <h4>How the team discussed it</h4>
+          <p>The team exchanged {messages.length} messages across {rounds?.current_round ?? "multiple"} debate stages before the Growth Manager prepared the recommendation.</p>
+        </section>
+      )}
+      {dashboard.recommendation && (
+        <section>
+          <h4>What to do next</h4>
+          <p>{dashboard.recommendation}</p>
+        </section>
+      )}
+    </div>
   );
+}
+
+function plainMetric(fact: string, value: number) {
+  const label = fact.replace(/[_-]+/g, " ").toLowerCase();
+  if (label.includes("captured") && label.includes("transaction")) return `We reviewed ${value} successful payments.`;
+  if (label.includes("successful") && label.includes("payment")) return `${value} payments were successful.`;
+  if (label.includes("failed") && label.includes("payment")) return `${value} payments failed.`;
+  if (label.includes("customer")) return `${value} customers were included in the analysis.`;
+  if (label.includes("order")) return `${value} orders were reviewed.`;
+  return `${prettify(fact)}: ${value}`;
+}
+
+function EvidenceList({ evidence }: { evidence: Array<Record<string, unknown>> | null }) {
+  if (!Array.isArray(evidence) || evidence.length === 0) return null;
+  return (
+    <ul className="debate-evidence-list">
+      {evidence.slice(0, 3).map((item, index) => (
+        <li key={index}>{evidenceText(item)}</li>
+      ))}
+    </ul>
+  );
+}
+
+function evidenceText(item: Record<string, unknown>) {
+  const source = typeof item.source === "string" ? item.source : typeof item.type === "string" ? prettify(item.type) : "Business data";
+  const metric = typeof item.metric === "string" ? prettify(item.metric) : "";
+  const value = item.value ?? item.catalog_size ?? item.payment_volume ?? item.failed_payments;
+  if (metric && value !== undefined) return `${source}: ${metric} was ${String(value)}.`;
+  if (value !== undefined) return `${source}: ${String(value)}.`;
+  return source;
 }

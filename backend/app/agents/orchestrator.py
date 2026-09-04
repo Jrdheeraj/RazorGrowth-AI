@@ -24,6 +24,7 @@ which lands in 'requested' state.
 from __future__ import annotations
 
 import logging
+import json
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -252,6 +253,14 @@ class GrowthAgentOrchestrator:
                 savepoint.rollback()
                 result = AgentResult(agent_name=agent_name, status="failed")
                 result.errors.append(f"{type(exc).__name__}: {exc}")
+
+            if mode == "growth_team" and result.ok and self.llm is not None:
+                self._ground_debate_messages(
+                    ctx,
+                    agent_name=agent_name,
+                    phase=str(step_ctx_params.get("phase", "investigate")),
+                    result=result,
+                )
             elapsed_ms = int((time.perf_counter() - t0) * 1000)
             result.total_ms = max(result.total_ms, elapsed_ms)
 
@@ -271,6 +280,9 @@ class GrowthAgentOrchestrator:
 
             if agent_name == "ManagerAgent" and "action_plan" in result.output:
                 summary.action_plan = result.output["action_plan"]
+
+            if mode == "growth_team":
+                self.db.commit()
 
         summary.debate_id = str(ctx.shared.get("manager_debate_id")) if ctx.shared.get("manager_debate_id") else None
         summary.ranked_opportunities = list(ctx.shared.get("ranked_opportunities", []))
@@ -294,6 +306,61 @@ class GrowthAgentOrchestrator:
         if mode in ("deep", "growth_team", "team"):
             self._remember_run(ctx, summary)
         return summary
+
+    def _ground_debate_messages(
+        self,
+        ctx: AgentContext,
+        *,
+        agent_name: str,
+        phase: str,
+        result: AgentResult,
+    ) -> None:
+        """Replace deterministic timeline copy with a Groq-grounded turn."""
+        from backend.app.models.agent_debate import AgentMessage
+
+        debate_id = ctx.shared.get("manager_debate_id")
+        if not debate_id:
+            return
+
+        messages = list(
+            self.db.query(AgentMessage)
+            .filter(AgentMessage.debate_id == uuid.UUID(str(debate_id)))
+            .order_by(AgentMessage.created_at.desc())
+            .limit(4)
+            .all()
+        )
+        if not messages:
+            return
+
+        evidence = {
+            "merchant_context": ctx.shared.get("rag_context", {}),
+            "agent_output": result.output,
+            "recent_debate": [
+                {"agent": message.from_agent, "type": message.message_type, "content": message.content}
+                for message in reversed(messages)
+            ],
+        }
+        prompt = json.dumps(
+            {
+                "agent": agent_name,
+                "phase": phase,
+                "instruction": (
+                    "Write the next live debate turn for the named specialist. Use only verified merchant "
+                    "context and the agent output. Address the recent debate when useful. Do not invent or "
+                    "round any numbers. Return 2-4 concise plain-English sentences."
+                ),
+                "evidence": evidence,
+            },
+            default=str,
+        )
+        generated = self.llm.generate(
+            "You are a specialist agent in a multi-agent growth debate. Every claim must be grounded in the supplied real merchant data.",
+            prompt,
+            temperature=0.35,
+            max_tokens=220,
+        ).strip()
+        if generated:
+            messages[0].content = generated
 
     def _share_findings(self, agent_name: str, result: AgentResult, shared: dict[str, Any]) -> None:
         """Share findings between main growth team agents via shared context."""
