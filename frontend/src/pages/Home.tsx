@@ -8,7 +8,6 @@ import { HomeWhoItsFor } from "../features/public/WhoItsFor/HomeWhoItsFor";
 import { HowItWorks } from "../features/public/HowItWorks/HowItWorks";
 import { ProductShowcase } from "../features/public/ProductShowcase/ProductShowcase";
 import { Agents } from "../features/public/Agents/Agents";
-import { AgentDebateDashboard } from "../features/public/Agents/AgentDebateDashboard";
 import { Workflow } from "../features/public/Workflow/Workflow";
 import { Demo } from "../features/public/Demo/Demo";
 import { Manifesto } from "../features/public/Manifesto/Manifesto";
@@ -54,7 +53,6 @@ export function Home() {
         <div className="readable"><HowItWorks /></div>
         <div className="readable"><ProductShowcase /></div>
         <div className="readable"><Agents /></div>
-        <div className="readable"><AgentDebateDashboard /></div>
         <div className="readable"><Workflow /></div>
         <div className="readable"><Demo /></div>
 
