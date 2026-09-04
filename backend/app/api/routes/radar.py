@@ -18,12 +18,25 @@ from backend.app.models.opportunity import GrowthOpportunity
 from backend.app.schemas.phase5 import (
     RadarResponse,
     RankedOpportunitiesResponse,
+    GrowthRadarResponse,
 )
 from backend.app.services.radar import GrowthRadarService
 from backend.app.services.scoring import OpportunityScoringEngine
 from sqlalchemy import select
 
 router = APIRouter(tags=["radar"])
+
+
+@router.get("/growth/radar", response_model=GrowthRadarResponse)
+def get_real_data_growth_radar(
+    window_days: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(merchant_ctx),
+) -> Any:
+    """Calculate the current growth radar directly from PostgreSQL data."""
+    return GrowthRadarService(db).build_real_data_radar(
+        ctx.merchant_id, window_days=window_days
+    )
 
 
 @router.get("/radar", response_model=RadarResponse)

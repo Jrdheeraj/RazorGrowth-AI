@@ -29,8 +29,46 @@ import type {
   SimulationResult,
   SimulationsResponse,
   TokenResponse,
+  CheckoutSessionRequest,
+  CheckoutSessionResponse,
+  PaymentVerificationRequest,
+  PaymentVerificationResponse,
+  GrowthRadarResponse,
+  RAGContextResponse,
+  AgentDashboardResponse,
+  AgentDashboardAgent,
 } from "../types/api";
 
+export type {
+  ActionListResponse,
+  ActionTransitionResponse,
+  AgentRunRequest,
+  AgentRunsResponse,
+  AgentsListResponse,
+  AuditEventListResponse,
+  AccessibleMerchantsResponse,
+  ExecutionResponse,
+  ExperimentsResponse,
+  GrowthBrief,
+  GrowthMemoryResponse,
+  CustomerInsightsResponse,
+  MeResponse,
+  OrchestratorRunResponse,
+  RadarResponse,
+  RankedOpportunitiesResponse,
+  SimulationRequest,
+  SimulationResult,
+  SimulationsResponse,
+  TokenResponse,
+  CheckoutSessionRequest,
+  CheckoutSessionResponse,
+  PaymentVerificationRequest,
+  PaymentVerificationResponse,
+  GrowthRadarResponse,
+  RAGContextResponse,
+  AgentDashboardResponse,
+  AgentDashboardAgent,
+};
 export class ApiError extends Error {
   status: number;
   code?: string;
@@ -100,6 +138,17 @@ export function login(email: string, password: string): Promise<TokenResponse> {
   });
 }
 
+export function register(
+  email: string,
+  password: string,
+  full_name?: string,
+): Promise<import("../types/api").UserOut> {
+  return request("/api/auth/register", {
+    method: "POST",
+    body: { email, password, full_name },
+  });
+}
+
 export function fetchMe(): Promise<MeResponse> {
   return request<MeResponse>("/api/auth/me");
 }
@@ -114,26 +163,84 @@ export function fetchRadar(): Promise<RadarResponse> {
   return request<RadarResponse>("/api/radar");
 }
 
+export function fetchGrowthRadar(windowDays = 30): Promise<GrowthRadarResponse> {
+  return request<GrowthRadarResponse>(`/api/growth/radar?window_days=${windowDays}`);
+}
+
+export function buildRAGContext(
+  query: string,
+  windowDays = 30,
+): Promise<RAGContextResponse> {
+  return request<RAGContextResponse>("/api/ai/rag/context", {
+    method: "POST",
+    body: { query, window_days: windowDays },
+  });
+}
+
 export function fetchRankedOpportunities(): Promise<RankedOpportunitiesResponse> {
   return request<RankedOpportunitiesResponse>("/api/opportunities/ranked");
 }
 
-/* ── Agents ───────────────────────────────────────────────────────────── */
+/* ── Agents / Investigation ───────────────────────────────────────────── */
 
 export function fetchAgentsMeta(): Promise<AgentsListResponse> {
   return request<AgentsListResponse>("/api/agents");
 }
 
-export function fetchAgentRuns(limit = 25): Promise<AgentRunsResponse> {
-  return request<AgentRunsResponse>(`/api/agents/runs?limit=${limit}`);
+export function fetchAgentRuns(limit = 50, orchestratorRunId?: string): Promise<AgentRunsResponse> {
+  const qs = orchestratorRunId
+    ? `/api/agents/runs?limit=${limit}&orchestrator_run_id=${encodeURIComponent(orchestratorRunId)}`
+    : `/api/agents/runs?limit=${limit}`;
+  return request<AgentRunsResponse>(qs);
 }
 
+/** Internal API — wrapped as a merchant-facing business action. */
 export function runAgents(
   body: AgentRunRequest,
 ): Promise<OrchestratorRunResponse> {
   return request<OrchestratorRunResponse>("/api/agents/run", {
     method: "POST",
     body,
+  });
+}
+
+/**
+ * Start AI Team Work on merchant's real commerce data.
+ * Executes all 13 specialized agents in the collaborative AI Team workspace pipeline.
+ */
+export function startAiTeamWork(
+  objective = "Comprehensive commerce analysis and growth optimization",
+  options?: { merchantId?: string; windowDays?: number },
+): Promise<OrchestratorRunResponse> {
+  return request<OrchestratorRunResponse>("/api/agents/run", {
+    method: "POST",
+    body: {
+      mode: "team",
+      objective,
+      merchant_id: options?.merchantId,
+      window_days: options?.windowDays ?? 30,
+      propose_actions: true,
+    },
+  });
+}
+
+/**
+ * Start an Agent Debate session for multi-agent cross-examination.
+ * Merchants see this as a business action — the underlying mode is hidden.
+ */
+export function startInvestigation(
+  objective: string,
+  options?: { merchantId?: string; windowDays?: number },
+): Promise<OrchestratorRunResponse> {
+  return request<OrchestratorRunResponse>("/api/agents/run", {
+    method: "POST",
+    body: {
+      mode: "growth_team",
+      objective,
+      merchant_id: options?.merchantId,
+      window_days: options?.windowDays ?? 30,
+      propose_actions: true,
+    },
   });
 }
 
@@ -201,3 +308,46 @@ export function fetchGrowthMemory(): Promise<GrowthMemoryResponse> {
 export function fetchGrowthBrief(): Promise<GrowthBrief> {
   return request<GrowthBrief>("/api/growth-brief");
 }
+
+/* ── Checkout / Razorpay TEST ───────────────────────────────────────────── */
+
+export function createCheckoutSession(
+  body: CheckoutSessionRequest,
+): Promise<CheckoutSessionResponse> {
+  return request<CheckoutSessionResponse>("/api/payments/checkout", {
+    method: "POST",
+    body,
+  });
+}
+
+export function verifyPayment(
+  body: PaymentVerificationRequest,
+): Promise<PaymentVerificationResponse> {
+  return request<PaymentVerificationResponse>("/api/payments/verify", {
+    method: "POST",
+    body,
+  });
+}
+
+/* ── Agent Debate Dashboard ────────────────────────────────────────────── */
+
+export function fetchAgentDashboard(debateId: string): Promise<AgentDashboardResponse> {
+  return request<AgentDashboardResponse>(`/api/agent-debates/${debateId}/dashboard`);
+}
+
+export function fetchDebateList(): Promise<import("../types/api").AgentDebateListResponse> {
+  return request(`/api/agent-debates`);
+}
+
+export function fetchDebateFindings(debateId: string): Promise<import("../types/api").AgentFindingListResponse> {
+  return request(`/api/agent-debates/${debateId}/findings`);
+}
+
+export function fetchDebateMessages(debateId: string): Promise<import("../types/api").AgentMessageListResponse> {
+  return request(`/api/agent-debates/${debateId}/messages`);
+}
+
+export function fetchDebateRoundStatus(debateId: string): Promise<import("../types/api").AgentDebateRoundStatus> {
+  return request(`/api/agent-debates/${debateId}/rounds`);
+}
+

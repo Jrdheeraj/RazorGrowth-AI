@@ -146,3 +146,70 @@ class AgentDebateSynthesizeRequest(BaseModel):
 class AgentDebateConcludeRequest(BaseModel):
     synthesis: str
     recommendation_id: uuid.UUID | None = None
+
+
+# ─── Debate Rounds ──────────────────────────────────────────────────────────
+
+
+class DebateRound(BaseModel):
+    round_number: int
+    name: str
+    description: str
+    status: str  # pending, active, completed
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+class DebateRoundStatus(BaseModel):
+    debate_id: uuid.UUID
+    current_round: int
+    max_rounds: int = 4
+    status: str  # initiated, investigating, debating, rebuttal, synthesizing, concluded
+    rounds: list[DebateRound]
+    current_round_status: str  # pending, active, completed
+
+
+class DebateRoundAdvanceRequest(BaseModel):
+    target_round: int = Field(..., ge=2, le=4)
+
+
+class DebateRoundResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    debate_id: uuid.UUID
+    current_round: int
+    status: str
+    round_details: dict[int, dict[str, Any]]
+    agent_positions: dict[str, dict[str, Any]]
+
+
+# ─── Agent Dashboard ──────────────────────────────────────────────────────────
+
+
+class AgentDashboardAgent(BaseModel):
+    """Agent info for dashboard display."""
+    specialty: str
+    name: str
+    description: str
+    status: str  # pending, running, completed, failed
+    task_id: uuid.UUID | None = None
+    findings_count: int = 0
+    supporting_findings: int = 0
+    opposing_findings: int = 0
+    uncertainty_findings: int = 0
+    confidence_avg: float | None = None
+    evidence_summary: dict[str, Any] | None = None
+    output_summary: dict[str, Any] | None = None
+
+
+class AgentDashboardResponse(BaseModel):
+    """Complete agent dashboard for a debate."""
+    debate_id: uuid.UUID
+    objective: str
+    debate_status: str
+    rag_context: dict[str, Any] | None = None
+    agents: list[AgentDashboardAgent]
+    total_findings: int = 0
+    findings_by_type: dict[str, int] = {}
+    final_synthesis: str | None = None
+    recommendation: str | None = None

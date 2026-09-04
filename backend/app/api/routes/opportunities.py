@@ -18,9 +18,6 @@ from backend.app.api.deps import MerchantContext, merchant_ctx
 from backend.app.db.session import get_db
 from backend.app.services.opportunity_service import GrowthOpportunityService
 
-# Phase 1 in-memory fallback (preserved)
-from backend.app.services.growth_engine import generate_opportunities
-
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/opportunities", tags=["growth"])
@@ -86,7 +83,4 @@ def list_opportunities(
             # Never leak another tenant's synthetic data on failure.
             raise
 
-    # Phase 1 fallback — anonymous/optional mode only, works without a DB.
-    if not ctx.authenticated:
-        return {"items": generate_opportunities()}
     return {"items": []}

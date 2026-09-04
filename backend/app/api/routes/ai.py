@@ -1,8 +1,9 @@
 """
 AI routes.
 
-POST /api/ai/ingest  — ingest production commerce data into the knowledge store.
-POST /api/ai/analyze — run agentic growth analysis for a merchant.
+POST /api/ai/ingest           — ingest production commerce data into the knowledge store.
+POST /api/ai/ingest/razorpay  — ingest Razorpay TEST MODE data into local database.
+POST /api/ai/analyze          — run agentic growth analysis for a merchant.
 
 Merchant is resolved from the first available merchant in the DB when
 merchant_id is omitted (single-tenant mode; will use auth tokens in Phase 4).
@@ -21,11 +22,26 @@ from backend.app.core.config import get_settings
 from backend.app.db.session import get_db
 from backend.app.schemas.analysis import AnalysisResponse, AnalysisInsight, AnalysisToolCallSummary
 from backend.app.schemas.ingestion import IngestRequest, IngestResponse
+from backend.app.schemas.rag_context import RAGContextRequest, RAGContextResponse
 from backend.app.services.ai_analysis_service import AIAnalysisService
 from backend.app.services.ingestion_connector import ProductionDataConnector
+from backend.app.services.rag_context import RAGContextService
+from backend.app.services.razorpay_ingestion import RazorpayIngestionService
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+
+@router.post("/rag/context", response_model=RAGContextResponse)
+def build_rag_context(
+    request: RAGContextRequest,
+    db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(operator_ctx),
+) -> RAGContextResponse:
+    """Build verified merchant context for downstream agent reasoning."""
+    return RAGContextResponse(**RAGContextService(db).build(
+        ctx.merchant_id, request.query, window_days=request.window_days
+    ))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -233,3 +249,87 @@ def ingest(
         raise HTTPException(status_code=500, detail="Ingestion commit failed.")
 
     return response
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /ingest/razorpay endpoint
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class RazorpayIngestRequest(BaseModel):
+    """Request for Razorpay TEST MODE ingestion."""
+    force_full_sync: bool = Field(
+        default=False,
+        description="If true, fetch all records regardless of last sync time.",
+    )
+    merchant_id: uuid.UUID | None = Field(
+        default=None,
+        description="Merchant UUID. Omit to use the caller's membership merchant.",
+    )
+
+
+class RazorpayIngestResponse(BaseModel):
+    """Response for Razorpay ingestion."""
+    source: str = "razorpay_test"
+    customers: dict[str, int]
+    orders: dict[str, int]
+    payments: dict[str, int]
+    total_errors: int
+    errors: list[str]
+
+
+@router.post("/ingest/razorpay", response_model=RazorpayIngestResponse)
+def ingest_razorpay(
+    request: RazorpayIngestRequest,
+    db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(operator_ctx),
+) -> RazorpayIngestResponse:
+    """
+    Ingest Razorpay TEST MODE data into local database.
+
+    Requires operator role or above; tenant-isolated to the caller's
+    membership merchant.
+
+    Fetches real TEST MODE records from Razorpay:
+      customers · orders · payments
+
+    Upserts into local database models with idempotent provider IDs.
+
+    Returns:
+      200 — ingestion completed
+      401 — missing/invalid credentials
+      403 — insufficient role / cross-tenant access
+      404 — merchant not found
+      503 — Razorpay TEST integration not configured
+    """
+    settings = get_settings()
+    if not settings.REAL_TEST_INTEGRATION_ENABLED:
+        raise HTTPException(
+            status_code=503,
+            detail="Razorpay REAL TEST integration not enabled. Set REAL_TEST_INTEGRATION_ENABLED=true",
+        )
+
+    merchant_id = resolve_claimed_merchant(ctx, request.merchant_id)
+
+    # Build real test client
+    from backend.app.integrations.razorpay import build_razorpay_client
+    razorpay_client = build_razorpay_client()
+
+    service = RazorpayIngestionService(db=db, merchant_id=merchant_id, razorpay_client=razorpay_client)
+    result = service.ingest_all()
+
+    try:
+        db.commit()
+    except Exception as exc:
+        log.warning("Failed to commit Razorpay ingestion: %s", exc)
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Ingestion commit failed.")
+
+    return RazorpayIngestResponse(
+        source="razorpay_test",
+        customers=result.to_dict()["customers"],
+        orders=result.to_dict()["orders"],
+        payments=result.to_dict()["payments"],
+        total_errors=result.to_dict()["total_errors"],
+        errors=result.to_dict()["errors"],
+    )

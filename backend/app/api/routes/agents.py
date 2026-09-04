@@ -144,8 +144,8 @@ def run_agents(
     Produces opportunities/signals/proposals only. Nothing executes and
     nothing is approved without a human owner/admin (Phase 4 invariants).
     """
-    if request.mode not in ("fast", "deep", "growth_team"):
-        raise HTTPException(status_code=422, detail="mode must be 'fast', 'deep', or 'growth_team'")
+    if request.mode not in ("fast", "deep", "growth_team", "team"):
+        raise HTTPException(status_code=422, detail="mode must be 'fast', 'deep', 'growth_team', or 'team'")
     merchant_id = resolve_claimed_merchant(ctx, request.merchant_id)
 
     settings = get_settings()
@@ -155,7 +155,7 @@ def run_agents(
         if settings.LLM_PROVIDER.lower() == "groq"
         else settings.LLM_API_KEY
     )
-    if request.mode == "deep" and api_key:
+    if request.mode in ("deep", "team") and api_key:
         from backend.app.ai.llm.provider import build_llm_provider
 
         llm = build_llm_provider(

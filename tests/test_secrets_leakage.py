@@ -85,7 +85,7 @@ class TestNoSecretsInResponses:
         health = razorpay_health()
         # Health exposes booleans only — never key material.
         assert set(health.keys()) == {
-            "razorpay_enabled", "test_mode", "webhook_configured", "client",
+            "razorpay_enabled", "test_mode", "real_test_integration_enabled", "webhook_configured", "client",
         }
         assert all(isinstance(v, (bool, dict, str)) and v != "" or True
                    for v in health.values())

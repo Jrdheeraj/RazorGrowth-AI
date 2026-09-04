@@ -62,6 +62,49 @@ export interface RadarResponse {
   signals: RadarSignal[];
 }
 
+export interface GrowthRadarResponse {
+  merchant_id: string;
+  generated_at: string;
+  overall_health: string;
+  metrics: {
+    captured_revenue: number;
+    captured_transactions: number;
+    successful_payments: number;
+    failed_payments: number;
+    total_customers: number;
+    repeat_customers: number;
+    total_orders: number;
+    average_order_value: number;
+  };
+  data_sufficiency: {
+    status: string;
+    message: string;
+    minimum_required: number;
+    available: number;
+  };
+  signals: Array<{
+    signal: string;
+    title: string;
+    observed_data: Record<string, unknown>;
+    calculated_metric: string;
+    opportunity: string;
+    confidence: number;
+    reason: string;
+    recommended_action: string;
+  }>;
+}
+
+export interface RAGContextResponse {
+  merchant_id: string;
+  query: string;
+  status: string;
+  data_sufficiency: Record<string, unknown>;
+  verified_facts: Array<{ fact: string; value: number; verified: boolean; source: string }>;
+  derived_metrics: Record<string, unknown>;
+  retrieved_context: Array<Record<string, unknown>>;
+  inference_allowed: boolean;
+}
+
 /* ── Opportunities ────────────────────────────────────────────────────── */
 
 export interface ScoreBreakdown {
@@ -160,21 +203,83 @@ export interface AgentRunRow {
   errors: string[] | null;
 }
 
+export type AgentRunRecord = AgentRunRow;
+
 export interface AgentRunsResponse {
   runs: AgentRunRow[];
 }
 
 export interface AgentRunRequest {
-  mode: "fast" | "deep";
+  mode: "fast" | "deep" | "growth_team" | "team";
   window_days?: number;
   propose_actions?: boolean;
   merchant_id?: string;
+  objective?: string;
+  params?: Record<string, unknown>;
+}
+
+export interface ActionPlanItem {
+  title: string;
+  assigned_to: string;
+  priority: string;
+  expected_impact: string;
+  next_steps: string;
+}
+
+export interface ActionPlan {
+  objective: string;
+  executive_summary: string;
+  initiatives: ActionPlanItem[];
+  status: string;
+}
+
+export interface OrchestrationAgentOutput {
+  agent: string;
+  status: string;
+  opportunities_created: number;
+  actions_proposed: number;
+  insights_generated: number;
+  signals_detected: number;
+  experiments_proposed: number;
+  errors: string[];
+  latency_ms?: {
+    total: number;
+    llm?: number;
+    db?: number;
+    tool?: number;
+  };
+  output?: {
+    summary?: string;
+    recommendations?: string[];
+    action_plan?: ActionPlan;
+    [key: string]: unknown;
+  };
 }
 
 export interface OrchestratorRunResponse {
   orchestrator_run_id: string;
   merchant_id: string;
   mode: string;
+  status?: string;
+  debate_id?: string | null;
+  action_plan?: ActionPlan | null;
+  agents?: OrchestrationAgentOutput[];
+  totals?: {
+    opportunities_created: number;
+    actions_proposed: number;
+    signals_detected: number;
+    insights_generated: number;
+    experiments_proposed: number;
+    failed_agents: number;
+  };
+  ranked_opportunities?: Array<{
+    id?: string;
+    title: string;
+    type?: string;
+    expected_revenue?: number;
+    confidence?: number;
+    [key: string]: unknown;
+  }>;
   [key: string]: unknown;
 }
 
@@ -370,6 +475,35 @@ export interface ExperimentsResponse {
   experiments: ExperimentRow[];
 }
 
+/* ── Checkout / Razorpay TEST ───────────────────────────────────────────── */
+
+export interface CheckoutSessionRequest {
+  amount: number;
+  currency?: string;
+  description?: string;
+  customer_email?: string;
+  customer_contact?: string;
+  receipt?: string;
+  notes?: Record<string, string>;
+  callback_url?: string;
+}
+
+export interface CheckoutSessionResponse {
+  source: string;
+  razorpay_order_id: string;
+  razorpay_payment_link_id: string | null;
+  short_url: string | null;
+  amount: number;
+  currency: string;
+  key_id: string;
+}
+
+export interface PaymentVerificationRequest {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
 /* ── Memory & brief ───────────────────────────────────────────────────── */
 
 export interface MemoryEntry {
@@ -402,4 +536,136 @@ export interface GrowthBrief {
   } | null;
   top_risk: { type: string; detail: string } | null;
   [key: string]: unknown;
+}
+
+/* ── Checkout / Razorpay TEST ───────────────────────────────────────────── */
+
+export interface CheckoutSessionRequest {
+  amount: number;
+  currency?: string;
+  description?: string;
+  customer_email?: string;
+  customer_contact?: string;
+  receipt?: string;
+  notes?: Record<string, string>;
+  callback_url?: string;
+}
+
+export interface CheckoutSessionResponse {
+  source: string;
+  razorpay_order_id: string;
+  razorpay_payment_link_id: string | null;
+  short_url: string | null;
+  amount: number;
+  currency: string;
+  key_id: string;
+}
+
+export interface PaymentVerificationRequest {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
+export interface PaymentVerificationResponse {
+  verified: boolean;
+  payment_id: string | null;
+}
+
+/* ── Agent Debate Dashboard ────────────────────────────────────────────── */
+
+export interface AgentDebateListItem {
+  id: string;
+  objective: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  current_round?: number;
+}
+
+export interface AgentDebateListResponse {
+  debates: AgentDebateListItem[];
+}
+
+export interface AgentFinding {
+  id: string;
+  agent_specialty: string;
+  finding_type: "supporting" | "opposing" | "neutral" | "uncertainty";
+  title: string;
+  description: string | null;
+  evidence: Array<Record<string, unknown>> | null;
+  confidence: number;
+  uncertainty_notes: string | null;
+  supports_recommendation: boolean | null;
+}
+
+export interface AgentFindingListResponse {
+  findings: AgentFinding[];
+}
+
+export interface AgentMessage {
+  id: string;
+  from_agent: string;
+  to_agent: string | null;
+  message_type: string;
+  content: string;
+  references: unknown[] | null;
+  created_at: string;
+}
+
+export interface AgentMessageListResponse {
+  messages: AgentMessage[];
+}
+
+export interface AgentDebateRoundStatus {
+  debate_id: string;
+  current_round: number;
+  status: string;
+  objective: string;
+  tasks: Array<{ id: string; assigned_to: string; title: string; status: string }>;
+  findings_summary: {
+    total: number;
+    by_type: { supporting: number; opposing: number; neutral: number; uncertainty: number };
+    by_agent: Record<string, number>;
+  };
+  rounds: Record<string, Array<{ from: string; to: string | null; type: string; content: string }>>;
+}
+
+export interface AgentDashboardAgent {
+  specialty: string;
+  name: string;
+  description: string;
+  status: string;
+  task_id: string | null;
+  findings_count: number;
+  supporting_findings: number;
+  opposing_findings: number;
+  uncertainty_findings: number;
+  confidence_avg: number | null;
+  evidence_summary: { sources: string[] } | null;
+  output_summary: Record<string, unknown> | null;
+}
+
+export interface AgentDashboardResponse {
+  debate_id: string;
+  objective: string;
+  debate_status: string;
+  rag_context: {
+    status: string;
+    data_sufficiency: Record<string, unknown>;
+    verified_facts: Array<{ fact: string; value: number; verified: boolean; source: string }>;
+    derived_metrics: Record<string, unknown>;
+    retrieved_context: Array<Record<string, unknown>>;
+    inference_allowed: boolean;
+  } | null;
+  agents: AgentDashboardAgent[];
+  total_findings: number;
+  findings_by_type: {
+    supporting: number;
+    opposing: number;
+    neutral: number;
+    uncertainty: number;
+  };
+  final_synthesis: string | null;
+  recommendation: string | null;
 }

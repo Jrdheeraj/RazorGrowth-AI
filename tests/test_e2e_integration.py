@@ -252,7 +252,7 @@ class TestEndToEndWorkflow:
             payment = Payment(
                 merchant_id=merchant.id,
                 order_id=order.id,
-                provider=PaymentProvider.synthetic,
+                provider=PaymentProvider.razorpay,
                 provider_payment_id=f"pay_{uuid.uuid4().hex[:16]}",
                 amount=order.total,
                 currency=Currency.INR,
@@ -279,7 +279,7 @@ class TestEndToEndWorkflow:
             fail_payment = Payment(
                 merchant_id=merchant.id,
                 order_id=fail_order.id,
-                provider=PaymentProvider.synthetic,
+                provider=PaymentProvider.razorpay,
                 provider_payment_id=f"pay_fail_{uuid.uuid4().hex[:16]}",
                 amount=Decimal("5000"),
                 currency=Currency.INR,
@@ -805,7 +805,7 @@ class TestFailureRecoveryE2E:
         fail_payment = Payment(
             merchant_id=merchant.id,
             order_id=fail_order.id,
-            provider=PaymentProvider.synthetic,
+            provider=PaymentProvider.razorpay,
             provider_payment_id=f"pay_fail_{uuid.uuid4().hex[:16]}",
             amount=Decimal("5000"),
             currency=Currency.INR,

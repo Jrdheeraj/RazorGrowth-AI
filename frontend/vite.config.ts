@@ -15,7 +15,7 @@ export default defineConfig({
       "/api": {
         // Override when the backend lives on another host/interface,
         // e.g. VITE_PROXY_TARGET=http://172.x.x.x:8000 (WSL → Windows setups).
-        target: process.env.VITE_PROXY_TARGET ?? "http://127.0.0.1:8000",
+        target: process.env.VITE_PROXY_TARGET ?? "http://127.0.0.1:8001",
         changeOrigin: true,
       },
     },

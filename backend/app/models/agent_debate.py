@@ -48,6 +48,7 @@ class AgentDebate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         server_default=DebateStatus.initiated.value,
         index=True,
     )
+    current_round: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     manager_agent_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
     context: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     final_synthesis: Mapped[str | None] = mapped_column(Text, nullable=True)

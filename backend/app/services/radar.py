@@ -26,10 +26,12 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.app.core.config import get_settings
 from backend.app.models.customer import Customer
 from backend.app.models.enums import (
     GrowthSignalType,
     OrderStatus,
+    PaymentProvider,
     PaymentStatus,
     SignalStatus,
 )
@@ -100,6 +102,133 @@ class GrowthRadarService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
+    def build_real_data_radar(
+        self, merchant_id: uuid.UUID, *, window_days: int = 30
+    ) -> dict[str, Any]:
+        """Build a read-time radar response strictly from the merchant's real Razorpay data."""
+        settings = get_settings()
+        if getattr(settings, 'REAL_TEST_INTEGRATION_ENABLED', False) and settings.RAZORPAY_KEY_ID and settings.RAZORPAY_KEY_SECRET:
+            try:
+                from backend.app.services.razorpay_ingestion import RazorpayIngestionService
+                RazorpayIngestionService(self.db, merchant_id).ingest_all()
+                self.db.commit()
+            except Exception as e:
+                log.warning("GrowthRadar real test data auto-sync failed: %s", e)
+                self.db.rollback()
+
+        now = _utcnow()
+        start = now - timedelta(days=window_days)
+
+        captured_revenue, captured_transactions = self._revenue(merchant_id, start, now)
+        successful_payments = captured_transactions
+        failed_payments = int(self.db.scalar(
+            select(func.count(Payment.id)).where(
+                Payment.merchant_id == merchant_id,
+                Payment.provider == PaymentProvider.razorpay.value,
+                Payment.status == PaymentStatus.failed.value,
+                Payment.created_at >= start,
+            )
+        ) or 0)
+        total_customers = int(self.db.scalar(
+            select(func.count(Customer.id)).where(Customer.merchant_id == merchant_id)
+        ) or 0)
+        repeat_customers = int(self.db.scalar(
+            select(func.count(Customer.id)).where(
+                Customer.merchant_id == merchant_id,
+                Customer.total_orders >= 2,
+            )
+        ) or 0)
+        total_orders = self._order_volume(merchant_id, start, now)
+        average_order_value = Decimal(str(self.db.scalar(
+            select(func.coalesce(func.avg(Payment.amount), 0)).where(
+                Payment.merchant_id == merchant_id,
+                Payment.provider == PaymentProvider.razorpay.value,
+                Payment.status == PaymentStatus.captured.value,
+                Payment.created_at >= start,
+            )
+        ) or 0))
+
+        minimum_required = MIN_SIGNAL_SAMPLE
+        if captured_transactions == 0 and failed_payments == 0:
+            sufficiency = {
+                "status": "insufficient_data",
+                "message": "No real Razorpay test data available. Create test orders/payments via Checkout to view growth metrics.",
+                "minimum_required": minimum_required,
+                "available": 0,
+            }
+        elif captured_transactions < minimum_required:
+            sufficiency = {
+                "status": "insufficient_data",
+                "message": f"More real captured transactions are required to generate a reliable growth signal ({captured_transactions} recorded, {minimum_required} required).",
+                "minimum_required": minimum_required,
+                "available": captured_transactions,
+            }
+        else:
+            sufficiency = {
+                "status": "sufficient",
+                "message": "Sufficient real captured transaction data is available for growth analysis.",
+                "minimum_required": minimum_required,
+                "available": captured_transactions,
+            }
+
+        raw_signals = self.detect(merchant_id, window_days=window_days, persist=False)
+        signal_guidance = {
+            "revenue_drop": (
+                "Revenue recovery opportunity",
+                "Investigate the real revenue decline and target retention or recovery work.",
+            ),
+            "emerging_growth": (
+                "Revenue expansion opportunity",
+                "Study the observed growth source and focus on the best-performing segment.",
+            ),
+            "payment_failures": (
+                "Payment recovery opportunity",
+                "Review failed transactions and offer a compliant payment-recovery path.",
+            ),
+            "payment_recovery_opportunity": (
+                "Recover failed-payment revenue",
+                "Follow up on the recorded failed payments using an approved recovery workflow.",
+            ),
+            "declining_repeat_purchases": (
+                "Repeat-purchase opportunity",
+                "Consider a retention campaign based on the observed repeat-purchase decline.",
+            ),
+        }
+        signals = []
+        for item in raw_signals:
+            opportunity, action = signal_guidance.get(
+                item["signal_type"],
+                ("Growth opportunity", "Review the recorded evidence with the merchant team."),
+            )
+            signals.append({
+                "signal": item["signal_type"],
+                "title": item["title"],
+                "observed_data": item["evidence"] or {},
+                "calculated_metric": item["metric"],
+                "opportunity": opportunity,
+                "confidence": item["confidence"],
+                "reason": f"Observed {item['metric']} from {item['window_days']}-day PostgreSQL payment/order data.",
+                "recommended_action": action,
+            })
+
+        return {
+            "merchant_id": str(merchant_id),
+            "generated_at": now.isoformat(),
+            "overall_health": "insufficient_data" if sufficiency["status"] == "insufficient_data" else "measured",
+            "metrics": {
+                "captured_revenue": float(captured_revenue),
+                "captured_transactions": captured_transactions,
+                "successful_payments": successful_payments,
+                "failed_payments": failed_payments,
+                "total_customers": total_customers,
+                "repeat_customers": repeat_customers,
+                "total_orders": total_orders,
+                "average_order_value": float(average_order_value),
+            },
+            "data_sufficiency": sufficiency,
+            "signals": signals,
+        }
+
     # ── Aggregation helpers (real rows only) ────────────────────────────
 
     def revenue_for_window(
@@ -111,12 +240,11 @@ class GrowthRadarService:
     def _revenue(self, merchant_id: uuid.UUID, start: datetime, end: datetime) -> tuple[Decimal, int]:
         stmt = (
             select(func.coalesce(func.sum(Payment.amount), 0), func.count(Payment.id))
-            .join(Order, Payment.order_id == Order.id)
             .where(Payment.merchant_id == merchant_id)
+            .where(Payment.provider == PaymentProvider.razorpay.value)
             .where(Payment.status == PaymentStatus.captured.value)
-            .where(Order.status.in_([OrderStatus.paid.value]))
-            .where(Order.created_at >= start)
-            .where(Order.created_at < end)
+            .where(Payment.created_at >= start)
+            .where(Payment.created_at < end)
         )
         row = self.db.execute(stmt).one()
         return Decimal(str(row[0])), int(row[1])
@@ -145,6 +273,7 @@ class GrowthRadarService:
         stmt = (
             select(func.count(Payment.id), func.coalesce(func.sum(Payment.amount), 0))
             .where(Payment.merchant_id == merchant_id)
+            .where(Payment.provider == PaymentProvider.razorpay.value)
             .where(Payment.status == PaymentStatus.failed.value)
             .where(Payment.created_at >= start)
             .where(Payment.created_at < end)

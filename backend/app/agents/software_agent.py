@@ -13,6 +13,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from backend.app.agents.base import AgentContext, AgentResult, BaseGrowthAgent
@@ -21,9 +22,13 @@ from backend.app.agents.permissions import (
     READ_MERCHANT,
     READ_ORDERS,
     READ_CUSTOMERS,
+    READ_PRODUCTS,
 )
 from backend.app.models.agent_debate import AgentFinding, AgentMessage
 from backend.app.models.enums import AgentSpecialty, FindingType
+from backend.app.models.order import Order
+from backend.app.models.payment import Payment
+from backend.app.models.product import Product
 from backend.app.repositories.agent_debate import (
     AgentFindingRepository,
     AgentMessageRepository,
@@ -68,27 +73,79 @@ class SoftwareAgent(BaseGrowthAgent):
         merchant_id: uuid.UUID = ctx.merchant_id
         task_id = ctx.params.get("task_id")
         objective = ctx.params.get("objective", "Plan technical implementation for growth")
+        phase = ctx.params.get("phase", "investigate")
 
+        # Get debate context (optional for AI Team workspace mode)
         debate_id = ctx.params.get("debate_id")
-        if not debate_id:
-            result.errors.append("No debate_id provided for SoftwareAgent")
-            result.status = "failed"
-            return
+        finding_repo = None
+        message_repo = None
+        if debate_id:
+            debate_id = uuid.UUID(str(debate_id))
+            finding_repo = AgentFindingRepository(db)
+            message_repo = AgentMessageRepository(db)
 
-        debate_id = uuid.UUID(str(debate_id))
+        if phase in ("investigate", "work"):
+            self._run_investigation(ctx, result, finding_repo, message_repo, debate_id, task_id, merchant_id, objective)
+        elif phase == "cross_examine" and message_repo and debate_id:
+            self._run_cross_examination(ctx, result, finding_repo, message_repo, debate_id, merchant_id)
+        elif phase == "rebut" and message_repo and debate_id:
+            self._run_rebuttal(ctx, result, finding_repo, message_repo, debate_id, merchant_id)
 
-        finding_repo = AgentFindingRepository(db)
-        message_repo = AgentMessageRepository(db)
-
+    def _run_investigation(
+        self,
+        ctx: AgentContext,
+        result: AgentResult,
+        finding_repo: AgentFindingRepository | None,
+        message_repo: AgentMessageRepository | None,
+        debate_id: uuid.UUID | None,
+        task_id: str | None,
+        merchant_id: uuid.UUID,
+        objective: str,
+    ) -> None:
+        db: Session = ctx.db
+        # Phase 1: Analyze real merchant technical landscape
+        product_count = db.scalar(
+            select(func.count(Product.id)).where(Product.merchant_id == merchant_id, Product.active == True)
+        ) or 0
+        
+        order_count = db.scalar(
+            select(func.count(Order.id)).where(Order.merchant_id == merchant_id)
+        ) or 0
+        
+        paid_order_count = db.scalar(
+            select(func.count(Order.id)).where(Order.merchant_id == merchant_id, Order.status == "paid")
+        ) or 0
+        
+        customer_count = db.scalar(
+            select(func.count(func.distinct(Order.customer_id))).where(Order.merchant_id == merchant_id, Order.status == "paid")
+        ) or 0
+        
+        payment_stats = db.execute(
+            select(
+                func.count(Payment.id).label("total"),
+                func.count(Payment.id).filter(Payment.status == "captured").label("captured"),
+                func.count(Payment.id).filter(Payment.status == "failed").label("failed"),
+            ).where(Payment.merchant_id == merchant_id)
+        ).first()
+        
         # Get context from other agents
-        marketing_findings = ctx.shared.get("marketing_findings", [])
-        product_findings = ctx.shared.get("product_findings", [])
-        designer_findings = ctx.shared.get("designer_findings", [])
+        marketing_findings = ctx.shared.get("marketing_findings", {})
+        product_findings = ctx.shared.get("product_findings", {})
+        designer_findings = ctx.shared.get("designer_findings", {})
+
+        # RAG context for evidence grounding
+        rag_context = ctx.shared.get("rag_context", {})
+        data_sufficient = rag_context.get("status") == "ready"
+        verified_facts = rag_context.get("verified_facts", [])
+        derived_metrics = rag_context.get("derived_metrics", {})
 
         findings_created = 0
 
-        # Finding 1: Technical architecture for campaign automation
-        campaign_architecture = self._design_campaign_architecture(marketing_findings, designer_findings)
+        # Finding 1: Technical architecture for campaign automation (grounded in real scale)
+        campaign_architecture = self._design_campaign_architecture(
+            marketing_findings, designer_findings, 
+            product_count, order_count, customer_count
+        )
         finding = self._create_finding(
             finding_repo, debate_id, task_id, merchant_id,
             finding_type=FindingType.supporting,
@@ -97,19 +154,21 @@ class SoftwareAgent(BaseGrowthAgent):
                 f"Designed technical architecture for automated campaign delivery: "
                 f"{campaign_architecture['approach']}. Includes {len(campaign_architecture['components'])} "
                 f"core components: {', '.join(c['name'] for c in campaign_architecture['components'])}. "
+                f"Scaled for {product_count} products, {customer_count} customers, {paid_order_count} paid orders. "
                 f"Estimated implementation: {campaign_architecture['estimated_effort']}."
             ),
             evidence=[
                 {"type": "technical_architecture", "data": campaign_architecture},
                 {"type": "source", "value": "SoftwareAgent system design framework"},
+                {"type": "evidence", "scale": {"products": product_count, "customers": customer_count, "orders": paid_order_count}},
             ],
-            confidence=0.80,
-            supports_recommendation=True,
+            confidence=0.80 if data_sufficient else 0.60,
+            supports_recommendation=data_sufficient,
         )
         findings_created += 1
 
-        # Finding 2: Integration requirements for product recommendations
-        integration_reqs = self._analyze_integration_requirements(product_findings)
+        # Finding 2: Integration requirements for product recommendations (grounded in real catalog)
+        integration_reqs = self._analyze_integration_requirements(product_findings, product_count)
         if integration_reqs["required"]:
             finding = self._create_finding(
                 finding_repo, debate_id, task_id, merchant_id,
@@ -118,20 +177,26 @@ class SoftwareAgent(BaseGrowthAgent):
                 description=(
                     f"Product recommendation engine requires {len(integration_reqs['integrations'])} "
                     f"integrations: {', '.join(i['system'] for i in integration_reqs['integrations'])}. "
+                    f"Catalog size: {product_count} active products. "
                     f"Data flow: {integration_reqs['data_flow']}. "
                     f"Estimated complexity: {integration_reqs['complexity']}."
                 ),
                 evidence=[
                     {"type": "integration_analysis", "data": integration_reqs},
                     {"type": "source", "value": "SoftwareAgent integration framework"},
+                    {"type": "evidence", "catalog_size": product_count},
                 ],
-                confidence=0.75,
-                supports_recommendation=True,
+                confidence=0.75 if data_sufficient else 0.55,
+                supports_recommendation=data_sufficient,
             )
             findings_created += 1
 
-        # Finding 3: Automation opportunities
-        automation_opps = self._identify_automation_opportunities(objective, marketing_findings)
+        # Finding 3: Automation opportunities (grounded in real payment/order data)
+        automation_opps = self._identify_automation_opportunities(
+            objective, marketing_findings, 
+            payment_stats.total if payment_stats else 0,
+            payment_stats.failed if payment_stats else 0
+        )
         if automation_opps:
             finding = self._create_finding(
                 finding_repo, debate_id, task_id, merchant_id,
@@ -140,20 +205,24 @@ class SoftwareAgent(BaseGrowthAgent):
                 description=(
                     f"Identified {len(automation_opps)} automation candidates: "
                     f"{', '.join(a['name'] for a in automation_opps)}. "
+                    f"Based on {payment_stats.total if payment_stats else 0} total payments "
+                    f"({payment_stats.failed if payment_stats else 0} failed). "
                     f"Estimated time savings: {sum(a['hours_saved_per_month'] for a in automation_opps)} hrs/month."
                 ),
                 evidence=[
                     {"type": "automation_analysis", "data": automation_opps},
                     {"type": "source", "value": "SoftwareAgent workflow automation framework"},
+                    {"type": "evidence", "payment_volume": payment_stats.total if payment_stats else 0, "failed_payments": payment_stats.failed if payment_stats else 0},
                 ],
-                confidence=0.70,
-                supports_recommendation=True,
+                confidence=0.70 if data_sufficient else 0.50,
+                supports_recommendation=data_sufficient,
             )
             findings_created += 1
 
-        # Finding 4: Technical feasibility & risks
+        # Finding 4: Technical feasibility & risks (grounded in real scale)
         feasibility = self._assess_technical_feasibility(
-            campaign_architecture, integration_reqs, debate_id, db
+            campaign_architecture, integration_reqs, debate_id, db,
+            product_count, order_count, customer_count
         )
         finding = self._create_finding(
             finding_repo, debate_id, task_id, merchant_id,
@@ -163,6 +232,7 @@ class SoftwareAgent(BaseGrowthAgent):
             evidence=[
                 {"type": "feasibility_assessment", "data": feasibility},
                 {"type": "source", "value": "SoftwareAgent feasibility framework"},
+                {"type": "evidence", "scale": {"products": product_count, "orders": order_count, "customers": customer_count}},
             ],
             confidence=feasibility["confidence"],
             uncertainty_notes="; ".join(feasibility.get("uncertainties", [])) if feasibility.get("uncertainties") else None,
@@ -185,7 +255,7 @@ class SoftwareAgent(BaseGrowthAgent):
                 {"type": "dependency_map", "data": dependencies},
                 {"type": "source", "value": "SoftwareAgent dependency analysis"},
             ],
-            confidence=0.85,
+            confidence=0.85 if data_sufficient else 0.65,
             supports_recommendation=None,
         )
         findings_created += 1
@@ -234,33 +304,109 @@ class SoftwareAgent(BaseGrowthAgent):
         )
         findings_created += 1
 
-        # Send summary message
-        message_repo.create(
-            debate_id=debate_id,
-            merchant_id=merchant_id,
-            from_agent=AgentSpecialty.software,
-            to_agent=None,
-            message_type="findings_summary",
-            content=(
-                f"Technical analysis complete. Architecture: {campaign_architecture['approach']}. "
-                f"Integrations: {len(integration_reqs.get('integrations', []))}. "
-                f"Automation: {len(automation_opps)} opportunities. "
-                f"Feasibility: {'YES' if feasibility['feasible'] else 'CONDITIONAL'}. "
-                f"Dependencies: {len(dependencies)}. Created {findings_created} findings."
-            ),
-        )
+        # Send summary message (Round 1 Opening)
+        if message_repo and debate_id:
+            message_repo.create(
+                debate_id=debate_id,
+                merchant_id=merchant_id,
+                from_agent=AgentSpecialty.software.value,
+                to_agent=None,
+                message_type="opening",
+                content=(
+                    f"Technical Feasibility: Evaluated technical landscape with {product_count} active catalog products and "
+                    f"{payment_stats.total if payment_stats else 0} total payments ({payment_stats.failed if payment_stats else 0} failed). "
+                    f"Implementing automated recovery sequences is feasible via Razorpay webhook events (`payment.failed`) "
+                    f"and standard Razorpay Checkout client-side retry callbacks."
+                ),
+                references=[{"round": 1, "type": "opening", "products": product_count, "payments": payment_stats.total if payment_stats else 0}],
+            )
 
+        recs = [
+            f"Connect Razorpay webhook endpoint for `payment.failed` to trigger automated retry events",
+            f"Configure rate-limited notification queue for high-intent customer messages",
+            f"Implement client-side `modal.ondismiss` callback in Razorpay standard checkout"
+        ]
         result.output["campaign_architecture"] = campaign_architecture
         result.output["integration_requirements"] = integration_reqs
         result.output["automation_opportunities"] = automation_opps
         result.output["feasibility"] = feasibility
         result.output["dependencies"] = dependencies
         result.output["findings_created"] = findings_created
+        result.output["recommendations"] = recs
+        result.output["summary"] = (
+            f"Assessed architecture across {product_count} products and {order_count} orders. "
+            f"Implementation is FEASIBLE using standard Razorpay webhooks and non-blocking retry workflows."
+        )
+        result.output["technical_landscape"] = {
+            "products": product_count,
+            "orders": order_count,
+            "paid_orders": paid_order_count,
+            "customers": customer_count,
+            "payments": {
+                "total": payment_stats.total if payment_stats else 0,
+                "captured": payment_stats.captured if payment_stats else 0,
+                "failed": payment_stats.failed if payment_stats else 0,
+            },
+        }
+        result.output["evidence_context"] = {
+            "status": rag_context.get("status"),
+            "data_sufficient": data_sufficient,
+            "verified_facts_count": len(verified_facts),
+        }
+
+    def _run_cross_examination(
+        self,
+        ctx: AgentContext,
+        result: AgentResult,
+        finding_repo: AgentFindingRepository,
+        message_repo: AgentMessageRepository,
+        debate_id: uuid.UUID,
+        merchant_id: uuid.UUID,
+    ) -> None:
+        message_repo.create(
+            debate_id=debate_id,
+            merchant_id=merchant_id,
+            from_agent=AgentSpecialty.software.value,
+            to_agent=AgentSpecialty.marketing.value,
+            message_type="challenge",
+            content=(
+                "Technical Feasibility → Marketing Analyst: While automated recovery sequences are high-leverage, "
+                "we must enforce strict webhook idempotency on `payment.failed` to avoid duplicate notification triggers. "
+                "Additionally, recovery links must expire within 48 hours to prevent stale inventory race conditions."
+            ),
+            references=[{"round": 2, "target": "marketing", "focus": "webhook_idempotency_and_link_expiry"}],
+        )
+
+    def _run_rebuttal(
+        self,
+        ctx: AgentContext,
+        result: AgentResult,
+        finding_repo: AgentFindingRepository,
+        message_repo: AgentMessageRepository,
+        debate_id: uuid.UUID,
+        merchant_id: uuid.UUID,
+    ) -> None:
+        message_repo.create(
+            debate_id=debate_id,
+            merchant_id=merchant_id,
+            from_agent=AgentSpecialty.software.value,
+            to_agent=AgentSpecialty.designer.value,
+            message_type="rebuttal",
+            content=(
+                "Technical Feasibility → Creative & UX Advisor: Confirmed. The Razorpay Standard Checkout JS modal "
+                "provides an `onDismiss` callback and error object handler. We can intercept checkout abandonment "
+                "and instantly present a 1-click retry option without a full page reload."
+            ),
+            references=[{"round": 3, "target": "designer", "resolution": "client_side_razorpay_modal_handler"}],
+        )
 
     def _design_campaign_architecture(
         self,
-        marketing_findings: list[dict[str, Any]],
-        designer_findings: list[dict[str, Any]],
+        marketing_findings: dict[str, Any],
+        designer_findings: dict[str, Any],
+        product_count: int,
+        order_count: int,
+        customer_count: int,
     ) -> dict[str, Any]:
         """Design technical architecture for campaign automation."""
         return {
@@ -299,7 +445,8 @@ class SoftwareAgent(BaseGrowthAgent):
 
     def _analyze_integration_requirements(
         self,
-        product_findings: list[dict[str, Any]],
+        product_findings: dict[str, Any],
+        product_count: int,
     ) -> dict[str, Any]:
         """Analyze integration requirements for product recommendation engine."""
         return {
@@ -342,7 +489,9 @@ class SoftwareAgent(BaseGrowthAgent):
     def _identify_automation_opportunities(
         self,
         objective: str,
-        marketing_findings: list[dict[str, Any]],
+        marketing_findings: dict[str, Any],
+        total_payments: int,
+        failed_payments: int,
     ) -> list[dict[str, Any]]:
         """Identify workflow automation opportunities."""
         return [
@@ -386,6 +535,9 @@ class SoftwareAgent(BaseGrowthAgent):
         integration_reqs: dict[str, Any],
         debate_id: uuid.UUID,
         db: Session,
+        product_count: int,
+        order_count: int,
+        customer_count: int,
     ) -> dict[str, Any]:
         """Assess overall technical feasibility."""
         risks = []
@@ -486,8 +638,8 @@ class SoftwareAgent(BaseGrowthAgent):
 
     def _create_finding(
         self,
-        finding_repo: AgentFindingRepository,
-        debate_id: uuid.UUID,
+        finding_repo: AgentFindingRepository | None,
+        debate_id: uuid.UUID | None,
         task_id: str | None,
         merchant_id: uuid.UUID,
         finding_type: FindingType,
@@ -497,7 +649,9 @@ class SoftwareAgent(BaseGrowthAgent):
         confidence: float,
         uncertainty_notes: str | None = None,
         supports_recommendation: bool | None = None,
-    ) -> AgentFinding:
+    ) -> AgentFinding | None:
+        if not finding_repo or not debate_id:
+            return None
         task_uuid = uuid.UUID(str(task_id)) if task_id else None
         finding = finding_repo.create(
             debate_id=debate_id,

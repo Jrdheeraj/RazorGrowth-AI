@@ -112,6 +112,22 @@ def register(
         status=UserStatus.active,
     )
     db.add(user)
+
+    # Attach to the real Razorpay TEST merchant workspace (Live Audit Merchant)
+    primary_merchant_id = uuid.UUID("dbec6e31-1327-4c3b-a046-2c10a208145d")
+    merchant = db.get(Merchant, primary_merchant_id)
+    if not merchant:
+        merchant = db.execute(select(Merchant)).scalars().first()
+    if merchant:
+        membership = MerchantMembership(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            merchant_id=merchant.id,
+            role=UserRole.owner,
+            status=MembershipStatus.active,
+        )
+        db.add(membership)
+
     db.commit()
     log.info("User registered. user=%s", str(user.id))
     return {
@@ -141,6 +157,29 @@ def login(
         raise GENERIC_CREDENTIALS_ERROR
     if user.status == UserStatus.disabled:
         raise _forbidden("USER_DISABLED")
+
+    # Ensure user has access to the real Razorpay TEST workspace
+    has_membership = db.execute(
+        select(MerchantMembership).where(
+            MerchantMembership.user_id == user.id,
+            MerchantMembership.status == MembershipStatus.active,
+        )
+    ).scalars().first()
+    if not has_membership:
+        primary_merchant_id = uuid.UUID("dbec6e31-1327-4c3b-a046-2c10a208145d")
+        merchant = db.get(Merchant, primary_merchant_id)
+        if not merchant:
+            merchant = db.execute(select(Merchant)).scalars().first()
+        if merchant:
+            membership = MerchantMembership(
+                id=uuid.uuid4(),
+                user_id=user.id,
+                merchant_id=merchant.id,
+                role=UserRole.owner,
+                status=MembershipStatus.active,
+            )
+            db.add(membership)
+            db.commit()
 
     token, expires_in = create_access_token(user.id, user.email)
     return {

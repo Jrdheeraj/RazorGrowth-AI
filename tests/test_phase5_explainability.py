@@ -69,7 +69,7 @@ def seed_revenue_trend(db_session: Session, merchant: Merchant) -> None:
         db_session.add(
             Payment(
                 merchant_id=merchant.id, order_id=o.id,
-                provider=PaymentProvider.synthetic,
+                provider=PaymentProvider.razorpay,
                 amount=Decimal(total), currency=Currency.INR,
                 status=PaymentStatus.captured,
                 created_at=now - timedelta(days=days_ago),
@@ -186,7 +186,7 @@ class TestGrowthBrief:
         db_session.add(o); db_session.flush()
         db_session.add(Payment(
             merchant_id=merchant.id, order_id=o.id,
-            provider=PaymentProvider.synthetic, amount=Decimal("9000"),
+            provider=PaymentProvider.razorpay, amount=Decimal("9000"),
             currency=Currency.INR, status=PaymentStatus.failed,
         ))
         db_session.commit()

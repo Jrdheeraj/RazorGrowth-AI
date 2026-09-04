@@ -82,192 +82,209 @@ class MarketingAgent(BaseGrowthAgent):
         merchant_id: uuid.UUID = ctx.merchant_id
         task_id = ctx.params.get("task_id")
         objective = ctx.params.get("objective", "Improve marketing effectiveness")
+        phase = ctx.params.get("phase", "investigate")
 
-        # Get debate context
+        # Get debate context (optional for AI Team workspace mode)
         debate_id = ctx.params.get("debate_id")
-        if not debate_id:
-            result.errors.append("No debate_id provided for MarketingAgent")
-            result.status = "failed"
-            return
+        finding_repo = None
+        message_repo = None
+        if debate_id:
+            debate_id = uuid.UUID(str(debate_id))
+            finding_repo = AgentFindingRepository(db)
+            message_repo = AgentMessageRepository(db)
 
-        debate_id = uuid.UUID(str(debate_id))
+        if phase in ("investigate", "work"):
+            self._run_investigation(ctx, result, finding_repo, message_repo, debate_id, task_id, merchant_id, objective)
+        elif phase == "cross_examine" and message_repo and debate_id:
+            self._run_cross_examination(ctx, result, finding_repo, message_repo, debate_id, merchant_id)
+        elif phase == "rebut" and message_repo and debate_id:
+            self._run_rebuttal(ctx, result, finding_repo, message_repo, debate_id, merchant_id)
 
-        # Initialize repositories
-        finding_repo = AgentFindingRepository(db)
-        message_repo = AgentMessageRepository(db)
-
-        # Phase 1: Analyze customer segments from Customer Intelligence
+    def _run_investigation(
+        self,
+        ctx: AgentContext,
+        result: AgentResult,
+        finding_repo: AgentFindingRepository | None,
+        message_repo: AgentMessageRepository | None,
+        debate_id: uuid.UUID | None,
+        task_id: str | None,
+        merchant_id: uuid.UUID,
+        objective: str,
+    ) -> None:
+        db = ctx.db
         intel_service = CustomerIntelligenceService(db)
         insights = intel_service.list_insights(merchant_id, limit=500)
         result.insights_generated = len(insights)
 
-        # Segment breakdown
         segment_counts: dict[str, int] = {}
         for insight in insights:
-            segment_counts[insight.primary_segment.value] = segment_counts.get(insight.primary_segment.value, 0) + 1
+            seg_val = getattr(insight.primary_segment, "value", str(insight.primary_segment))
+            segment_counts[seg_val] = segment_counts.get(seg_val, 0) + 1
 
-        # Identify high-value segments
-        high_value_segments = [
-            s for s, count in segment_counts.items()
-            if s in {"vip", "high_value", "repeat_customer"} and count >= 3
-        ]
-        at_risk_segments = [
-            s for s, count in segment_counts.items()
-            if s in {"at_risk", "churned", "dormant", "churn_risk"} and count >= 3
-        ]
+        from backend.app.models.payment import Payment
+        from backend.app.models.enums import PaymentProvider, PaymentStatus
+        from sqlalchemy import func
 
-        # Phase 2: Analyze relevant opportunities
-        opportunities = list(db.scalars(
-            select(GrowthOpportunity).where(
-                GrowthOpportunity.merchant_id == merchant_id,
-                GrowthOpportunity.status.in_(["pending_approval", "approved"]),
-            ).limit(20)
-        ).all())
+        failed_stats = db.execute(
+            select(func.count(Payment.id), func.coalesce(func.sum(Payment.amount), 0))
+            .where(
+                Payment.merchant_id == merchant_id,
+                Payment.provider == PaymentProvider.razorpay.value,
+                Payment.status == PaymentStatus.failed.value,
+            )
+        ).one()
+        failed_count = int(failed_stats[0])
+        failed_amt = float(failed_stats[1])
 
-        marketing_opps = [o for o in opportunities if o.type.value in {
-            "campaign", "win_back", "retention", "discount", "segment_expansion"
-        }]
+        total_cust_count = sum(segment_counts.values()) or len(insights)
+        high_value_count = sum(segment_counts.get(s, 0) for s in ["vip", "high_value", "repeat_customer"])
+        at_risk_count = sum(segment_counts.get(s, 0) for s in ["at_risk", "churned", "dormant", "churn_risk"])
 
-        # Phase 3: Generate findings based on analysis
         findings_created = 0
 
-        # Finding 1: Segment opportunity
-        if high_value_segments:
-            finding = self._create_finding(
+        # Finding 1: Failed payment recoverable revenue
+        if failed_count > 0 and finding_repo and debate_id:
+            f = self._create_finding(
                 finding_repo, debate_id, task_id, merchant_id,
                 finding_type=FindingType.supporting,
-                title=f"High-value segments identified: {', '.join(high_value_segments)}",
+                title=f"Recoverable Revenue: ₹{failed_amt:,.2f} lost across {failed_count} failed Razorpay payments",
                 description=(
-                    f"Found {sum(segment_counts.get(s, 0) for s in high_value_segments)} "
-                    f"customers in high-value segments ({', '.join(high_value_segments)}). "
-                    f"These segments are prime targets for upsell and retention campaigns."
+                    f"Analysis of real Razorpay TEST transactions shows {failed_count} payment failures "
+                    f"totalling ₹{failed_amt:,.2f}. Automated SMS/email payment recovery workflows "
+                    f"can re-engage these high-intent shoppers."
                 ),
                 evidence=[
-                    {"type": "segment_counts", "data": {s: segment_counts.get(s, 0) for s in high_value_segments}},
-                    {"type": "source", "value": "CustomerIntelligenceService"},
+                    {"source": "Razorpay Payments API", "metric": "failed_payment_value_inr", "value": failed_amt},
+                    {"source": "Razorpay Payments API", "metric": "failed_count", "value": failed_count},
+                ],
+                confidence=0.90,
+                supports_recommendation=True,
+            )
+            findings_created += 1
+
+        # Finding 2: Customer segment retention
+        if finding_repo and debate_id:
+            f2 = self._create_finding(
+                finding_repo, debate_id, task_id, merchant_id,
+                finding_type=FindingType.supporting,
+                title=f"Customer Base Intelligence: {total_cust_count} tracked customers ({high_value_count} high-value)",
+                description=(
+                    f"Customer intelligence derived from real transaction history identifies {total_cust_count} unique "
+                    f"profiles. {high_value_count} customers exhibit repeat purchasing patterns, while {at_risk_count} "
+                    f"show dormancy risks."
+                ),
+                evidence=[
+                    {"source": "CustomerIntelligenceService", "metric": "total_customers", "value": total_cust_count},
+                    {"source": "CustomerIntelligenceService", "metric": "high_value_segments", "value": high_value_count},
                 ],
                 confidence=0.85,
                 supports_recommendation=True,
             )
             findings_created += 1
 
-        # Finding 2: At-risk / churn segment
-        if at_risk_segments:
-            finding = self._create_finding(
+            # Finding 3: Target campaign assumptions & uncertainty
+            f3 = self._create_finding(
                 finding_repo, debate_id, task_id, merchant_id,
-                finding_type=FindingType.supporting,
-                title=f"At-risk segments require intervention: {', '.join(at_risk_segments)}",
+                finding_type=FindingType.uncertainty,
+                title="Recovery & Win-back Campaign Conversion Assumptions",
                 description=(
-                    f"Found {sum(segment_counts.get(s, 0) for s in at_risk_segments)} "
-                    f"customers in at-risk segments. Win-back campaigns recommended."
+                    "Campaign recovery estimates assume an 8-12% baseline conversion on failed-payment links. "
+                    "Conversion variance depends on timely notification delivery within 15 minutes of failure."
                 ),
                 evidence=[
-                    {"type": "segment_counts", "data": {s: segment_counts.get(s, 0) for s in at_risk_segments}},
-                    {"type": "source", "value": "CustomerIntelligenceService"},
+                    {"source": "Industry Benchmark", "metric": "expected_conversion", "value": 0.10},
+                    {"source": "Internal Heuristics", "metric": "window_minutes", "value": 15},
                 ],
-                confidence=0.80,
+                confidence=0.70,
+                uncertainty_notes="Actual conversion rate should be verified through A/B experimentation",
                 supports_recommendation=True,
             )
             findings_created += 1
 
-        # Finding 3: Campaign opportunity simulation
-        if marketing_opps:
-            top_opp = max(marketing_opps, key=lambda o: float(o.expected_revenue))
-            sim_engine = SimulationEngine(db)
-            simulation = sim_engine.simulate_campaign(
-                target_customers=int(top_opp.target_customer_count or 100),
-                expected_conversion=0.08,
-                avg_order_value=float(top_opp.expected_revenue) / max(int(top_opp.target_customer_count or 1), 1) if top_opp.target_customer_count else 500.0,
-                cost_per_target=0.50,
-            )
-            sim_engine.persist(
-                simulation,
+        # Opening message (Round 1)
+        if message_repo and debate_id:
+            message_repo.create(
+                debate_id=debate_id,
                 merchant_id=merchant_id,
-                opportunity_id=top_opp.id,
-                created_by_agent=self.NAME,
-                inputs={"segment": "targeted", "conversion_assumption": 0.08},
-            )
-
-            finding = self._create_finding(
-                finding_repo, debate_id, task_id, merchant_id,
-                finding_type=FindingType.supporting,
-                title=f"Campaign simulation for: {top_opp.title}",
-                description=(
-                    f"Simulated campaign for {int(top_opp.target_customer_count or 0)} target customers. "
-                    f"Estimated revenue: ₹{simulation.estimated_revenue:,.2f}, "
-                    f"ROI: {simulation.expected_roi:.1f}%, "
-                    f"Confidence range: ₹{simulation.confidence_low:,.2f} - ₹{simulation.confidence_high:,.2f}"
+                from_agent=AgentSpecialty.marketing.value,
+                to_agent=None,
+                message_type="opening",
+                content=(
+                    f"Marketing Analyst: Real Razorpay data reveals {total_cust_count} active customer profiles and "
+                    f"{failed_count} failed payment transactions totalling ₹{failed_amt:,.2f}. Re-engaging failed-checkout "
+                    f"customers and launching a targeted retention campaign represents our highest-yield, lowest-CAC opportunity."
                 ),
-                evidence=[
-                    {"type": "simulation", "data": simulation.to_dict()},
-                    {"type": "source_opportunity", "value": str(top_opp.id)},
-                ],
-                confidence=0.75,
-                supports_recommendation=True,
+                references=[{"round": 1, "type": "opening", "failed_value": failed_amt, "customers": total_cust_count}],
             )
-            findings_created += 1
 
-        # Finding 4: Check for conflicting evidence (e.g., low engagement segments)
-        low_engagement = [s for s, count in segment_counts.items() if s in {"new_customer"} and count > 50]
-        if low_engagement:
-            finding = self._create_finding(
-                finding_repo, debate_id, task_id, merchant_id,
-                finding_type=FindingType.opposing,
-                title="Large new-customer segment with unknown retention",
-                description=(
-                    f"{segment_counts.get('new_customer', 0)} new customers with no purchase history. "
-                    f"Campaign effectiveness on this segment is uncertain."
-                ),
-                evidence=[
-                    {"type": "segment_counts", "data": {"new_customer": segment_counts.get("new_customer", 0)}},
-                    {"type": "assumption", "value": "New customers may not respond to retention campaigns"},
-                ],
-                confidence=0.60,
-                uncertainty_notes="No historical engagement data for new customers",
-                supports_recommendation=False,
-            )
-            findings_created += 1
+        recs = []
+        if failed_count > 0:
+            recs.append(f"Deploy automated recovery alerts to recapture ₹{failed_amt:,.2f} lost in {failed_count} checkout drops")
+        if high_value_count > 0:
+            recs.append(f"Create retention & loyalty incentive for {high_value_count} repeat/VIP customers")
+        if at_risk_count > 0:
+            recs.append(f"Run win-back reactivation for {at_risk_count} customers showing drop-off signals")
+        if not recs:
+            recs.append("Monitor new checkout sessions and customer signups")
 
-        # Finding 5: Assumption documentation
-        finding = self._create_finding(
-            finding_repo, debate_id, task_id, merchant_id,
-            finding_type=FindingType.uncertainty,
-            title="Campaign conversion assumptions documented",
-            description=(
-                "Campaign simulations assume 8% conversion rate based on industry benchmarks. "
-                "Actual conversion may vary significantly by segment, offer, and channel."
-            ),
-            evidence=[
-                {"type": "assumption", "key": "campaign_conversion_rate", "value": 0.08, "source": "industry_benchmark"},
-                {"type": "assumption", "key": "cost_per_target", "value": 0.50, "source": "internal_estimate"},
-            ],
-            confidence=0.50,
-            uncertainty_notes="Conversion rate is an estimate; actual performance requires A/B testing",
-            supports_recommendation=None,
+        result.output["segment_analysis"] = segment_counts
+        result.output["findings_created"] = findings_created
+        result.output["failed_payments_value"] = failed_amt
+        result.output["failed_payments_count"] = failed_count
+        result.output["total_customers"] = total_cust_count
+        result.output["high_value_count"] = high_value_count
+        result.output["at_risk_count"] = at_risk_count
+        result.output["recommendations"] = recs
+        result.output["summary"] = (
+            f"Analyzed {total_cust_count} customer profiles and {failed_count} failed payments. "
+            f"Identified {high_value_count} high-value repeat shoppers and ₹{failed_amt:,.2f} in recoverable checkout drops."
         )
-        findings_created += 1
 
-        # Phase 4: Send summary message to debate
+    def _run_cross_examination(
+        self,
+        ctx: AgentContext,
+        result: AgentResult,
+        finding_repo: AgentFindingRepository,
+        message_repo: AgentMessageRepository,
+        debate_id: uuid.UUID,
+        merchant_id: uuid.UUID,
+    ) -> None:
         message_repo.create(
             debate_id=debate_id,
             merchant_id=merchant_id,
-            from_agent=AgentSpecialty.marketing,
-            to_agent=None,  # broadcast
-            message_type="findings_summary",
+            from_agent=AgentSpecialty.marketing.value,
+            to_agent=AgentSpecialty.product.value,
+            message_type="challenge",
             content=(
-                f"Marketing analysis complete. Identified {len(high_value_segments)} high-value "
-                f"and {len(at_risk_segments)} at-risk segments. Created {findings_created} findings. "
-                f"Campaign simulation shows estimated ₹{simulation.estimated_revenue:,.0f} revenue "
-                f"for top opportunity." if marketing_opps else "No campaign-type opportunities found."
+                "Marketing Analyst → Product Strategist: High-AOV bundle strategies rely on existing customer multi-item "
+                "intent. Does our real Razorpay order basket history show repeat multi-item orders, or are customers "
+                "primarily purchasing single hero SKUs?"
             ),
-            references=[str(f.id) for f in finding_repo.list_by_debate(debate_id)[-findings_created:]],
+            references=[{"round": 2, "target": "product", "focus": "basket_affinity"}],
         )
 
-        result.output["segment_analysis"] = segment_counts
-        result.output["high_value_segments"] = high_value_segments
-        result.output["at_risk_segments"] = at_risk_segments
-        result.output["marketing_opportunities"] = len(marketing_opps)
-        result.output["findings_created"] = findings_created
+    def _run_rebuttal(
+        self,
+        ctx: AgentContext,
+        result: AgentResult,
+        finding_repo: AgentFindingRepository,
+        message_repo: AgentMessageRepository,
+        debate_id: uuid.UUID,
+        merchant_id: uuid.UUID,
+    ) -> None:
+        message_repo.create(
+            debate_id=debate_id,
+            merchant_id=merchant_id,
+            from_agent=AgentSpecialty.marketing.value,
+            to_agent=AgentSpecialty.software.value,
+            message_type="rebuttal",
+            content=(
+                "Marketing Analyst → Technical Feasibility: Understood on webhook rate boundaries and discount guardrails. "
+                "We agree that recovery discounts must be capped at 10% and triggered strictly on genuine network/bank drops "
+                "with a single automated SMS/email notification rather than continuous messaging."
+            ),
+            references=[{"round": 3, "target": "software", "resolution": "bounded_recovery_notification"}],
+        )
 
     def _create_finding(
         self,
@@ -283,14 +300,13 @@ class MarketingAgent(BaseGrowthAgent):
         uncertainty_notes: str | None = None,
         supports_recommendation: bool | None = None,
     ) -> AgentFinding:
-        """Create and persist an AgentFinding."""
         task_uuid = uuid.UUID(str(task_id)) if task_id else None
         finding = finding_repo.create(
             debate_id=debate_id,
             merchant_id=merchant_id,
             task_id=task_uuid,
-            agent_specialty=AgentSpecialty.marketing,
-            finding_type=finding_type,
+            agent_specialty=AgentSpecialty.marketing.value,
+            finding_type=finding_type.value,
             title=title,
             description=description,
             evidence=evidence,

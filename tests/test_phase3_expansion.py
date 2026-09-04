@@ -221,7 +221,7 @@ def _order(db, merchant: Merchant, customer: Customer, product: Product) -> Orde
 
 def _payment(db, merchant, order, status=PaymentStatus.captured) -> Payment:
     p = Payment(merchant_id=merchant.id, order_id=order.id,
-                provider=PaymentProvider.synthetic, amount=order.total,
+                provider=PaymentProvider.razorpay, amount=order.total,
                 currency=Currency.INR, status=status,
                 failure_code="INSUFFICIENT_FUNDS" if status == PaymentStatus.failed else None)
     db.add(p)

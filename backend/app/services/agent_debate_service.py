@@ -209,6 +209,120 @@ class AgentDebateService:
             "uncertainty": self.list_findings_by_type(debate_id, FindingType.uncertainty),
         }
 
+    # ─── Debate Round Management ──────────────────────────────────────────────
+    
+    def get_debate_round(self, debate_id: uuid.UUID) -> int:
+        """Get the current debate round number."""
+        debate = self._debate_repo.get_by_id(debate_id)
+        return debate.current_round if debate else 1
+
+    def advance_debate_round(self, debate_id: uuid.UUID) -> AgentDebate | None:
+        """Advance the debate to the next round."""
+        debate = self._debate_repo.get_by_id(debate_id)
+        if not debate:
+            return None
+        debate.current_round = (debate.current_round or 1) + 1
+        if debate.current_round == 2:
+            debate.status = DebateStatus.debating
+        elif debate.current_round == 3:
+            debate.status = DebateStatus.debating
+        elif debate.current_round >= 4:
+            debate.status = DebateStatus.synthesizing
+        self._db.flush()
+        return debate
+
+    def get_debate_round_status(self, debate_id: uuid.UUID) -> dict[str, Any]:
+        """Get the current round status with agent positions."""
+        debate = self._debate_repo.get_with_details(debate_id)
+        if not debate:
+            return {"error": "Debate not found"}
+        
+        current_round = debate.current_round or 1
+        tasks = self._task_repo.list_by_debate(debate_id)
+        findings = self._finding_repo.list_by_debate(debate_id)
+        messages = self._message_repo.list_by_debate(debate_id)
+        
+        # Group findings by agent
+        findings_by_agent = {}
+        for f in findings:
+            if f.agent_specialty not in findings_by_agent:
+                findings_by_agent[f.agent_specialty] = []
+            findings_by_agent[f.agent_specialty].append(f)
+        
+        # Group messages by round
+        messages_by_round = {}
+        for m in messages:
+            round_num = m.round if hasattr(m, 'round') else 1
+            if round_num not in messages_by_round:
+                messages_by_round[round_num] = []
+            messages_by_round[round_num].append(m)
+        
+        return {
+            "debate_id": str(debate.id),
+            "current_round": current_round,
+            "status": debate.status.value,
+            "objective": debate.objective,
+            "tasks": [
+                {
+                    "id": str(t.id),
+                    "assigned_to": t.assigned_to,
+                    "title": t.title,
+                    "status": t.status.value,
+                }
+                for t in self._task_repo.list_by_debate(debate_id)
+            ],
+            "findings_summary": {
+                "total": len(findings),
+                "by_type": {
+                    "supporting": len([f for f in findings if f.finding_type == FindingType.supporting]),
+                    "opposing": len([f for f in findings if f.finding_type == FindingType.opposing]),
+                    "neutral": len([f for f in findings if f.finding_type == FindingType.neutral]),
+                    "uncertainty": len([f for f in findings if f.finding_type == FindingType.uncertainty]),
+                },
+                "by_agent": {
+                    agent.value: len(findings) for agent, findings in findings_by_agent.items()
+                }
+            },
+            "rounds": {
+                r: [{"from": m.from_agent, "to": m.to_agent, "type": m.message_type, "content": m.content[:200]} for m in msgs]
+                for r, msgs in messages_by_round.items()
+            },
+        }
+
+    # ─── Debate Round Advancement ─────────────────────────────────────────────
+    
+    def advance_to_round_2(self, debate_id: uuid.UUID) -> AgentDebate | None:
+        """Advance debate to Round 2: Cross-agent debate/challenges."""
+        debate = self._debate_repo.get_by_id(debate_id)
+        if not debate:
+            return None
+        if debate.current_round != 1:
+            return None
+        debate.current_round = 2
+        debate.status = DebateStatus.debating
+        self._db.flush()
+        return debate
+
+    def advance_to_round_3(self, debate_id: uuid.UUID) -> AgentDebate | None:
+        """Advance debate to Round 3: Rebuttals/refinements."""
+        debate = self._debate_repo.get_by_id(debate_id)
+        if not debate or debate.current_round != 2:
+            return None
+        debate.current_round = 3
+        debate.status = DebateStatus.debating
+        self._db.flush()
+        return debate
+
+    def advance_to_synthesis(self, debate_id: uuid.UUID) -> AgentDebate | None:
+        """Advance debate to synthesis phase."""
+        debate = self._debate_repo.get_by_id(debate_id)
+        if not debate or debate.current_round != 3:
+            return None
+        debate.current_round = 4
+        debate.status = DebateStatus.synthesizing
+        self._db.flush()
+        return debate
+
     def get_debate_summary(self, debate_id: uuid.UUID) -> dict[str, Any] | None:
         """Get a structured summary of the debate for synthesis."""
         debate = self.get_debate(debate_id)

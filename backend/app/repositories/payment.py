@@ -47,3 +47,10 @@ class PaymentRepository(BaseRepository[Payment]):
             .order_by(Payment.created_at.desc())
         )
         return list(self.db.scalars(stmt).all())
+
+    def get_by_provider_payment_id(self, merchant_id: uuid.UUID, provider_payment_id: str) -> Payment | None:
+        stmt = select(Payment).where(
+            Payment.merchant_id == merchant_id,
+            Payment.provider_payment_id == provider_payment_id,
+        )
+        return self.db.execute(stmt).scalar_one_or_none()

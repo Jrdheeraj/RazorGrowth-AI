@@ -920,6 +920,6 @@ class TestSafetyDefaults:
     def test_no_placeholder_credentials_in_settings_defaults(self):
         from backend.app.core.config import Settings
 
-        s = Settings(DATABASE_URL="sqlite:///:memory:", APP_ENV="testing")
+        s = Settings(DATABASE_URL="sqlite:///:memory:", APP_ENV="testing", _env_file=None)
         assert s.RAZORPAY_KEY_ID == ""
         assert s.RAZORPAY_KEY_SECRET == ""

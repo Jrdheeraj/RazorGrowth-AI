@@ -55,15 +55,45 @@ DEEP_PLAN = (
     ("OpportunityPrioritizationAgent", {}),
 )
 
-# Phase E: Main AI Growth Team orchestration
+# Phase E: Main AI Growth Team orchestration with 4-Round Multi-Agent Debate
 GROWTH_TEAM_PLAN = (
     ("GrowthMemoryAgent", {"phase": "load"}),
     ("ManagerAgent", {"phase": "delegate"}),
-    ("MarketingAgent", {}),
-    ("ProductAgent", {}),
-    ("DesignerAgent", {}),
-    ("SoftwareAgent", {}),
+    # Round 1: Individual Investigation
+    ("MarketingAgent", {"phase": "investigate"}),
+    ("ProductAgent", {"phase": "investigate"}),
+    ("DesignerAgent", {"phase": "investigate"}),
+    ("SoftwareAgent", {"phase": "investigate"}),
+    # Round 2: Cross-Examination / Challenge
+    ("MarketingAgent", {"phase": "cross_examine"}),
+    ("ProductAgent", {"phase": "cross_examine"}),
+    ("DesignerAgent", {"phase": "cross_examine"}),
+    ("SoftwareAgent", {"phase": "cross_examine"}),
+    # Round 3: Rebuttal
+    ("MarketingAgent", {"phase": "rebut"}),
+    ("ProductAgent", {"phase": "rebut"}),
+    ("DesignerAgent", {"phase": "rebut"}),
+    ("SoftwareAgent", {"phase": "rebut"}),
+    # Round 4: Final Executive Synthesis & Consensus
     ("ManagerAgent", {"phase": "synthesize"}),
+    ("GrowthMemoryAgent", {"phase": "persist"}),
+)
+
+# AI Team Workspace: Coordinated 13-agent collaborative business pipeline
+AI_TEAM_PLAN = (
+    ("GrowthMemoryAgent", {"phase": "load"}),
+    ("GrowthDiscoveryAgent", {}),
+    ("CustomerIntelligenceAgent", {}),
+    ("RevenueOptimizationAgent", {}),
+    ("PaymentRecoveryAgent", {}),
+    ("MarketingAgent", {"phase": "work"}),
+    ("ProductAgent", {"phase": "work"}),
+    ("CampaignStrategistAgent", {}),
+    ("DesignerAgent", {"phase": "work"}),
+    ("ExperimentAgent", {}),
+    ("OpportunityPrioritizationAgent", {}),
+    ("SoftwareAgent", {"phase": "work"}),
+    ("ManagerAgent", {"phase": "coordinate"}),
     ("GrowthMemoryAgent", {"phase": "persist"}),
 )
 
@@ -74,6 +104,8 @@ class OrchestrationSummary:
     merchant_id: str
     mode: str
     status: str = "completed"
+    debate_id: str | None = None
+    action_plan: dict[str, Any] | None = None
     agents_run: list[dict[str, Any]] = field(default_factory=list)
     totals: dict[str, int] = field(default_factory=dict)
     ranked_opportunities: list[dict[str, Any]] = field(default_factory=list)
@@ -84,6 +116,8 @@ class OrchestrationSummary:
             "merchant_id": self.merchant_id,
             "mode": self.mode,
             "status": self.status,
+            "debate_id": self.debate_id,
+            "action_plan": self.action_plan,
             "agents": self.agents_run,
             "totals": self.totals,
             "ranked_opportunities": self.ranked_opportunities,
@@ -121,8 +155,8 @@ class GrowthAgentOrchestrator:
         mode: str = "deep",
         params: dict[str, Any] | None = None,
     ) -> OrchestrationSummary:
-        if mode not in ("fast", "deep", "growth_team"):
-            raise ValueError("mode must be 'fast', 'deep', or 'growth_team'")
+        if mode not in ("fast", "deep", "growth_team", "team"):
+            raise ValueError("mode must be 'fast', 'deep', 'growth_team', or 'team'")
         merchant = self.db.get(Merchant, merchant_id)
         if merchant is None:
             raise MerchantNotFoundError(f"Merchant {merchant_id} not found")
@@ -142,10 +176,20 @@ class GrowthAgentOrchestrator:
             mode=mode,
         )
 
+        from backend.app.services.rag_context import RAGContextService
+
+        ctx.shared["rag_context"] = RAGContextService(self.db).build(
+            merchant_id,
+            str((params or {}).get("objective") or "growth opportunity analysis"),
+            window_days=int((params or {}).get("window_days", 30)),
+        )
+
         if mode == "fast":
             plan = FAST_PLAN
         elif mode == "deep":
             plan = DEEP_PLAN
+        elif mode == "team":
+            plan = AI_TEAM_PLAN
         else:  # growth_team
             plan = GROWTH_TEAM_PLAN
 
@@ -156,17 +200,26 @@ class GrowthAgentOrchestrator:
             step_ctx_params = dict(ctx.params)
             step_ctx_params.update(step_params)
             step_ctx_params["orchestrator_run_id"] = orchestrator_run_id
+            step_ctx_params["_rag_context"] = ctx.shared.get("rag_context", {})
 
             # For growth_team mode, pass debate_id and task_id from ManagerAgent to specialist agents
-            if mode == "growth_team" and agent_name in {"MarketingAgent", "ProductAgent", "DesignerAgent", "SoftwareAgent"}:
-                # Get debate_id from ManagerAgent's output (stored in shared by _share_findings)
-                if "manager_delegations" in ctx.shared:
-                    delegations = ctx.shared["manager_delegations"]
-                    for delegation in delegations:
-                        if delegation["assigned_to"].lower() == agent_name.lower().replace("agent", ""):
-                            step_ctx_params["debate_id"] = ctx.shared.get("manager_debate_id")
-                            step_ctx_params["task_id"] = delegation["task_id"]
-                            break
+            if mode == "growth_team":
+                if "manager_debate_id" in ctx.shared:
+                    step_ctx_params["debate_id"] = ctx.shared.get("manager_debate_id")
+                if agent_name in {"MarketingAgent", "ProductAgent", "DesignerAgent", "SoftwareAgent"}:
+                    if "manager_delegations" in ctx.shared:
+                        from backend.app.models.enums import DebateStatus
+                        from backend.app.services.agent_debate_service import AgentDebateService
+
+                        AgentDebateService(self.db).update_debate_status(
+                            uuid.UUID(str(ctx.shared["manager_debate_id"])),
+                            DebateStatus.debating,
+                        )
+                        delegations = ctx.shared["manager_delegations"]
+                        for delegation in delegations:
+                            if delegation["assigned_to"].lower() == agent_name.lower().replace("agent", ""):
+                                step_ctx_params["task_id"] = delegation["task_id"]
+                                break
 
             step_ctx = AgentContext(
                 db=self.db,
@@ -212,10 +265,14 @@ class GrowthAgentOrchestrator:
             if "ranked_opportunities" in result.output:
                 ctx.shared["ranked_opportunities"] = result.output["ranked_opportunities"]
 
-            # Share findings between main growth team agents
-            if mode == "growth_team" and agent_name in MAIN_GROWTH_TEAM_AGENTS:
+            # Share findings between main growth team agents (both in debate and team modes)
+            if mode in ("growth_team", "team") and agent_name in MAIN_GROWTH_TEAM_AGENTS:
                 self._share_findings(agent_name, result, ctx.shared)
 
+            if agent_name == "ManagerAgent" and "action_plan" in result.output:
+                summary.action_plan = result.output["action_plan"]
+
+        summary.debate_id = str(ctx.shared.get("manager_debate_id")) if ctx.shared.get("manager_debate_id") else None
         summary.ranked_opportunities = list(ctx.shared.get("ranked_opportunities", []))
         summary.totals = {
             "opportunities_created": sum(a["opportunities_created"] for a in summary.agents_run),
@@ -233,8 +290,8 @@ class GrowthAgentOrchestrator:
         elif failed_agents:
             summary.status = "partial_success"
 
-        # Final memory write (deep and growth_team modes) — remember what was decided
-        if mode in ("deep", "growth_team"):
+        # Final memory write (deep, team, and growth_team modes) — remember what was decided
+        if mode in ("deep", "growth_team", "team"):
             self._remember_run(ctx, summary)
         return summary
 

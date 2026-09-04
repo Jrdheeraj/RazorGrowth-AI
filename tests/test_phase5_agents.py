@@ -91,7 +91,7 @@ def seed_commerce(db_session: Session, merchant: Merchant) -> None:
             Payment(
                 merchant_id=merchant.id,
                 order_id=order.id,
-                provider=PaymentProvider.synthetic,
+                provider=PaymentProvider.razorpay,
                 amount=Decimal("10000"),
                 currency=Currency.INR,
                 status=PaymentStatus.captured,
@@ -118,7 +118,7 @@ def seed_commerce(db_session: Session, merchant: Merchant) -> None:
                 Payment(
                     merchant_id=merchant.id,
                     order_id=fail_order.id,
-                    provider=PaymentProvider.synthetic,
+                    provider=PaymentProvider.razorpay,
                     amount=Decimal("5000"),
                     currency=Currency.INR,
                     status=PaymentStatus.failed,
@@ -251,6 +251,17 @@ class TestOrchestrator:
         assert summary.totals["actions_proposed"] >= 1
         assert summary.totals["experiments_proposed"] >= 1
         assert summary.totals["insights_generated"] > 0
+
+    def test_team_run_full_pipeline(self, db_session, merchant_with_data):
+        summary = GrowthAgentOrchestrator(db_session).run(
+            merchant_with_data.id, mode="team"
+        )
+        names = [a["agent"] for a in summary.agents_run]
+        assert len(names) == 14  # All 13 agents + memory persist
+        assert summary.status == "completed"
+        assert summary.action_plan is not None
+        assert "initiatives" in summary.action_plan
+        assert summary.totals["failed_agents"] == 0
 
     def test_failure_isolation_partial_results(self, db_session, merchant_with_data, monkeypatch):
         from backend.app.agents.campaign_strategist import CampaignStrategistAgent

@@ -54,7 +54,7 @@ def _seed_minimal_commerce(db_session, merchant: Merchant, *, failures: int = 2)
     )
     db_session.add(o); db_session.flush()
     db_session.add(Payment(
-        merchant_id=merchant.id, order_id=o.id, provider=PaymentProvider.synthetic,
+        merchant_id=merchant.id, order_id=o.id, provider=PaymentProvider.razorpay,
         amount=Decimal("40000"), currency=Currency.INR, status=PaymentStatus.captured,
         created_at=now - timedelta(days=45),
     ))
@@ -68,7 +68,7 @@ def _seed_minimal_commerce(db_session, merchant: Merchant, *, failures: int = 2)
         )
         db_session.add(fo); db_session.flush()
         db_session.add(Payment(
-            merchant_id=merchant.id, order_id=fo.id, provider=PaymentProvider.synthetic,
+            merchant_id=merchant.id, order_id=fo.id, provider=PaymentProvider.razorpay,
             amount=Decimal("2000"), currency=Currency.INR, status=PaymentStatus.failed,
             created_at=now - timedelta(days=2),
         ))

@@ -34,6 +34,11 @@ os.environ.setdefault("AUTH_MODE", "optional")
 os.environ.setdefault("AUTH_ENABLE_REGISTRATION", "true")
 os.environ.setdefault("AUTH_SECRET_KEY", "test-only-secret-key-do-not-use-in-production")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+# Ensure Razorpay is disabled by default for tests (override .env)
+os.environ["RAZORPAY_ENABLED"] = "false"
+os.environ["RAZORPAY_TEST_MODE"] = "false"
+os.environ["REAL_TEST_INTEGRATION_ENABLED"] = "false"
+os.environ["RAZORPAY_WEBHOOK_SECRET"] = ""
 
 import pytest
 from sqlalchemy import create_engine, event

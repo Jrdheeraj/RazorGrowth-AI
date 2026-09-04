@@ -162,7 +162,7 @@ def _payment(
     p = Payment(
         merchant_id=merchant.id,
         order_id=order.id,
-        provider=PaymentProvider.synthetic,
+        provider=PaymentProvider.razorpay,
         amount=order.total,
         currency=Currency.INR,
         status=status,

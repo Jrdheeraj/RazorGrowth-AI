@@ -93,8 +93,28 @@ class BaseGrowthAgent(ABC):
     def execute(self, ctx: AgentContext) -> AgentResult:
         t0 = time.perf_counter()
         result = AgentResult(agent_name=self.NAME, tools_used=list(self.TOOLS))
+        rag_context = ctx.shared.get("rag_context")
+        result.output["objective"] = ctx.params.get("objective")
+        if rag_context:
+            result.output["evidence_context"] = {
+                "status": rag_context.get("status"),
+                "merchant_id": rag_context.get("merchant_id"),
+                "verified_facts": rag_context.get("verified_facts", []),
+                "derived_metrics": rag_context.get("derived_metrics", {}),
+                "retrieved_context": rag_context.get("retrieved_context", []),
+                "data_sufficiency": rag_context.get("data_sufficiency", {}),
+            }
         try:
-            self._run(ctx, result)
+            if (
+                rag_context
+                and rag_context.get("status") == "insufficient_data"
+                and ctx.mode == "growth_team"
+                and self.NAME != "ManagerAgent"
+            ):
+                result.output["decision"] = "INSUFFICIENT EVIDENCE"
+                result.output["recommendation"] = None
+            else:
+                self._run(ctx, result)
             result.status = "completed"
         except AgentPermissionError as exc:
             log.error("Permission violation in %s: %s", self.NAME, exc)

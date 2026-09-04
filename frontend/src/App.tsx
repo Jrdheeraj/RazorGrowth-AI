@@ -1,28 +1,50 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { PublicLayout } from "./layouts/PublicLayout";
+import { RequireAuth } from "./components/RequireAuth";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
+import { Checkout } from "./pages/Checkout";
+import { GrowthRadar } from "./pages/GrowthRadar";
+import { AgentsPage } from "./pages/AgentsPage";
+import { DebatePage } from "./pages/DebatePage";
+import { ProfilePage } from "./pages/ProfilePage";
 
 /**
  * Application routes.
  *
- *   /        → the complete public SaaS website (one continuous page;
- *              navbar items smooth-scroll between section anchors)
- *   /login   → dedicated login page (the ONLY separate public route)
- *   /app/*   → authenticated workspace — guarded from Phase 3; until then
- *              it always redirects to /login
- *   *        → unknown URLs fall back to "/"
- *
- * Opening "/" never redirects to login and never shows a login gate.
+ *   /              → public SaaS site
+ *   /login         → login + signup page
+ *   /profile       → authenticated user profile  ← RequireAuth
+ *   /checkout      → Razorpay TEST checkout
+ *   /growth-radar  → live Growth Radar
+ *   /agents        → AI Growth Team dashboard
+ *   /debate        → Agent Debate detail
+ *   /app/*         → redirects to /login (Phase 4 workspace)
+ *   *              → falls back to "/"
  */
 export default function App() {
   return (
     <Routes>
       <Route element={<PublicLayout />}>
-        <Route path="/" element={<Home />} />
-        <Route path="/login" element={<Login />} />
+        <Route path="/"             element={<Home />} />
+        <Route path="/login"        element={<Login />} />
+        <Route path="/checkout"     element={<Checkout />} />
+        <Route path="/growth-radar" element={<GrowthRadar />} />
+        <Route path="/agents"       element={<AgentsPage />} />
+        <Route path="/debate"       element={<DebatePage />} />
+
+        {/* Protected — redirects to /login if not authenticated */}
+        <Route
+          path="/profile"
+          element={
+            <RequireAuth>
+              <ProfilePage />
+            </RequireAuth>
+          }
+        />
+
         <Route path="/app/*" element={<Navigate to="/login" replace />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*"      element={<Navigate to="/"     replace />} />
       </Route>
     </Routes>
   );

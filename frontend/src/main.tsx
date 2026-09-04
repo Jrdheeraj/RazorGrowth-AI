@@ -12,12 +12,17 @@ import "./styles/tokens.css";
 import "./styles/global.css";
 import "./styles/components.css";
 
+// Auth context wraps the whole application so every component can read
+// the authenticated user via useAuth().
+import { AuthProvider } from "./lib/AuthContext";
 import App from "./App";
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
-      <App />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>,
 );

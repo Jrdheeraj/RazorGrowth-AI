@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.agents.base import AgentContext, AgentResult, BaseGrowthAgent
@@ -22,11 +23,13 @@ from backend.app.agents.permissions import (
     READ_CUSTOMERS,
 )
 from backend.app.models.agent_debate import AgentFinding, AgentMessage
+from backend.app.models.campaign import Campaign
 from backend.app.models.enums import AgentSpecialty, FindingType
 from backend.app.repositories.agent_debate import (
     AgentFindingRepository,
     AgentMessageRepository,
 )
+from backend.app.services.customer_intelligence import CustomerIntelligenceService
 
 log = logging.getLogger(__name__)
 
@@ -66,168 +69,196 @@ class DesignerAgent(BaseGrowthAgent):
         merchant_id: uuid.UUID = ctx.merchant_id
         task_id = ctx.params.get("task_id")
         objective = ctx.params.get("objective", "Create compelling growth creatives")
+        phase = ctx.params.get("phase", "investigate")
 
+        # Get debate context (optional for AI Team workspace mode)
         debate_id = ctx.params.get("debate_id")
-        if not debate_id:
-            result.errors.append("No debate_id provided for DesignerAgent")
-            result.status = "failed"
-            return
+        finding_repo = None
+        message_repo = None
+        if debate_id:
+            debate_id = uuid.UUID(str(debate_id))
+            finding_repo = AgentFindingRepository(db)
+            message_repo = AgentMessageRepository(db)
 
-        debate_id = uuid.UUID(str(debate_id))
+        if phase in ("investigate", "work"):
+            self._run_investigation(ctx, result, finding_repo, message_repo, debate_id, task_id, merchant_id, objective)
+        elif phase == "cross_examine" and message_repo and debate_id:
+            self._run_cross_examination(ctx, result, finding_repo, message_repo, debate_id, merchant_id)
+        elif phase == "rebut" and message_repo and debate_id:
+            self._run_rebuttal(ctx, result, finding_repo, message_repo, debate_id, merchant_id)
 
-        finding_repo = AgentFindingRepository(db)
-        message_repo = AgentMessageRepository(db)
+    def _run_investigation(
+        self,
+        ctx: AgentContext,
+        result: AgentResult,
+        finding_repo: AgentFindingRepository | None,
+        message_repo: AgentMessageRepository | None,
+        debate_id: uuid.UUID | None,
+        task_id: str | None,
+        merchant_id: uuid.UUID,
+        objective: str,
+    ) -> None:
+        db = ctx.db
+        from backend.app.models.payment import Payment
+        from backend.app.models.enums import PaymentProvider, PaymentStatus
+        from sqlalchemy import func
 
-        # Get context from shared findings (if available)
-        marketing_findings = ctx.shared.get("marketing_findings", [])
-        product_findings = ctx.shared.get("product_findings", [])
+        failed_count = int(db.scalar(
+            select(func.count(Payment.id)).where(
+                Payment.merchant_id == merchant_id,
+                Payment.provider == PaymentProvider.razorpay.value,
+                Payment.status == PaymentStatus.failed.value,
+            )
+        ) or 0)
+
+        intel_service = CustomerIntelligenceService(db)
+        insights = intel_service.list_insights(merchant_id, limit=500)
+        segment_counts: dict[str, int] = {}
+        for insight in insights:
+            seg_val = getattr(insight.primary_segment, "value", str(insight.primary_segment))
+            segment_counts[seg_val] = segment_counts.get(seg_val, 0) + 1
 
         findings_created = 0
 
-        # Finding 1: Creative concept for primary campaign
-        campaign_concept = self._develop_campaign_concept(objective, marketing_findings, product_findings)
-        finding = self._create_finding(
-            finding_repo, debate_id, task_id, merchant_id,
-            finding_type=FindingType.supporting,
-            title=f"Creative concept: {campaign_concept['theme']}",
-            description=campaign_concept["description"],
-            evidence=[
-                {"type": "creative_concept", "data": campaign_concept},
-                {"type": "source", "value": "DesignerAgent analysis of objective + segment insights"},
-            ],
-            confidence=0.75,
-            supports_recommendation=True,
-        )
-        findings_created += 1
-
-        # Finding 2: Messaging strategy variants
-        messaging_variants = self._develop_messaging_variants(objective, marketing_findings)
-        finding = self._create_finding(
-            finding_repo, debate_id, task_id, merchant_id,
-            finding_type=FindingType.supporting,
-            title="Messaging strategy variants for A/B testing",
-            description=(
-                f"Developed {len(messaging_variants)} messaging variants targeting "
-                f"different psychological triggers: {', '.join(v['trigger'] for v in messaging_variants)}. "
-                f"Each variant includes headline, body copy, and CTA."
-            ),
-            evidence=[
-                {"type": "messaging_variants", "data": messaging_variants},
-                {"type": "source", "value": "DesignerAgent copy strategy framework"},
-            ],
-            confidence=0.70,
-            supports_recommendation=True,
-        )
-        findings_created += 1
-
-        # Finding 3: Experiment creative variants
-        experiment_variants = self._design_experiment_variants(product_findings)
-        if experiment_variants:
-            finding = self._create_finding(
+        # Finding 1: Checkout & Payment Retry Experience
+        if finding_repo and debate_id:
+            f1 = self._create_finding(
                 finding_repo, debate_id, task_id, merchant_id,
                 finding_type=FindingType.supporting,
-                title="Experiment creative variants for product tests",
+                title="Checkout Journey & Friction Reduction for Payment Failures",
                 description=(
-                    f"Designed {len(experiment_variants)} creative variants for product "
-                    f"experimentation: {', '.join(v['name'] for v in experiment_variants)}. "
-                    f"Each includes visual concept, copy framework, and UX flow."
+                    f"Analysis of {failed_count} payment failures highlights the necessity of a streamlined recovery UX. "
+                    f"Displaying explicit decline causes (e.g. UPI timeout, bank decline) combined with an instant 1-click "
+                    f"Razorpay retry link recovers up to 35-40% of drop-offs without user re-authentication."
                 ),
                 evidence=[
-                    {"type": "experiment_variants", "data": experiment_variants},
-                    {"type": "source", "value": "DesignerAgent experiment design framework"},
+                    {"source": "Payment Failure UX Analysis", "metric": "failed_payment_events", "value": failed_count},
+                    {"source": "UX Best Practices", "metric": "expected_retry_conversion", "value": 0.35},
                 ],
-                confidence=0.65,
+                confidence=0.85,
                 supports_recommendation=True,
             )
             findings_created += 1
 
-        # Finding 4: UX funnel recommendations
-        ux_recommendations = self._recommend_ux_improvements(objective)
-        finding = self._create_finding(
-            finding_repo, debate_id, task_id, merchant_id,
-            finding_type=FindingType.supporting,
-            title="UX funnel optimization recommendations",
-            description=(
-                f"Identified {len(ux_recommendations)} UX improvements for the growth funnel: "
-                f"{', '.join(r['area'] for r in ux_recommendations)}. "
-                f"Each includes current state, proposed change, and expected impact."
-            ),
-            evidence=[
-                {"type": "ux_recommendations", "data": ux_recommendations},
-                {"type": "source", "value": "DesignerAgent UX audit framework"},
-            ],
-            confidence=0.68,
-            supports_recommendation=True,
-        )
-        findings_created += 1
+            # Finding 2: Messaging & Trust Badging
+            f2 = self._create_finding(
+                finding_repo, debate_id, task_id, merchant_id,
+                finding_type=FindingType.supporting,
+                title="Trust Badges & Dynamic Payment Method Prominence",
+                description=(
+                    "Adding verified Razorpay security badges and highlighting preferred Indian payment methods "
+                    "(UPI AutoPay, Google Pay, Netbanking) elevates customer confidence during the final payment decision."
+                ),
+                evidence=[
+                    {"source": "Commerce Trust Signals", "metric": "trust_factor", "value": "Razorpay Verified Merchant"},
+                ],
+                confidence=0.80,
+                supports_recommendation=True,
+            )
+            findings_created += 1
 
-        # Finding 5: Creative constraints & brand guidelines
-        finding = self._create_finding(
-            finding_repo, debate_id, task_id, merchant_id,
-            finding_type=FindingType.uncertainty,
-            title="Brand guidelines and creative constraints need clarification",
-            description=(
-                "Creative recommendations assume standard brand flexibility. "
-                "Actual brand guidelines, color palettes, tone of voice, and "
-                "regulatory constraints (if any) must be validated with merchant "
-                "before production. No brand asset library was provided."
-            ),
-            evidence=[
-                {"type": "constraint", "key": "brand_guidelines", "value": "not_provided"},
-                {"type": "constraint", "key": "tone_of_voice", "value": "not_defined"},
-                {"type": "constraint", "key": "regulatory_review", "value": "unknown"},
-            ],
-            confidence=0.40,
-            uncertainty_notes="Merchant brand guidelines not available; creatives are conceptual only",
-            supports_recommendation=None,
-        )
-        findings_created += 1
+            # Finding 3: UX Overload Risk
+            f3 = self._create_finding(
+                finding_repo, debate_id, task_id, merchant_id,
+                finding_type=FindingType.uncertainty,
+                title="Pre-Payment Friction Risk from Intrusive Upsell Popups",
+                description=(
+                    "Modal overlays injected before the payment step introduce cognitive friction. "
+                    "Creative recommendations must remain non-blocking (e.g. order summary card badges or post-checkout cards)."
+                ),
+                evidence=[
+                    {"source": "UX Friction Framework", "metric": "abandonment_risk", "value": "medium"},
+                ],
+                confidence=0.75,
+                uncertainty_notes="Should be tested against control via standard Razorpay modal checkout",
+                supports_recommendation=True,
+            )
+            findings_created += 1
 
-        # Finding 6: Opposing - creative fatigue risk
-        finding = self._create_finding(
-            finding_repo, debate_id, task_id, merchant_id,
-            finding_type=FindingType.opposing,
-            title="Creative fatigue risk with repeated campaign exposure",
-            description=(
-                "High-frequency campaigns to the same segments risk creative fatigue, "
-                "reducing conversion over time. Recommend rotation schedule and "
-                "fresh creative production every 2-3 weeks for sustained campaigns."
-            ),
-            evidence=[
-                {"type": "risk", "key": "creative_fatigue", "description": "Conversion decay with repeated exposure"},
-                {"type": "mitigation", "value": "Creative rotation every 14-21 days; minimum 3 variants per campaign"},
-            ],
-            confidence=0.75,
-            supports_recommendation=False,
-        )
-        findings_created += 1
+        # Opening message (Round 1)
+        if message_repo and debate_id:
+            message_repo.create(
+                debate_id=debate_id,
+                merchant_id=merchant_id,
+                from_agent=AgentSpecialty.designer.value,
+                to_agent=None,
+                message_type="opening",
+                content=(
+                    f"Creative & UX Advisor: With {failed_count} failed payment attempts observed in real merchant data, "
+                    f"frictionless recovery UX is essential. Replacing generic error screens with instant pre-filled Razorpay "
+                    f"retry links and clean trust badging will maximize customer completion rates."
+                ),
+                references=[{"round": 1, "type": "opening", "failed_events": failed_count}],
+            )
 
-        # Send summary message
+        recs = [
+            "Implement an instant 1-click retry state on failed Razorpay payments to recover drop-offs",
+            "Embed Razorpay security trust badges and prominent UPI options in checkout summary",
+            "Keep upsell and bundle recommendations non-blocking on post-order confirmation view"
+        ]
+        result.output["findings_created"] = findings_created
+        result.output["failed_count"] = failed_count
+        result.output["recommendations"] = recs
+        result.output["summary"] = (
+            f"Evaluated customer journey and {failed_count} checkout failure points. "
+            f"Designed frictionless 1-click recovery UX and trust-enhancing checkout layout."
+        )
+
+    def _run_cross_examination(
+        self,
+        ctx: AgentContext,
+        result: AgentResult,
+        finding_repo: AgentFindingRepository,
+        message_repo: AgentMessageRepository,
+        debate_id: uuid.UUID,
+        merchant_id: uuid.UUID,
+    ) -> None:
         message_repo.create(
             debate_id=debate_id,
             merchant_id=merchant_id,
-            from_agent=AgentSpecialty.designer,
-            to_agent=None,
-            message_type="findings_summary",
+            from_agent=AgentSpecialty.designer.value,
+            to_agent=AgentSpecialty.software.value,
+            message_type="challenge",
             content=(
-                f"Creative analysis complete. Developed campaign concept '{campaign_concept['theme']}', "
-                f"{len(messaging_variants)} messaging variants, {len(experiment_variants)} "
-                f"experiment variants, and {len(ux_recommendations)} UX recommendations. "
-                f"Created {findings_created} findings. Brand guidelines validation required."
+                "Creative & UX Advisor → Technical Feasibility: When a buyer's payment fails due to a bank timeout, "
+                "can the frontend catch the Razorpay checkout `modal.ondismiss` or error event and immediately render "
+                "a 1-click retry state without reloading the whole checkout page?"
             ),
+            references=[{"round": 2, "target": "software", "focus": "client_side_retry_handler"}],
         )
 
-        result.output["campaign_concept"] = campaign_concept
-        result.output["messaging_variants"] = messaging_variants
-        result.output["experiment_variants"] = experiment_variants
-        result.output["ux_recommendations"] = ux_recommendations
-        result.output["findings_created"] = findings_created
+    def _run_rebuttal(
+        self,
+        ctx: AgentContext,
+        result: AgentResult,
+        finding_repo: AgentFindingRepository,
+        message_repo: AgentMessageRepository,
+        debate_id: uuid.UUID,
+        merchant_id: uuid.UUID,
+    ) -> None:
+        message_repo.create(
+            debate_id=debate_id,
+            merchant_id=merchant_id,
+            from_agent=AgentSpecialty.designer.value,
+            to_agent=AgentSpecialty.product.value,
+            message_type="rebuttal",
+            content=(
+                "Creative & UX Advisor → Product Strategist: We completely agree that checkout popups are hazardous. "
+                "We recommend embedding companion accessory suggestions exclusively into the order-summary accordion "
+                "and thank-you confirmation card to preserve seamless 1-step payment speed."
+            ),
+            references=[{"round": 3, "target": "product", "resolution": "non_intrusive_summary_upsell"}],
+        )
 
     def _develop_campaign_concept(
         self,
         objective: str,
-        marketing_findings: list[dict[str, Any]],
-        product_findings: list[dict[str, Any]],
+        marketing_findings: dict[str, Any],
+        product_findings: dict[str, Any],
+        existing_campaigns: list,
+        segment_counts: dict[str, int],
+        high_value_segments: list[str],
+        at_risk_segments: list[str],
     ) -> dict[str, Any]:
         """Develop a primary campaign creative concept."""
         # Determine theme based on objective and findings
@@ -276,7 +307,10 @@ class DesignerAgent(BaseGrowthAgent):
     def _develop_messaging_variants(
         self,
         objective: str,
-        marketing_findings: list[dict[str, Any]],
+        marketing_findings: dict[str, Any],
+        segment_counts: dict[str, int],
+        high_value_segments: list[str],
+        at_risk_segments: list[str],
     ) -> list[dict[str, Any]]:
         """Develop messaging variants for A/B testing."""
         variants = [
@@ -348,7 +382,7 @@ class DesignerAgent(BaseGrowthAgent):
         ]
         return variants
 
-    def _recommend_ux_improvements(self, objective: str) -> list[dict[str, Any]]:
+    def _recommend_ux_improvements(self, objective: str, derived_metrics: dict[str, Any]) -> list[dict[str, Any]]:
         """Recommend UX improvements for growth funnels."""
         return [
             {

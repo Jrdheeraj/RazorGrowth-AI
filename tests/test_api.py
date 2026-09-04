@@ -49,7 +49,96 @@ class TestHealth:
 # GET /api/opportunities
 # --------------------------------------------------------------------------- #
 
+import pytest
+
+
 class TestOpportunities:
+    @pytest.fixture(autouse=True)
+    def seed_data(self, db_session):
+        from decimal import Decimal
+        from backend.app.models.merchant import Merchant
+        from backend.app.models.product import Product
+        from backend.app.models.customer import Customer
+        from backend.app.models.order import Order, OrderItem
+        from backend.app.models.enums import MerchantStatus, Currency, OrderStatus
+        
+        m = db_session.scalars(select(Merchant)).first()
+        if not m:
+            m = Merchant(
+                name="Test Merchant",
+                slug=f"test-merchant-{uuid.uuid4().hex[:6]}",
+                email="test@example.com",
+                status=MerchantStatus.active,
+                currency=Currency.INR,
+            )
+            db_session.add(m)
+            db_session.flush()
+
+        p_hp = db_session.scalars(select(Product).where(Product.merchant_id == m.id, Product.name == "Noise-Cancelling Headphones")).first()
+        if not p_hp:
+            p_hp = Product(
+                merchant_id=m.id,
+                name="Noise-Cancelling Headphones",
+                sku="PROD-AUDIO-1",
+                category="audio",
+                price=Decimal("14999.00"),
+                currency=Currency.INR,
+                active=True,
+            )
+            db_session.add(p_hp)
+            db_session.flush()
+
+        p_case = db_session.scalars(select(Product).where(Product.merchant_id == m.id, Product.name == "Protective Hard Case")).first()
+        if not p_case:
+            p_case = Product(
+                merchant_id=m.id,
+                name="Protective Hard Case",
+                sku="PROD-CASE-1",
+                category="accessories",
+                price=Decimal("1999.00"),
+                currency=Currency.INR,
+                active=True,
+            )
+            db_session.add(p_case)
+            db_session.flush()
+
+        cust = db_session.scalars(select(Customer).where(Customer.merchant_id == m.id)).first()
+        if not cust:
+            cust = Customer(
+                merchant_id=m.id,
+                name="Jane Doe",
+                email=f"jane-{uuid.uuid4().hex[:6]}@example.com",
+                total_orders=1,
+                total_spend=Decimal("14999.00"),
+            )
+            db_session.add(cust)
+            db_session.flush()
+
+        order = db_session.scalars(select(Order).where(Order.merchant_id == m.id)).first()
+        if not order:
+            order = Order(
+                merchant_id=m.id,
+                customer_id=cust.id,
+                order_number=f"ORD-TEST-{uuid.uuid4().hex[:6]}",
+                status=OrderStatus.paid,
+                subtotal=Decimal("14999.00"),
+                discount=Decimal("0"),
+                tax=Decimal("0"),
+                total=Decimal("14999.00"),
+                currency=Currency.INR,
+            )
+            db_session.add(order)
+            db_session.flush()
+            item = OrderItem(
+                order_id=order.id,
+                product_id=p_hp.id,
+                quantity=1,
+                unit_price=Decimal("14999.00"),
+                line_total=Decimal("14999.00"),
+            )
+            db_session.add(item)
+            db_session.commit()
+
     def test_returns_200(self, client):
         response = client.get("/api/opportunities")
         assert response.status_code == 200

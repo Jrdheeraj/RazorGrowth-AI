@@ -87,6 +87,9 @@ class Settings(BaseSettings):
     #   (no network, no credentials). Live execution additionally requires
     #   EXECUTION_ENABLED=true AND RAZORPAY_ENABLED=false→true explicitly.
     RAZORPAY_TEST_MODE: bool = False
+    # Explicit opt-in for REAL Razorpay TEST MODE integration (real network calls to TEST endpoints).
+    # Requires RAZORPAY_ENABLED=true, RAZORPAY_TEST_MODE=true, and valid credentials.
+    REAL_TEST_INTEGRATION_ENABLED: bool = False
     RAZORPAY_WEBHOOK_SECRET: str = ""
 
     # Approval expiry (days; None = no expiry)

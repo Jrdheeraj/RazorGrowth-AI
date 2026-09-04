@@ -135,3 +135,60 @@ class CustomerTimeSeriesResponse(BaseModel):
     merchant_id: str
     period_days: int
     data: list[TimeSeriesPoint]
+
+
+class AnalyticsTransaction(BaseModel):
+    id: str
+    order_id: str
+    order_number: str
+    provider: str
+    provider_payment_id: str | None
+    amount: Decimal
+    currency: str
+    status: str
+    paid_at: datetime | None
+    created_at: datetime
+
+
+class AnalyticsTransactionsResponse(BaseModel):
+    merchant_id: str
+    period_days: int
+    total: int
+    transactions: list[AnalyticsTransaction]
+
+
+class AnalyticsCustomer(BaseModel):
+    id: str
+    name: str
+    email: str
+    phone: str | None
+    total_orders: int
+    total_spend: Decimal
+    created_at: datetime
+
+
+class AnalyticsCustomersResponse(BaseModel):
+    merchant_id: str
+    total: int
+    customers: list[AnalyticsCustomer]
+
+
+class AnalyticsOrder(BaseModel):
+    id: str
+    customer_id: str
+    order_number: str
+    status: str
+    subtotal: Decimal
+    discount: Decimal
+    tax: Decimal
+    total: Decimal
+    currency: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class AnalyticsOrdersResponse(BaseModel):
+    merchant_id: str
+    period_days: int
+    total: int
+    orders: list[AnalyticsOrder]

@@ -77,16 +77,17 @@ def add_payment(
     *,
     amount: str | None = None,
     status: PaymentStatus = PaymentStatus.captured,
-    days_ago: int = 5,
+    days_ago: int | None = None,
 ) -> Payment:
+    created_at = order.created_at if days_ago is None else datetime.now(timezone.utc) - timedelta(days=days_ago)
     payment = Payment(
         merchant_id=merchant.id,
         order_id=order.id,
-        provider=PaymentProvider.synthetic,
+        provider=PaymentProvider.razorpay.value,
         amount=Decimal(amount or order.total),
-        currency=Currency.INR,
-        status=status,
-        created_at=datetime.now(timezone.utc) - timedelta(days=days_ago),
+        currency=Currency.INR.value if hasattr(Currency.INR, 'value') else Currency.INR,
+        status=status.value if hasattr(status, 'value') else status,
+        created_at=created_at,
     )
     db_session.add(payment)
     db_session.commit()

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, inspect, select
 from sqlalchemy.orm import Session
 
 from backend.app.models.agent_run import AgentRun
@@ -41,6 +41,12 @@ def _previous_period_start(days: int) -> datetime:
     return _utcnow() - timedelta(days=days * 2)
 
 
+def _has_columns(db: Session, table: str, *columns: str) -> bool:
+    inspector = inspect(db.bind)
+    available = {column["name"] for column in inspector.get_columns(table)}
+    return set(columns).issubset(available)
+
+
 class AnalyticsService:
     """Tenant-scoped analytics service."""
 
@@ -70,13 +76,51 @@ class AnalyticsService:
         opportunities = self._get_opportunity_analytics(merchant_id, period_start)
 
         # Recommendation analytics
-        recommendations = self._get_recommendation_analytics(merchant_id, period_start)
+        recommendations = (
+            self._get_recommendation_analytics(merchant_id, period_start)
+            if inspect(self.db.bind).has_table("recommendations")
+            else {
+                "total_recommendations": 0,
+                "draft": 0,
+                "pending_approval": 0,
+                "changes_requested": 0,
+                "approved": 0,
+                "rejected": 0,
+                "executing": 0,
+                "completed": 0,
+                "failed": 0,
+                "average_confidence": None,
+            }
+        )
 
         # Execution analytics
         executions = self._get_execution_analytics(merchant_id, period_start)
 
         # Agent activity analytics
-        agent_activity = self._get_agent_activity_analytics(merchant_id, period_start)
+        agent_activity = (
+            self._get_agent_activity_analytics(merchant_id, period_start)
+            if _has_columns(
+                self.db,
+                "agent_runs",
+                "started_at",
+                "status",
+                "agent_name",
+                "opportunities_created",
+                "actions_proposed",
+                "insights_generated",
+                "experiments_proposed",
+            )
+            else {
+                "total_runs": 0,
+                "completed_runs": 0,
+                "failed_runs": 0,
+                "total_opportunities_created": 0,
+                "total_actions_proposed": 0,
+                "total_insights_generated": 0,
+                "total_experiments_proposed": 0,
+                "by_agent": {},
+            }
+        )
 
         # Experiment analytics
         experiments = self._get_experiment_analytics(merchant_id, period_start)
@@ -97,6 +141,136 @@ class AnalyticsService:
             "agent_activity": agent_activity,
             "experiments": experiments,
             "predicted_vs_actual": predicted_vs_actual,
+        }
+
+    def get_revenue_series(
+        self, merchant_id: uuid.UUID, period_days: int, granularity: str
+    ) -> list[dict[str, Any]]:
+        start = _period_start(period_days)
+        timestamp = func.coalesce(Payment.paid_at, Payment.created_at)
+        if granularity == "day":
+            period = func.date(timestamp)
+        elif self.db.bind.dialect.name == "sqlite":
+            format_map = {"week": "%Y-%W", "month": "%Y-%m"}
+            period = func.strftime(format_map[granularity], timestamp)
+        else:
+            period = func.date_trunc(granularity, timestamp)
+
+        rows = self.db.execute(
+            select(period.label("period"), func.coalesce(func.sum(Payment.amount), 0))
+            .where(
+                Payment.merchant_id == merchant_id,
+                Payment.status == PaymentStatus.captured.value,
+                timestamp >= start,
+            )
+            .group_by(period)
+            .order_by(period)
+        ).all()
+        return [{"date": str(period_value), "value": Decimal(str(value))} for period_value, value in rows]
+
+    def get_transactions(
+        self, merchant_id: uuid.UUID, period_days: int, limit: int, offset: int
+    ) -> dict[str, Any]:
+        start = _period_start(period_days)
+        timestamp = func.coalesce(Payment.paid_at, Payment.created_at)
+        total = self.db.scalar(
+            select(func.count(Payment.id)).where(
+                Payment.merchant_id == merchant_id,
+                timestamp >= start,
+            )
+        ) or 0
+        rows = self.db.execute(
+            select(Payment, Order)
+            .join(Order, Payment.order_id == Order.id)
+            .where(
+                Payment.merchant_id == merchant_id,
+                timestamp >= start,
+            )
+            .order_by(timestamp.desc())
+            .limit(limit)
+            .offset(offset)
+        ).all()
+        transactions = [
+            {
+                "id": str(payment.id),
+                "order_id": str(order.id),
+                "order_number": order.order_number,
+                "provider": str(payment.provider),
+                "provider_payment_id": payment.provider_payment_id,
+                "amount": payment.amount,
+                "currency": str(payment.currency),
+                "status": str(payment.status),
+                "paid_at": payment.paid_at,
+                "created_at": payment.created_at,
+            }
+            for payment, order in rows
+        ]
+        return {"total": int(total), "transactions": transactions}
+
+    def get_customers(
+        self, merchant_id: uuid.UUID, limit: int, offset: int
+    ) -> dict[str, Any]:
+        total = self.db.scalar(
+            select(func.count(Customer.id)).where(Customer.merchant_id == merchant_id)
+        ) or 0
+        customers = self.db.scalars(
+            select(Customer)
+            .where(Customer.merchant_id == merchant_id)
+            .order_by(Customer.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        ).all()
+        return {
+            "total": int(total),
+            "customers": [
+                {
+                    "id": str(customer.id),
+                    "name": customer.name,
+                    "email": customer.email,
+                    "phone": customer.phone,
+                    "total_orders": customer.total_orders,
+                    "total_spend": customer.total_spend,
+                    "created_at": customer.created_at,
+                }
+                for customer in customers
+            ],
+        }
+
+    def get_orders(
+        self, merchant_id: uuid.UUID, period_days: int, limit: int, offset: int
+    ) -> dict[str, Any]:
+        start = _period_start(period_days)
+        stmt = (
+            select(Order)
+            .where(Order.merchant_id == merchant_id, Order.created_at >= start)
+            .order_by(Order.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        orders = self.db.scalars(stmt).all()
+        total = self.db.scalar(
+            select(func.count(Order.id)).where(
+                Order.merchant_id == merchant_id, Order.created_at >= start
+            )
+        ) or 0
+        return {
+            "total": int(total),
+            "orders": [
+                {
+                    "id": str(order.id),
+                    "customer_id": str(order.customer_id),
+                    "order_number": order.order_number,
+                    "status": str(order.status),
+                    "subtotal": order.subtotal,
+                    "discount": order.discount,
+                    "tax": order.tax,
+                    "total": order.total,
+                    "currency": str(order.currency),
+                    "created_at": order.created_at,
+                    "updated_at": order.updated_at,
+                }
+                for order in orders
+            ],
         }
 
     def _get_revenue_analytics(

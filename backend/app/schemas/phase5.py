@@ -34,7 +34,7 @@ class AgentsListResponse(BaseModel):
 
 class AgentRunRequest(BaseModel):
     objective: str | None = Field(default=None, max_length=500)
-    mode: str = Field(default="fast", description="'fast', 'deep', or 'growth_team'")
+    mode: str = Field(default="team", description="'fast', 'deep', 'growth_team', or 'team'")
     window_days: int = Field(default=30, ge=1, le=365)
     merchant_id: uuid.UUID | None = None
     propose_actions: bool = True
@@ -57,6 +57,8 @@ class OrchestratorRunResponse(BaseModel):
     mode: str
     status: str
     totals: dict[str, int]
+    debate_id: str | None = None
+    action_plan: dict[str, Any] | None = None
     agents: list[dict[str, Any]] = Field(default_factory=list)
     ranked_opportunities: list[dict[str, Any]] = Field(default_factory=list)
 
@@ -105,6 +107,44 @@ class SignalOut(BaseModel):
 class RadarResponse(BaseModel):
     merchant_id: str
     signals: list[SignalOut]
+
+
+class GrowthRadarMetrics(BaseModel):
+    captured_revenue: float
+    captured_transactions: int
+    successful_payments: int
+    failed_payments: int
+    total_customers: int
+    repeat_customers: int
+    total_orders: int
+    average_order_value: float
+
+
+class GrowthRadarSufficiency(BaseModel):
+    status: str
+    message: str
+    minimum_required: int
+    available: int
+
+
+class GrowthRadarSignal(BaseModel):
+    signal: str
+    title: str
+    observed_data: dict[str, Any]
+    calculated_metric: str
+    opportunity: str
+    confidence: float
+    reason: str
+    recommended_action: str
+
+
+class GrowthRadarResponse(BaseModel):
+    merchant_id: str
+    generated_at: str
+    overall_health: str
+    metrics: GrowthRadarMetrics
+    data_sufficiency: GrowthRadarSufficiency
+    signals: list[GrowthRadarSignal]
 
 
 class RankedOpportunity(BaseModel):

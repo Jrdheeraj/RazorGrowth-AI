@@ -1,11 +1,18 @@
+/**
+ * SiteHeader — sticky top navigation.
+ *
+ * Unauthenticated: shows Login + Get Started buttons.
+ * Authenticated:   shows NavUserMenu (avatar + dropdown) instead.
+ *
+ * Section links that have no `route` smooth-scroll on the home page;
+ * those with a `route` navigate directly.
+ */
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { scrollToSection, scrollToTop } from "../lib/scroll";
+import { useAuth } from "../lib/AuthContext";
+import { NavUserMenu } from "./NavUserMenu";
 
-/**
- * Section anchors of the single-page public website.
- * Navbar items scroll; they never route.
- */
 interface SectionLink {
   id: string;
   label: string;
@@ -13,77 +20,57 @@ interface SectionLink {
 }
 
 const SECTION_LINKS: readonly SectionLink[] = [
-  { id: "home", label: "Home", route: "/" },
-  { id: "who-its-for", label: "Who it's for" },
+  { id: "home",         label: "Home",        route: "/" },
+  { id: "who-its-for",  label: "Who it's for" },
   { id: "how-it-works", label: "How it works" },
-  { id: "demo", label: "Demo" },
-  { id: "docs", label: "Docs" },
+  { id: "growth-radar", label: "Radar",        route: "/growth-radar" },
+  { id: "agents",       label: "AI Team",      route: "/agents" },
+  { id: "debate",       label: "Debates",      route: "/debate" },
+  { id: "checkout",     label: "Checkout",     route: "/checkout" },
 ] as const;
 
-/**
- * Public-site top navigation.
- * Cream bar · wordmark left · mono uppercase anchor links · Login + Get
- * started (router links) · collapsible clean menu on mobile that closes
- * after scrolling to the chosen section.
- */
 export function SiteHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
+  const navigate  = useNavigate();
+  const location  = useLocation();
+  const { user }  = useAuth();
 
-  // Close the mobile menu whenever the route changes.
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [location.pathname]);
+  // Close mobile menu on route change
+  useEffect(() => { setMenuOpen(false); }, [location.pathname]);
 
-  /**
-   * Navigate to a section or route.
-   * - Home ("/"): scroll to top or navigate home
-   * - Other sections: scroll to section on home, or navigate home + scroll
-   */
   const goToSection = (item: SectionLink) => {
     setMenuOpen(false);
-
-    // No dedicated routes - all sections scroll on home page
     if (item.id === "home") {
-      if (location.pathname === "/") {
-        scrollToTop();
-      } else {
-        navigate("/");
-      }
+      location.pathname === "/" ? scrollToTop() : navigate("/");
       return;
     }
-
+    if (item.route) { navigate(item.route); return; }
     const found = scrollToSection(item.id);
-    if (!found) {
-      navigate("/", { state: { scrollTo: item.id } });
-    }
+    if (!found) navigate("/", { state: { scrollTo: item.id } });
   };
 
   return (
     <header className="site-header">
       <div className="shell site-header__inner">
+        {/* Wordmark */}
         <Link
           to="/"
           className="wordmark"
           aria-label="RazorGrowth AI — back to top"
-          onClick={(e) => {
-            e.preventDefault();
-            goToSection({ id: "home", label: "Home", route: "/" });
-          }}
+          onClick={(e) => { e.preventDefault(); goToSection({ id: "home", label: "Home", route: "/" }); }}
         >
           RazorGrowth&nbsp;AI
           <span className="wordmark__badge">AI TEAM</span>
         </Link>
 
+        {/* Desktop nav */}
         <nav className="site-nav" aria-label="Primary">
-          {SECTION_LINKS.map((item) => (
+          {SECTION_LINKS.map((item) =>
             item.route ? (
               <Link
                 key={item.id}
                 to={item.route}
                 className="site-nav__link"
-                aria-label={`Go to ${item.label} page`}
                 onClick={() => goToSection(item)}
               >
                 {item.label}
@@ -93,23 +80,27 @@ export function SiteHeader() {
                 key={item.id}
                 type="button"
                 className="site-nav__link"
-                aria-label={`Scroll to ${item.label} section`}
                 onClick={() => goToSection(item)}
               >
                 {item.label}
               </button>
             )
-          ))}
-          <Link to="/login" className="site-nav__link">
-            Login
-          </Link>
-          <span className="site-nav__cta">
-            <Link to="/login" className="btn btn--primary btn--sm">
-              Get started
-            </Link>
-          </span>
+          )}
+
+          {/* Auth state */}
+          {user ? (
+            <NavUserMenu />
+          ) : (
+            <>
+              <Link to="/login" className="site-nav__link">Login</Link>
+              <span className="site-nav__cta">
+                <Link to="/login" className="btn btn--primary btn--sm">Get started</Link>
+              </span>
+            </>
+          )}
         </nav>
 
+        {/* Mobile hamburger */}
         <button
           type="button"
           className="nav-toggle"
@@ -124,9 +115,10 @@ export function SiteHeader() {
         </button>
       </div>
 
+      {/* Mobile menu */}
       <div id="mobile-menu" className="mobile-menu" hidden={!menuOpen}>
         <nav className="shell mobile-menu__list" aria-label="Mobile">
-          {SECTION_LINKS.map((item) => (
+          {SECTION_LINKS.map((item) =>
             item.route ? (
               <Link
                 key={item.id}
@@ -146,30 +138,36 @@ export function SiteHeader() {
                 {item.label}
               </button>
             )
-          ))}
-          <Link
-            to="/login"
-            className="mobile-menu__item"
-            onClick={() => setMenuOpen(false)}
-          >
-            Login
-          </Link>
-          <div className="mobile-menu__actions">
-            <Link
-              to="/login"
-              className="btn btn--primary btn--sm"
-              onClick={() => setMenuOpen(false)}
-            >
-              Get started
-            </Link>
-            <button
-              type="button"
-              className="btn btn--secondary btn--sm"
-              onClick={() => goToSection({ id: "home", label: "Home", route: "/" })}
-            >
-              Back to top
-            </button>
-          </div>
+          )}
+
+          {user ? (
+            <>
+              <Link to="/profile" className="mobile-menu__item" onClick={() => setMenuOpen(false)}>
+                Profile
+              </Link>
+              <div className="mobile-menu__actions">
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--sm"
+                  onClick={() => { setMenuOpen(false); }}
+                  style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-meta)" }}
+                >
+                  {user.full_name || user.email.split("@")[0]}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <Link to="/login" className="mobile-menu__item" onClick={() => setMenuOpen(false)}>
+                Login
+              </Link>
+              <div className="mobile-menu__actions">
+                <Link to="/login" className="btn btn--primary btn--sm" onClick={() => setMenuOpen(false)}>
+                  Get started
+                </Link>
+              </div>
+            </>
+          )}
         </nav>
       </div>
     </header>
