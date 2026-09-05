@@ -264,16 +264,16 @@
 
 .debate-chat-card {
   display: flex;
-  min-height: calc(100vh - var(--header-height) - 46px);
-  max-height: calc(100vh - var(--header-height) - 46px);
+  min-height: calc(100vh - var(--header-height) - 24px);
+  max-height: calc(100vh - var(--header-height) - 24px);
   flex-direction: column;
   overflow: hidden;
 }
 
 .debate-chat-header {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr);
   padding: 22px 22px 18px;
   border-bottom: 1px solid var(--line-soft);
 }
@@ -293,13 +293,15 @@
 }
 
 .debate-chat-header h2 {
-  max-width: 840px;
+  width: 100%;
+  max-width: none;
   font-size: clamp(1.45rem, 2vw, 2rem);
   line-height: 1.12;
 }
 
 .debate-chat-header p {
-  max-width: 760px;
+  width: 100%;
+  max-width: none;
   margin: 10px 0 0;
   color: var(--ink-soft);
   font-size: 1rem;
@@ -307,6 +309,9 @@
 }
 
 .debate-chat-status {
+  position: absolute;
+  top: 22px;
+  right: 22px;
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -1118,6 +1123,8 @@
   }
 
   .debate-chat-status {
+    position: static;
+    justify-self: start;
     flex-wrap: wrap;
   }
 }
