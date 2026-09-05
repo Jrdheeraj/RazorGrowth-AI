@@ -69,7 +69,7 @@
 .hfloat__body {
   padding: 14px 16px;
   display: grid;
-  gap: 7px;
+  gap: 4px;
   justify-items: start;
 }
 
@@ -90,20 +90,27 @@
   line-height: 1.45;
 }
 
+.hfloat__link {
+  align-self: end;
+  margin-top: 2px;
+  padding: 9px 12px;
+  font-size: 0.76rem;
+}
+
 /* Placement: hugging the main window's corners so they read as part of
    one composed scene rather than scattered cards. */
 .hfloat--log {
-  top: clamp(64px, 12vh, 120px);
+  top: clamp(48px, 10vh, 100px);
   right: clamp(24px, 7vw, 96px);
 }
 
 .hfloat--queue {
-  top: clamp(230px, 38vh, 360px);
+  top: clamp(250px, 36vh, 350px);
   right: clamp(90px, 16vw, 210px);
 }
 
 .hfloat--approval {
-  bottom: clamp(68px, 12vh, 126px);
+  bottom: clamp(78px, 10vh, 120px);
   right: clamp(18px, 5vw, 70px);
   left: auto;
   width: 292px;
