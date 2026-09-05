@@ -1,0 +1,636 @@
+/* ==========================================================================
+   Growth Radar — premium editorial business-intelligence layout.
+   RazorGrowth identity: cream paper, dark ink, coral accent, green status,
+   thin dark borders, offset print shadows, terminal-flavoured labels.
+   ========================================================================== */
+
+/* ── Page header ───────────────────────────────────────────────────────── */
+
+.radar-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.radar-header__lead {
+  max-width: 56ch;
+  margin-top: 10px;
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+}
+
+.radar-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  box-shadow: var(--shadow-button);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.radar-live__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 2px rgba(112, 184, 138, 0.25);
+  flex-shrink: 0;
+}
+
+/* ── Section rhythm ────────────────────────────────────────────────────── */
+
+.radar-section {
+  margin-top: clamp(32px, 5vw, 52px);
+}
+
+.radar-section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.radar-section__lede {
+  max-width: 68ch;
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+  margin-bottom: 18px;
+}
+
+/* Reading-flow separator: BUSINESS HEALTH → … → WHAT TO DO NEXT */
+.radar-flow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: clamp(32px, 5vw, 52px);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.radar-flow__rule {
+  flex: 1;
+  height: 1px;
+  background: var(--line-soft);
+}
+
+/* ── Business health metrics — editorial grid ─────────────────────────── */
+
+.radar-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  box-shadow: var(--shadow-window);
+}
+
+.radar-metric {
+  padding: 18px 18px 16px;
+  border-right: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.radar-metric:last-child {
+  border-right: none;
+}
+
+.radar-metric__value {
+  font-family: var(--font-mono);
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.radar-metric__value--warn {
+  color: var(--coral-strong);
+}
+
+.radar-metric__note {
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
+/* Small numeric detail inside a metric (e.g. failed-payment share) */
+.radar-metric__sub {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line-soft);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+
+/* ── Narrative summary — the intelligent business report strip ─────────── */
+
+.radar-summary {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--coral);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  box-shadow: var(--shadow-float-card);
+  padding: 22px 24px;
+}
+
+.radar-summary__text {
+  margin-top: 10px;
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  color: var(--ink);
+  max-width: 78ch;
+}
+
+/* ── Signals — editorial insight blocks ───────────────────────────────── */
+
+.radar-signals {
+  display: grid;
+  gap: 18px;
+}
+
+.radar-signal {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  box-shadow: var(--shadow-float-card);
+  overflow: hidden;
+}
+
+.radar-signal__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 18px;
+  background: var(--paper-deep);
+  border-bottom: 1px solid var(--line-soft);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.radar-signal__body {
+  padding: 20px 18px;
+}
+
+.radar-signal__title {
+  margin: 0;
+  font-size: var(--text-title);
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+.radar-signal__observed {
+  margin-top: 8px;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+.radar-signal__grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.radar-signal__cell {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  padding: 12px 14px;
+  background: var(--paper);
+  min-width: 0;
+}
+
+.radar-signal__cell--action {
+  border-left: 3px solid var(--coral);
+  background: var(--coral-wash);
+}
+
+.radar-signal__cell p {
+  margin: 0;
+}
+
+.radar-signal__footer {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.radar-signal__action {
+  flex: 1;
+  min-width: 240px;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+/* ── Minimal bar chart (payment success vs failure) ────────────────────── */
+
+.radar-chart {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  box-shadow: var(--shadow-float-card);
+  padding: 20px 18px;
+}
+
+.radar-chart__note {
+  margin-top: 6px;
+  margin-bottom: 16px;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: 1.45;
+  max-width: 60ch;
+}
+
+.radar-chart__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.radar-chart__row {
+  display: grid;
+  grid-template-columns: 170px 1fr 76px;
+  align-items: center;
+  gap: 14px;
+}
+
+.radar-chart__label {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.radar-chart__track {
+  height: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  overflow: hidden;
+}
+
+.radar-chart__fill {
+  height: 100%;
+  background: var(--green);
+}
+
+.radar-chart__fill--warn {
+  background: var(--coral);
+}
+
+.radar-chart__value {
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  font-weight: 700;
+  color: var(--ink);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.radar-chart__scale {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-soft);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── Priority opportunity — the command-centre callout ─────────────────── */
+
+.radar-priority {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--choc-800);
+  color: var(--cream-text);
+  box-shadow: var(--shadow-window-lift);
+  overflow: hidden;
+}
+
+.radar-priority__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 20px;
+  background: var(--choc-900);
+  border-bottom: 1px solid var(--line-on-dark);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--coral);
+}
+
+.radar-priority__body {
+  padding: 26px 20px 22px;
+}
+
+.radar-priority__title {
+  margin: 0;
+  font-size: var(--text-display-md);
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--cream-text);
+  letter-spacing: var(--tracking-display);
+  text-transform: uppercase;
+}
+
+.radar-priority__impact {
+  margin-top: 12px;
+  font-family: var(--font-mono);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--green);
+}
+
+.radar-priority__grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.radar-priority__cell {
+  border: 1px solid var(--line-on-dark-soft);
+  border-radius: var(--radius-window);
+  padding: 14px 16px;
+  background: rgba(247, 235, 215, 0.04);
+  min-width: 0;
+}
+
+.radar-priority__cell p {
+  margin: 0;
+}
+
+.radar-priority__cell-label {
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--coral);
+}
+
+.radar-priority__cell-text {
+  font-size: var(--text-small);
+  line-height: 1.5;
+  color: var(--cream-muted);
+}
+
+.radar-priority__cta {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line-on-dark-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.radar-priority__cta-note {
+  font-size: var(--text-small);
+  color: var(--cream-muted);
+  max-width: 46ch;
+  line-height: 1.5;
+}
+
+/* ── Opportunity cards ─────────────────────────────────────────────────── */
+
+.radar-opps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 18px;
+}
+
+.radar-opp {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  box-shadow: var(--shadow-float-card);
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.radar-opp__rank {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.radar-opp__title {
+  margin: 0;
+  font-size: var(--text-title);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
+.radar-opp__impact {
+  font-family: var(--font-mono);
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--green-deep);
+}
+
+.radar-opp__row {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  background: var(--paper);
+  padding: 10px 12px;
+}
+
+.radar-opp__row p {
+  margin: 0;
+  font-size: var(--text-small);
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.radar-opp__action {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line-soft);
+}
+
+/* ── Data coverage ─────────────────────────────────────────────────────── */
+
+.radar-coverage {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  box-shadow: var(--shadow-float-card);
+  padding: 20px 22px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 18px;
+  align-items: center;
+}
+
+.radar-coverage__note {
+  margin-top: 8px;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: 1.5;
+  max-width: 62ch;
+}
+
+.radar-coverage__meter {
+  min-width: 220px;
+  padding: 12px 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  background: var(--paper);
+}
+
+.radar-coverage__track {
+  margin-top: 8px;
+  height: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper-deep);
+  overflow: hidden;
+}
+
+.radar-coverage__fill {
+  height: 100%;
+  background: var(--green);
+}
+
+.radar-coverage__fill--low {
+  background: var(--coral);
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────── */
+
+.radar-footer {
+  margin-top: clamp(36px, 5vw, 56px);
+  padding-top: 22px;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.radar-footer p {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+}
+
+/* ── Shared mono label inside cards ────────────────────────────────────── */
+
+.radar-cell-label {
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────── */
+
+@media (max-width: 1080px) {
+  .radar-metrics {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .radar-metric:nth-child(3) {
+    border-right: none;
+  }
+  .radar-metric:nth-child(-n + 3) {
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .radar-signal__grid,
+  .radar-priority__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .radar-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .radar-metric {
+    border-right: 1px solid var(--line-soft);
+  }
+  .radar-metric:nth-child(2n) {
+    border-right: none;
+  }
+  .radar-metric:nth-child(-n + 4) {
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .radar-signal__grid,
+  .radar-priority__grid {
+    grid-template-columns: 1fr;
+  }
+  .radar-chart__row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .radar-chart__value {
+    text-align: left;
+  }
+  .radar-coverage {
+    grid-template-columns: 1fr;
+  }
+}
