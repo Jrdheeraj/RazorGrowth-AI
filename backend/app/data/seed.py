@@ -438,6 +438,21 @@ def _update_customer_stats(db: Session, merchant: Merchant) -> None:
     log.info("Customer stats updated for %d customers.", len(rows))
 
 
+def ensure_catalog_for_merchant(db: Session, merchant: Merchant) -> dict[str, Product]:
+    """
+    Provision the standard product catalog for an existing merchant.
+
+    Idempotent: reuses the same deterministic natural-key pattern as
+    _get_or_create_products, so calling it twice creates nothing new.
+
+    Intended for merchants created through Razorpay TEST ingestion, which
+    auto-create only a single generic placeholder product (price ₹0, no
+    stock) for orders without line items. This gives such merchants the
+    same real, purchasable catalog used across the system.
+    """
+    return _get_or_create_products(db, merchant)
+
+
 def run_seed(db: Session) -> None:
     """
     Execute the full seed sequence inside a caller-managed transaction.

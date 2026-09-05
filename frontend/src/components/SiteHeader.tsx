@@ -26,6 +26,7 @@ const SECTION_LINKS: readonly SectionLink[] = [
   { id: "growth-radar", label: "Radar",        route: "/growth-radar" },
   { id: "agents",       label: "AI Team",      route: "/agents" },
   { id: "debate",       label: "Debates",      route: "/debate" },
+  { id: "actions",      label: "Actions",      route: "/actions" },
   { id: "checkout",     label: "Checkout",     route: "/checkout" },
 ] as const;
 

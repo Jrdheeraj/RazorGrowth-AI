@@ -37,6 +37,8 @@ import type {
   RAGContextResponse,
   AgentDashboardResponse,
   AgentDashboardAgent,
+  ProductResponse,
+  ProductListResponse,
 } from "../types/api";
 
 export type {
@@ -68,6 +70,8 @@ export type {
   RAGContextResponse,
   AgentDashboardResponse,
   AgentDashboardAgent,
+  ProductResponse,
+  ProductListResponse,
 };
 export class ApiError extends Error {
   status: number;
@@ -327,6 +331,12 @@ export function verifyPayment(
     method: "POST",
     body,
   });
+}
+
+/* ── Products (AI-readable catalog) ────────────────────────────────────── */
+
+export function fetchProducts(): Promise<ProductListResponse> {
+  return request<ProductListResponse>("/api/products");
 }
 
 /* ── Agent Debate Dashboard ────────────────────────────────────────────── */

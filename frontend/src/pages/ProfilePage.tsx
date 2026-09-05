@@ -21,7 +21,8 @@ const QUICK_LINKS = [
   { label: "Growth Radar",     to: "/growth-radar",  desc: "Understand what's happening in your business" },
   { label: "AI Growth Team",   to: "/agents",         desc: "Let AI specialists investigate your business" },
   { label: "AI Investigations",to: "/debate",         desc: "See what your AI team found and why" },
-  { label: "Checkout",         to: "/checkout",       desc: "Razorpay TEST payment flow" },
+  { label: "Growth Actions",   to: "/actions",        desc: "Review, approve, and execute AI-proposed actions" },
+  { label: "Checkout",         to: "/checkout",       desc: "AI Buyer · Razorpay TEST payment flow" },
 ] as const;
 
 export function ProfilePage() {

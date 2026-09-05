@@ -7,6 +7,7 @@ import { Checkout } from "./pages/Checkout";
 import { GrowthRadar } from "./pages/GrowthRadar";
 import { AgentsPage } from "./pages/AgentsPage";
 import { DebatePage } from "./pages/DebatePage";
+import { ActionsPage } from "./pages/ActionsPage";
 import { ProfilePage } from "./pages/ProfilePage";
 
 /**
@@ -15,10 +16,11 @@ import { ProfilePage } from "./pages/ProfilePage";
  *   /              → public SaaS site
  *   /login         → login + signup page
  *   /profile       → authenticated user profile  ← RequireAuth
- *   /checkout      → Razorpay TEST checkout
+ *   /checkout      → AI Buyer + Razorpay TEST checkout
  *   /growth-radar  → live Growth Radar
  *   /agents        → AI Growth Team dashboard
  *   /debate        → Agent Debate detail
+ *   /actions       → Growth Actions approval console + audit trail
  *   /app/*         → redirects to /login (Phase 4 workspace)
  *   *              → falls back to "/"
  */
@@ -32,6 +34,7 @@ export default function App() {
         <Route path="/growth-radar" element={<GrowthRadar />} />
         <Route path="/agents"       element={<AgentsPage />} />
         <Route path="/debate"       element={<DebatePage />} />
+        <Route path="/actions"      element={<ActionsPage />} />
 
         {/* Protected — redirects to /login if not authenticated */}
         <Route

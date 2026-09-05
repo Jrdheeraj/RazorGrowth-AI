@@ -706,11 +706,16 @@ export function GrowthRadar() {
             ? "Investigate any opportunity above to have your AI Growth Team analyse it in depth."
             : "Your AI Growth Team is ready when you have sufficient data."}
         </p>
-        {ranked.length > 0 && (
-          <Button variant="secondary" mono onClick={() => navigate("/agents")}>
-            Meet the AI Growth Team →
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {ranked.length > 0 && (
+            <Button variant="secondary" mono onClick={() => navigate("/agents")}>
+              Meet the AI Growth Team →
+            </Button>
+          )}
+          <Button variant="primary" mono onClick={() => navigate("/actions")}>
+            Review Growth Actions →
           </Button>
-        )}
+        </div>
       </div>
     </section>
   );

@@ -319,6 +319,26 @@ export interface ProductRow {
   active: boolean;
 }
 
+/** Full product as returned by GET /api/products (AI-readable catalog). */
+export interface ProductResponse {
+  id: string;
+  merchant_id: string;
+  name: string;
+  description: string | null;
+  category: string;
+  price: number;
+  sku: string | null;
+  stock_quantity: number;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductListResponse {
+  products: ProductResponse[];
+  total: number;
+}
+
 export interface CustomerRow {
   id: string;
   merchant_id: string;

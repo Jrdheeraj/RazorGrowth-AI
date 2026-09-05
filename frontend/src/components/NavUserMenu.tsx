@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { label: "Growth Radar",   to: "/growth-radar" },
   { label: "AI Team",        to: "/agents" },
   { label: "Agent Debates",  to: "/debate" },
+  { label: "Growth Actions", to: "/actions" },
   { label: "Checkout",       to: "/checkout" },
 ] as const;
 

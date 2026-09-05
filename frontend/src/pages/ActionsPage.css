@@ -1,0 +1,433 @@
+/* ==========================================================================
+   Growth Actions — merchant-facing approval console + audit trail.
+   RazorGrowth identity: cream paper, dark ink, coral accent, thin borders,
+   offset print shadows, editorial/terminal labels.
+   ========================================================================== */
+
+.actions-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.actions-header__lead {
+  max-width: 58ch;
+  margin-top: 10px;
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+}
+
+.actions-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  box-shadow: var(--shadow-button);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.actions-live__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 2px rgba(112, 184, 138, 0.25);
+  flex-shrink: 0;
+}
+
+/* ── Journey strip: Radar → AI Team → Actions → Approval → Audit ───────── */
+
+.actions-journey {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: clamp(28px, 4vw, 44px);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  flex-wrap: wrap;
+}
+
+.actions-journey__rule {
+  flex: 1;
+  min-width: 24px;
+  height: 1px;
+  background: var(--line-soft);
+}
+
+.actions-journey__step--active {
+  color: var(--coral-deep);
+  font-weight: 700;
+}
+
+/* ── Section rhythm ────────────────────────────────────────────────────── */
+
+.actions-section {
+  margin-top: clamp(32px, 5vw, 52px);
+}
+
+.actions-section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.actions-section__lede {
+  max-width: 68ch;
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+  margin-bottom: 18px;
+}
+
+/* ── Status filter tabs ────────────────────────────────────────────────── */
+
+.actions-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.actions-tab {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+
+.actions-tab:hover {
+  border-color: var(--line);
+}
+
+.actions-tab--active {
+  border-color: var(--line);
+  background: var(--choc-900);
+  color: var(--cream-text);
+  box-shadow: var(--shadow-button);
+}
+
+/* ── Action card — explainable + bounded + approval ────────────────────── */
+
+.actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.action-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  box-shadow: var(--shadow-float-card);
+  overflow: hidden;
+}
+
+.action-card__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 18px;
+  background: var(--paper-deep);
+  border-bottom: 1px solid var(--line-soft);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.action-card__body {
+  padding: 20px 18px;
+}
+
+.action-card__title {
+  margin: 0;
+  font-size: var(--text-title);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
+.action-card__grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.action-card__cell {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  padding: 12px 14px;
+  background: var(--paper);
+  min-width: 0;
+}
+
+.action-card__cell p {
+  margin: 0;
+  font-size: var(--text-small);
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.action-cell-label {
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* Boundaries block — what the AI will / will not do */
+.action-card__bounds {
+  margin-top: 14px;
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--green-deep);
+  border-radius: var(--radius-window);
+  background: var(--green-wash);
+  padding: 12px 14px;
+}
+
+.action-card__bounds ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.action-card__bounds li {
+  font-size: var(--text-small);
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+/* Approval footer */
+.action-card__footer {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.action-card__approval-note {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* ── Status chips ─────────────────────────────────────────────────────── */
+
+.action-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-control);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  background: var(--paper);
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.action-status__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.action-status--waiting { color: var(--coral-deep); border-color: rgba(169, 79, 56, 0.45); background: var(--coral-wash); }
+.action-status--approved { color: var(--green-deep); border-color: rgba(62, 125, 88, 0.45); background: var(--green-wash); }
+.action-status--rejected { color: var(--ink-faint); }
+.action-status--running { color: var(--coral-deep); border-color: rgba(169, 79, 56, 0.45); background: var(--coral-wash); }
+.action-status--done { color: var(--green-deep); border-color: rgba(62, 125, 88, 0.45); background: var(--green-wash); }
+.action-status--failed { color: var(--coral-strong); border-color: rgba(200, 95, 67, 0.5); background: var(--coral-wash); }
+
+/* ── Execution result panel ─────────────────────────────────────────────── */
+
+.action-result {
+  margin-top: 14px;
+  border: 1px solid rgba(62, 125, 88, 0.45);
+  border-radius: var(--radius-window);
+  background: var(--green-wash);
+  padding: 12px 14px;
+}
+
+.action-result--failure {
+  border-color: rgba(200, 95, 67, 0.5);
+  background: var(--coral-wash);
+}
+
+.action-result p {
+  margin: 0;
+  font-size: var(--text-small);
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.action-result--failure p {
+  color: var(--coral-deep);
+}
+
+/* ── Audit trail timeline ──────────────────────────────────────────────── */
+
+.audit-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.audit-step {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 14px;
+  position: relative;
+  padding-bottom: 18px;
+}
+
+.audit-step:last-child {
+  padding-bottom: 0;
+}
+
+/* vertical connector */
+.audit-step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 24px;
+  bottom: 0;
+  width: 1px;
+  background: var(--line-soft);
+}
+
+.audit-step__marker {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper-bright);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 800;
+  z-index: 1;
+}
+
+.audit-step--ai .audit-step__marker {
+  background: var(--choc-900);
+  color: var(--green);
+}
+
+.audit-step--human .audit-step__marker {
+  background: var(--choc-900);
+  color: var(--coral);
+}
+
+.audit-step__body {
+  min-width: 0;
+}
+
+.audit-step__title {
+  margin: 0 0 3px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.3;
+}
+
+.audit-step__meta {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.audit-step__detail {
+  margin: 6px 0 0;
+  font-size: var(--text-small);
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+/* ── Empty state ───────────────────────────────────────────────────────── */
+
+.actions-empty {
+  border: 1px dashed var(--line-soft);
+  border-radius: var(--radius-window);
+  padding: 26px 22px;
+  background: var(--paper-bright);
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+  max-width: 72ch;
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────── */
+
+.actions-footer {
+  margin-top: clamp(36px, 5vw, 56px);
+  padding-top: 22px;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.actions-footer p {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .action-card__grid {
+    grid-template-columns: 1fr;
+  }
+}
