@@ -464,27 +464,6 @@ function DebateDetail({ debateId }: { debateId: string }) {
           </button>
         </form>
 
-        {showDetails && (
-          <div className="debate-detail-drawer" aria-label="Full analysis details">
-            <h3>Full analysis details</h3>
-            <AnalysisDetails dashboard={dashboard} findings={findings} messages={orderedMessages} rounds={rounds} />
-            {rounds && (
-              <div className="debate-round-summary">
-                <span>Current round: {rounds.current_round}</span>
-                <span>Total findings: {rounds.findings_summary?.total ?? findings.length}</span>
-              </div>
-            )}
-            <div className="debate-detail-grid">
-              {findings.map((finding) => (
-                <div key={finding.id} className="debate-detail-finding">
-                  <strong>{agentLabel(finding.agent_specialty)}: {finding.title}</strong>
-                  {finding.description && <span>{finding.description}</span>}
-                  <EvidenceList evidence={finding.evidence} />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </section>
 
       <aside className="debate-result-card" aria-label="Final recommendation">
@@ -548,6 +527,16 @@ function DebateDetail({ debateId }: { debateId: string }) {
           </button>
         </div>
       </aside>
+
+      {showDetails && (
+        <AnalysisFullPage
+          dashboard={dashboard}
+          findings={findings}
+          messages={orderedMessages}
+          rounds={rounds}
+          onBack={() => setShowDetails(false)}
+        />
+      )}
     </div>
   );
 }
@@ -586,6 +575,47 @@ function workingCopy(agent: string, status: string) {
   return "Working on this debate...";
 }
 
+function AnalysisFullPage({
+  dashboard,
+  findings,
+  messages,
+  rounds,
+  onBack,
+}: {
+  dashboard: AgentDashboardResponse;
+  findings: AgentFinding[];
+  messages: AgentMessage[];
+  rounds: AgentDebateRoundStatus | null;
+  onBack: () => void;
+}) {
+  return (
+    <div className="debate-analysis-page" aria-label="Full analysis details">
+      <div className="debate-analysis-page__inner">
+        <div className="debate-analysis-window">
+          <div className="debate-analysis-window__titlebar">
+            <span>analysis-report.log</span>
+            <div aria-hidden="true">
+              <i className="debate-analysis-window__control debate-analysis-window__control--coral" />
+              <i className="debate-analysis-window__control debate-analysis-window__control--gray" />
+              <i className="debate-analysis-window__control debate-analysis-window__control--muted" />
+            </div>
+          </div>
+          <header className="debate-analysis-page__header">
+            <button type="button" className="debate-analysis-back" onClick={onBack}>
+              <span aria-hidden="true">←</span>
+              Back to debate
+            </button>
+            <div className="debate-analysis-page__eyebrow">RazorGrowth AI / Analysis report</div>
+            <h2>{dashboard.objective}</h2>
+            <p>Review the evidence, findings, and recommendation from the AI team in one place.</p>
+          </header>
+        </div>
+        <AnalysisDetails dashboard={dashboard} findings={findings} messages={messages} rounds={rounds} />
+      </div>
+    </div>
+  );
+}
+
 function AnalysisDetails({
   dashboard,
   findings,
@@ -600,64 +630,147 @@ function AnalysisDetails({
   const facts = dashboard.rag_context?.verified_facts ?? [];
   const supporting = findings.filter((finding) => finding.finding_type === "supporting" || finding.supports_recommendation);
   const concerns = findings.filter((finding) => finding.finding_type === "opposing" || finding.finding_type === "uncertainty");
+  const insightFindings = [...supporting, ...concerns].slice(0, 8);
 
   return (
-    <div className="debate-analysis-copy">
-      <p>We looked at your recent Razorpay TEST payments, orders, customers, products, and the growth signals available for this merchant.</p>
-      {facts.length > 0 && (
-        <section>
-          <h4>Evidence reviewed</h4>
-          <ul>
-            {facts.slice(0, 6).map((fact, index) => (
-              <li key={`${fact.fact}-${index}`}>{plainMetric(fact.fact, fact.value)}</li>
+    <div className="debate-analysis-report">
+      <section className="debate-analysis-section debate-analysis-section--overview debate-analysis-overview">
+        <div className="debate-analysis-section__heading">
+          <span className="debate-analysis-kicker">01</span>
+          <div>
+            <h4>Overview</h4>
+            <p>A plain-English view of what the AI team reviewed and the signals it found in your Razorpay TEST data.</p>
+          </div>
+        </div>
+        {messages.length > 0 && (
+          <p className="debate-analysis-overview__summary">
+            The team reviewed {facts.length > 0 ? `${facts.length} business data points` : "the available business data"} and discussed the results across {rounds?.current_round ?? "multiple"} debate stages.
+          </p>
+        )}
+      </section>
+
+      <section className="debate-analysis-section debate-analysis-section--data">
+        <div className="debate-analysis-section__heading">
+          <span className="debate-analysis-kicker">02</span>
+          <div>
+            <h4>Business data reviewed</h4>
+            <p>Values returned by the connected Razorpay TEST account.</p>
+          </div>
+        </div>
+        {facts.length > 0 ? (
+          <div className="debate-analysis-metrics">
+            {facts.slice(0, 8).map((fact, index) => (
+              <div className="debate-analysis-metric" key={`${fact.fact}-${index}`}>
+                <strong>{formatMetricValue(fact.value)}</strong>
+                <span>{metricLabel(fact.fact)}</span>
+              </div>
             ))}
-          </ul>
-        </section>
-      )}
-      {supporting.length > 0 && (
-        <section>
-          <h4>What the specialists found</h4>
-          <ul>
+          </div>
+        ) : (
+          <p className="debate-analysis-empty">No verified business metrics were returned for this analysis.</p>
+        )}
+      </section>
+
+      <section className="debate-analysis-section debate-analysis-section--findings">
+        <div className="debate-analysis-section__heading">
+          <span className="debate-analysis-kicker">03</span>
+          <div>
+            <h4>What the AI team found</h4>
+            <p>Findings translated from the team&apos;s analysis into merchant-friendly language.</p>
+          </div>
+        </div>
+        {insightFindings.length > 0 ? (
+          <div className="debate-analysis-finding-list">
+            {insightFindings.map((finding) => (
+              <article className={`debate-analysis-finding debate-analysis-finding--${finding.finding_type === "supporting" || finding.supports_recommendation ? "positive" : "caution"}`} key={finding.id}>
+                <span className="debate-analysis-finding__marker" aria-hidden="true" />
+                <div>
+                  <strong>{finding.title || "Team finding"}</strong>
+                  <p>{finding.description || finding.uncertainty_notes || "The team recorded this finding during the analysis."}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="debate-analysis-empty">The team did not record additional findings for this analysis.</p>
+        )}
+      </section>
+
+      <section className="debate-analysis-section debate-analysis-section--insights">
+        <div className="debate-analysis-section__heading">
+          <span className="debate-analysis-kicker">04</span>
+          <div>
+            <h4>Key insights</h4>
+            <p>The most relevant signals to keep in mind when acting on this analysis.</p>
+          </div>
+        </div>
+        {supporting.length > 0 ? (
+          <div className="debate-analysis-insight-list">
             {supporting.slice(0, 6).map((finding) => (
-              <li key={finding.id}>{agentLabel(finding.agent_specialty)} found: {finding.description || finding.title}</li>
+              <article className="debate-analysis-insight" key={finding.id}>
+                <strong>{finding.title || "Opportunity identified"}</strong>
+                <p>{finding.description || finding.uncertainty_notes}</p>
+                <span>Why this matters: this signal was included in the team&apos;s recommendation.</span>
+              </article>
             ))}
-          </ul>
-        </section>
-      )}
-      {concerns.length > 0 && (
-        <section>
-          <h4>Concerns and open questions</h4>
-          <ul>
-            {concerns.slice(0, 5).map((finding) => (
-              <li key={finding.id}>{finding.uncertainty_notes || finding.description || finding.title}</li>
+          </div>
+        ) : (
+          <p className="debate-analysis-empty">No separate key insights were returned.</p>
+        )}
+      </section>
+
+      <section className="debate-analysis-section debate-analysis-section--next-steps">
+        <div className="debate-analysis-section__heading">
+          <span className="debate-analysis-kicker">05</span>
+          <div>
+            <h4>Recommended next steps</h4>
+            <p>What the AI team recommends based on the data and findings above.</p>
+          </div>
+        </div>
+        <div className="debate-analysis-next-step">
+          <span aria-hidden="true">→</span>
+          <p>{dashboard.recommendation || dashboard.final_synthesis || "No recommendation was returned for this analysis."}</p>
+        </div>
+      </section>
+
+      <section className="debate-analysis-section debate-analysis-section--evidence debate-analysis-evidence">
+        <div className="debate-analysis-section__heading">
+          <span className="debate-analysis-kicker">06</span>
+          <div>
+            <h4>Evidence</h4>
+            <p>Supporting data attached to the team&apos;s findings.</p>
+          </div>
+        </div>
+        {findings.some((finding) => finding.evidence?.length) ? (
+          <div className="debate-analysis-evidence-list">
+            {findings.filter((finding) => finding.evidence?.length).slice(0, 6).map((finding) => (
+              <div key={finding.id}>
+                <strong>{finding.title || "Finding"}</strong>
+                <EvidenceList evidence={finding.evidence} />
+              </div>
             ))}
-          </ul>
-        </section>
-      )}
-      {messages.length > 0 && (
-        <section>
-          <h4>How the team discussed it</h4>
-          <p>The team exchanged {messages.length} messages across {rounds?.current_round ?? "multiple"} debate stages before the Growth Manager prepared the recommendation.</p>
-        </section>
-      )}
-      {dashboard.recommendation && (
-        <section>
-          <h4>What to do next</h4>
-          <p>{dashboard.recommendation}</p>
-        </section>
-      )}
+          </div>
+        ) : (
+          <p className="debate-analysis-empty">No additional evidence was attached to the findings.</p>
+        )}
+      </section>
     </div>
   );
 }
 
-function plainMetric(fact: string, value: number) {
+function metricLabel(fact: string) {
   const label = fact.replace(/[_-]+/g, " ").toLowerCase();
-  if (label.includes("captured") && label.includes("transaction")) return `We reviewed ${value} successful payments.`;
-  if (label.includes("successful") && label.includes("payment")) return `${value} payments were successful.`;
-  if (label.includes("failed") && label.includes("payment")) return `${value} payments failed.`;
-  if (label.includes("customer")) return `${value} customers were included in the analysis.`;
-  if (label.includes("order")) return `${value} orders were reviewed.`;
-  return `${prettify(fact)}: ${value}`;
+  if (label.includes("captured") && label.includes("transaction")) return "Successful payments";
+  if (label.includes("successful") && label.includes("payment")) return "Successful payments";
+  if (label.includes("failed") && label.includes("payment")) return "Failed payments";
+  if (label.includes("customer")) return "Customers";
+  if (label.includes("order")) return "Orders";
+  if (label.includes("revenue") || label.includes("amount") || label.includes("volume")) return prettify(fact);
+  return prettify(fact);
+}
+
+function formatMetricValue(value: number) {
+  return new Intl.NumberFormat("en-IN").format(value);
 }
 
 function EvidenceList({ evidence }: { evidence: Array<Record<string, unknown>> | null }) {
