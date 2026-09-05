@@ -1,138 +1,147 @@
-/**
- * /agents — AI Growth Team Workspace.
- *
- * Real agentic operations workspace where all 13 AI specialists analyze the merchant's
- * real Razorpay TEST data, coordinate findings, and produce a prioritized Business Action Plan.
- *
- * AI Team stays on this page during execution. Agent Debate remains a separate, optional experience.
- */
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { fetchAgentsMeta, startAiTeamWork, fetchAgentRuns } from "../lib/api";
+import {
+  fetchAgentsMeta,
+  fetchAgentRuns,
+  fetchGrowthRadar,
+  fetchRankedOpportunities,
+  startAiTeamWork,
+} from "../lib/api";
 import type {
-  AgentsListResponse,
-  OrchestratorRunResponse,
-  AgentRunRecord,
   ActionPlan,
+  ActionPlanItem,
+  AgentRunRow,
+  AgentsListResponse,
+  GrowthRadarResponse,
+  OrchestratorRunResponse,
+  OrchestrationAgentOutput,
+  RankedOpportunity,
 } from "../types/api";
 import { WindowPanel } from "../components/WindowPanel";
 import { Button } from "../components/Button";
 import { StatusChip } from "../components/StatusIndicator";
+import "./AgentsPage.css";
+
+const DEFAULT_OBJECTIVE = "Comprehensive commerce analysis and growth optimization";
 
 interface AgentProfile {
   label: string;
   specialty: string;
   looksAt: string;
   focus: string;
-  category: "core" | "specialist" | "leadership";
-  tone: "ok" | "accent" | "neutral";
 }
 
 const AGENT_PROFILES: Record<string, AgentProfile> = {
   ManagerAgent: {
     label: "Growth Manager",
-    specialty: "Growth Strategy & Team Coordination",
-    looksAt: "Business health signals, specialist outputs, and opportunity rankings",
-    focus: "Coordinates the AI team, resolves conflicting findings, and locks the final action plan.",
-    category: "leadership",
-    tone: "ok",
+    specialty: "Growth strategy & coordination",
+    looksAt: "Business health, specialist findings, and opportunity rankings",
+    focus: "Coordinates the team, resolves disagreements, and locks the final recommendation.",
   },
   MarketingAgent: {
     label: "Marketing Analyst",
-    specialty: "Customer Retention & Campaign Strategy",
+    specialty: "Customer retention & campaigns",
     looksAt: "Customer segments, repeat purchases, and failed checkout transactions",
-    focus: "Finds ways to improve customer retention, re-activate buyers, and launch high-ROI campaigns.",
-    category: "core",
-    tone: "accent",
+    focus: "Finds ways to retain customers, win back buyers, and run high-return campaigns.",
   },
   ProductAgent: {
     label: "Product Strategist",
-    specialty: "Catalog Merchandising & Basket Economics",
-    looksAt: "Active product catalog, average order value (AOV), and basket affinities",
-    focus: "Uncovers upsell, cross-sell, and product bundle opportunities to increase transaction size.",
-    category: "core",
-    tone: "accent",
+    specialty: "Catalog & basket economics",
+    looksAt: "Product catalog, average order value, and items bought together",
+    focus: "Uncovers upsell, cross-sell, and bundle opportunities to increase order size.",
   },
   DesignerAgent: {
     label: "Creative & UX Advisor",
-    specialty: "Checkout Experience & Messaging Concepts",
+    specialty: "Checkout experience & messaging",
     looksAt: "Payment retry flows, checkout drop-offs, and trust signals",
-    focus: "Recommends frictionless checkout adjustments, clear decline messaging, and trust badging.",
-    category: "core",
-    tone: "accent",
+    focus: "Recommends smoother checkout steps and clearer decline messaging.",
   },
   SoftwareAgent: {
     label: "Technical Feasibility",
-    specialty: "Architecture & Automation Engineering",
+    specialty: "Automation & integrations",
     looksAt: "Razorpay webhooks, APIs, catalog scale, and integration constraints",
-    focus: "Evaluates whether business recommendations can realistically and safely be automated.",
-    category: "core",
-    tone: "accent",
+    focus: "Checks whether each recommendation can realistically and safely be automated.",
   },
   GrowthDiscoveryAgent: {
     label: "Opportunity Discovery",
-    specialty: "Continuous Growth Signal Detection",
-    looksAt: "Transaction telemetry, payment volume shifts, and baseline trends",
-    focus: "Scans your live commerce data for emerging revenue and retention signals.",
-    category: "specialist",
-    tone: "ok",
+    specialty: "Growth signal detection",
+    looksAt: "Payment volume shifts, transaction outcomes, and baseline trends",
+    focus: "Scans live commerce data for emerging revenue and retention signals.",
   },
   CustomerIntelligenceAgent: {
     label: "Customer Intelligence",
-    specialty: "Customer Lifecycle & Churn Risk",
-    looksAt: "Customer order recency, frequency, monetary value, and payment history",
-    focus: "Scores customer health and detects churn risks before shoppers drop off.",
-    category: "specialist",
-    tone: "ok",
+    specialty: "Customer lifecycle & churn risk",
+    looksAt: "Customer order recency, frequency, spend, and payment history",
+    focus: "Spots at-risk customers and high-value buyers before patterns are obvious.",
   },
   RevenueOptimizationAgent: {
     label: "Revenue Optimisation",
-    specialty: "Pricing & Margin Maximization",
+    specialty: "Pricing & margin maximization",
     looksAt: "Order basket distributions, pricing tiers, and margin thresholds",
-    focus: "Models discounting rules and bundling strategies to lift overall revenue.",
-    category: "specialist",
-    tone: "ok",
+    focus: "Models discount rules and bundling strategies that lift total revenue.",
   },
   CampaignStrategistAgent: {
     label: "Campaign Strategist",
-    specialty: "Targeted Audience Campaigns",
+    specialty: "Targeted audience campaigns",
     looksAt: "Audience cohorts and predicted conversion rates",
-    focus: "Plans targeted campaign scenarios with explicit revenue impact projections.",
-    category: "specialist",
-    tone: "ok",
+    focus: "Plans targeted campaigns with explicit revenue impact projections.",
   },
   PaymentRecoveryAgent: {
     label: "Payment Recovery",
-    specialty: "Failed Payment Recapture",
+    specialty: "Failed payment recapture",
     looksAt: "Unsuccessful Razorpay payments, failure error codes, and retry timings",
-    focus: "Identifies recoverable revenue from failed checkouts and sets automated retry strategies.",
-    category: "specialist",
-    tone: "ok",
+    focus: "Identifies recoverable revenue from failed checkouts and sets retry strategies.",
   },
   ExperimentAgent: {
     label: "Experiment Designer",
-    specialty: "A/B Testing & Validation",
+    specialty: "A/B testing & validation",
     looksAt: "Conversion rate baselines, sample sizes, and control groups",
-    focus: "Designs controlled experiments so every recommendation can be verified before full rollout.",
-    category: "specialist",
-    tone: "ok",
+    focus: "Designs controlled tests so recommendations are verified before rollout.",
   },
   OpportunityPrioritizationAgent: {
     label: "Priority Ranking",
-    specialty: "Impact vs. Effort Scoring",
+    specialty: "Impact vs. effort scoring",
     looksAt: "Discovered opportunities, estimated revenue, and operational effort",
-    focus: "Compares and ranks all growth ideas to highlight what to execute first.",
-    category: "specialist",
-    tone: "neutral",
+    focus: "Compares and ranks all growth ideas to decide what to execute first.",
   },
   GrowthMemoryAgent: {
     label: "Growth Memory",
-    specialty: "Knowledge & Historical Continuity",
+    specialty: "Knowledge & historical continuity",
     looksAt: "Prior investigations, approved actions, and outcome metrics",
-    focus: "Retains context across analyses so your AI team improves decisions over time.",
-    category: "specialist",
-    tone: "neutral",
+    focus: "Retains context across analyses so decisions improve over time.",
   },
+};
+
+const AGENT_ORDER: string[] = [
+  "GrowthMemoryAgent",
+  "GrowthDiscoveryAgent",
+  "CustomerIntelligenceAgent",
+  "RevenueOptimizationAgent",
+  "PaymentRecoveryAgent",
+  "MarketingAgent",
+  "ProductAgent",
+  "CampaignStrategistAgent",
+  "DesignerAgent",
+  "ExperimentAgent",
+  "OpportunityPrioritizationAgent",
+  "SoftwareAgent",
+  "ManagerAgent",
+];
+
+const LIVE_TASKS: Record<string, string> = {
+  ManagerAgent: "Team strategy, specialist coordination, and the final recommendation",
+  MarketingAgent: "Failed payments + customer purchase history",
+  ProductAgent: "Products, order values, and items bought together",
+  DesignerAgent: "Checkout experience and payment retry messaging",
+  SoftwareAgent: "Automation paths and technical constraints",
+  GrowthDiscoveryAgent: "Live commerce data for emerging growth signals",
+  CustomerIntelligenceAgent: "Customer purchase behavior and repeat patterns",
+  RevenueOptimizationAgent: "Pricing, basket value, and margin opportunities",
+  CampaignStrategistAgent: "Customer cohorts for targeted campaigns",
+  PaymentRecoveryAgent: "Failed transactions and recoverable revenue",
+  ExperimentAgent: "How each recommendation can be safely tested",
+  OpportunityPrioritizationAgent: "All discovered opportunities, ranked by impact",
+  GrowthMemoryAgent: "Historical context from past analyses",
 };
 
 const EXECUTION_PHASES: Record<string, string> = {
@@ -151,99 +160,271 @@ const EXECUTION_PHASES: Record<string, string> = {
   ManagerAgent: "Growth Manager is reviewing the team's work...",
 };
 
+const OPPORTUNITY_TYPES: Record<string, string> = {
+  payment_recovery: "Some customers tried to pay but their payments failed — this revenue can be won back.",
+  customer_winback: "Past customers have not purchased in a while and could be invited back.",
+  cross_sell: "Customers who buy certain products tend to buy related ones together.",
+  upsell: "Some orders could be expanded with a higher-value option or add-on.",
+  bundle: "Frequently bought together products can be offered as a discounted bundle.",
+  repeat_purchase: "Repeat buyers show patterns that can be encouraged across more customers.",
+  campaign: "A targeted campaign could lift sales for a specific customer group.",
+};
+
+interface AgentUiStatus {
+  label: string;
+  tone: "ok" | "accent" | "neutral";
+  marker: "" | "--working" | "--found" | "--done";
+}
+
+function prettifyName(raw: string) {
+  return raw
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+    .replace(/\s*Agent\s*$/i, "")
+    .trim();
+}
+
+function agentProfile(name: string): AgentProfile {
+  return (
+    AGENT_PROFILES[name] ?? {
+      label: prettifyName(name),
+      specialty: "Business analysis",
+      looksAt: "Your live commerce records",
+      focus: "Analyzes your business data for growth opportunities.",
+    }
+  );
+}
+
+function firstSentence(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const match = text.trim().match(/^(.+?[.!?])(\s|$)/);
+  return match?.[1] ?? text.trim();
+}
+
+function sentences(text: string | null | undefined, count: number): string | null {
+  if (!text) return null;
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .filter(Boolean)
+    .slice(0, count)
+    .join(" ");
+}
+
+function formatMoney(value: number | null | undefined): string | null {
+  if (value === null || value === undefined || Number.isNaN(value)) return null;
+  return `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+}
+
+function confidenceWord(value: number | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  if (value >= 0.75) return "High";
+  if (value >= 0.45) return "Medium";
+  return "Low";
+}
+
+function timeAgo(ts: number | null) {
+  if (!ts) return "Not yet run";
+  const seconds = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (seconds < 45) return "Just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} d ago`;
+}
+
+interface OpportunityView {
+  title: string;
+  why: string;
+  evidence: string | null;
+  impact: string | null;
+  action: string | null;
+  discoveredBy: string[];
+  confidence: string | null;
+}
+
+function translateOpportunityType(type: string | undefined) {
+  if (!type) return "This opportunity was identified from patterns in your live business data.";
+  const key = type.toLowerCase().replace(/[^a-z]/g, "_");
+  return (
+    OPPORTUNITY_TYPES[key] ??
+    OPPORTUNITY_TYPES[type.toLowerCase()] ??
+    `${prettifyName(type)}: identified by the AI team from your live business data.`
+  );
+}
+
+function findInitiative(plan: ActionPlan | null, title: string): ActionPlanItem | null {
+  if (!plan?.initiatives?.length) return null;
+  const needle = title.toLowerCase();
+  const exact = plan.initiatives.find((item) => item.title.toLowerCase() === needle);
+  if (exact) return exact;
+  const partial = plan.initiatives.find(
+    (item) =>
+      item.title.toLowerCase().includes(needle) || needle.includes(item.title.toLowerCase()),
+  );
+  return partial ?? null;
+}
+
+function liveNotesFor(
+  name: string,
+  output: OrchestrationAgentOutput | undefined,
+  radar: GrowthRadarResponse | null,
+): string[] {
+  const notes: string[] = [];
+  const recs = output?.output?.recommendations;
+  if (recs?.length) notes.push(firstSentence(recs[0]) || recs[0]);
+  if (output?.output?.summary) {
+    const head = firstSentence(output.output.summary) ?? "";
+    const rest = output.output.summary.replace(head, "").trim();
+    const second = firstSentence(rest);
+    if (second && !notes.includes(second)) notes.push(second);
+  }
+
+  const m = radar?.metrics;
+  const failed = m?.failed_payments ?? 0;
+  const failedValue = m && failed > 0 ? failed * (m.average_order_value || 0) : 0;
+
+  if (name === "PaymentRecoveryAgent" && failed > 0) {
+    notes.push(`${failed} failed payment${failed === 1 ? "" : "s"} detected after checkout was attempted`);
+    if (failedValue > 0)
+      notes.push(`Estimated recoverable revenue: ${formatMoney(failedValue) ?? "a small amount"}`);
+  }
+  if (name === "MarketingAgent" && failedValue > 0) {
+    notes.push(`Found ${formatMoney(failedValue) ?? "a small amount"} in failed payments`);
+  }
+  if (name === "CustomerIntelligenceAgent" && m) {
+    if (m.total_customers > 0) notes.push(`Found ${m.total_customers} customers`);
+    if (m.repeat_customers > 0)
+      notes.push(`Identified ${m.repeat_customers} repeat buyer${m.repeat_customers === 1 ? "" : "s"}`);
+  }
+  if (name === "GrowthDiscoveryAgent" && radar && radar.signals.length > 0) {
+    notes.push(`Detected ${radar.signals.length} growth signal${radar.signals.length === 1 ? "" : "s"} in recent activity`);
+  }
+
+  return notes.slice(0, 3);
+}
+
 export function AgentsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const urlObjective = searchParams.get("objective");
 
-  const [agents, setAgents] = useState<AgentsListResponse | null>(null);
+  const [agentsMeta, setAgentsMeta] = useState<AgentsListResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [objective, setObjective] = useState(
-    urlObjective || "Comprehensive commerce analysis and growth optimization"
-  );
+  const [radar, setRadar] = useState<GrowthRadarResponse | null>(null);
+  const [ranked, setRanked] = useState<RankedOpportunity[]>([]);
   const [isWorking, setIsWorking] = useState(false);
   const [currentPhaseText, setCurrentPhaseText] = useState("");
   const [workError, setWorkError] = useState<string | null>(null);
   const [lastRunResult, setLastRunResult] = useState<OrchestratorRunResponse | null>(null);
-  const [agentRuns, setAgentRuns] = useState<AgentRunRecord[]>([]);
-  const [activeTab, setActiveTab] = useState<"team" | "plan" | "activity">("team");
+  const [liveRuns, setLiveRuns] = useState<AgentRunRow[]>([]);
+  const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
+  const [lastAnalysisTime, setLastAnalysisTime] = useState<number | null>(null);
 
   const pollIntervalRef = useRef<number | null>(null);
   const autoStartedRef = useRef(false);
 
-  // Load registered agents
   useEffect(() => {
     fetchAgentsMeta()
-      .then(setAgents)
+      .then(setAgentsMeta)
       .catch((e) => {
         const msg = e instanceof Error ? e.message : "Failed to load";
-        setError(msg.includes("NO_MERCHANT_MEMBERSHIP") || msg.includes("403") ? "no_workspace" : msg);
+        setError(
+          msg.includes("NO_MERCHANT_MEMBERSHIP") || msg.includes("403") ? "no_workspace" : msg,
+        );
       });
+    fetchGrowthRadar(30)
+      .then((r) => setRadar(r))
+      .catch(() => undefined);
+    fetchRankedOpportunities()
+      .then((r) => setRanked(r.opportunities ?? []))
+      .catch(() => undefined);
   }, []);
 
-  // Cleanup polling on unmount
   useEffect(() => {
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
   }, []);
 
-  // Auto-start if navigated with objective from Growth Radar
   useEffect(() => {
-    if (urlObjective && agents && !autoStartedRef.current && !isWorking) {
+    if (urlObjective && agentsMeta && !autoStartedRef.current && !isWorking) {
       autoStartedRef.current = true;
       handleStartAiWork(urlObjective);
     }
-  }, [urlObjective, agents]);
+  }, [urlObjective, agentsMeta]);
 
   const handleStartAiWork = async (targetObjective?: string) => {
-    const obj = targetObjective || objective;
+    const obj = targetObjective || urlObjective || DEFAULT_OBJECTIVE;
+    if (isWorking) return;
     setIsWorking(true);
     setWorkError(null);
     setCurrentPhaseText("Starting your business analysis...");
-    setActiveTab("team");
 
     try {
-      // 1. Kick off real 13-agent AI Team execution on live data
       const runPromise = startAiTeamWork(obj, { windowDays: 30 });
 
-      // 2. Poll real agent runs from backend for live state
       let activeRunId: string | null = null;
       const pollTimer = window.setInterval(async () => {
         try {
           const runsResp = await fetchAgentRuns(20, activeRunId || undefined);
           if (runsResp.runs && runsResp.runs.length > 0) {
-            setAgentRuns(runsResp.runs);
+            setLiveRuns(runsResp.runs);
             const latest = runsResp.runs[0];
             if (latest && EXECUTION_PHASES[latest.agent_name]) {
               setCurrentPhaseText(EXECUTION_PHASES[latest.agent_name]);
             }
           }
         } catch {
-          // ignore transient poll error
+          // transient poll error — keep waiting
         }
       }, 1500);
       pollIntervalRef.current = pollTimer;
 
       const res = await runPromise;
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
 
       activeRunId = res.orchestrator_run_id;
       setLastRunResult(res);
       setIsWorking(false);
-      setCurrentPhaseText("Your business action plan is ready.");
-      setActiveTab("plan");
+      setCurrentPhaseText("");
+      setLastAnalysisTime(Date.now());
 
-      // Refresh final run records
       try {
         const finalRuns = await fetchAgentRuns(25, res.orchestrator_run_id);
-        setAgentRuns(finalRuns.runs || []);
+        setLiveRuns(finalRuns.runs || []);
+      } catch {
+        // non-fatal
+      }
+      try {
+        const rankedResp = await fetchRankedOpportunities();
+        setRanked(rankedResp.opportunities ?? []);
+      } catch {
+        // non-fatal
+      }
+      try {
+        const refreshed = await fetchGrowthRadar(30);
+        setRadar(refreshed);
       } catch {
         // non-fatal
       }
     } catch (e) {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-      setWorkError(e instanceof Error ? e.message : "AI Team execution failed");
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+      const msg = e instanceof Error ? e.message : "";
+      if (msg.includes("NO_MERCHANT_MEMBERSHIP") || msg.includes("403")) {
+        setError("no_workspace");
+      } else {
+        setWorkError(
+          msg || "The AI team could not complete this analysis. Please try again in a moment.",
+        );
+      }
       setIsWorking(false);
       setCurrentPhaseText("");
     }
@@ -254,663 +435,689 @@ export function AgentsPage() {
       <section className="shell section" aria-labelledby="agents-heading">
         <div className="page-hero" style={{ paddingBottom: 0 }}>
           <p className="meta-label">AI GROWTH TEAM</p>
-          <h1 id="agents-heading" className="display-lg" style={{ marginTop: 10 }}>Meet the AI Growth Team</h1>
+          <h1 id="agents-heading" className="display-lg" style={{ marginTop: 10 }}>
+            AI Growth Team
+          </h1>
         </div>
         <WindowPanel title="workspace-required.app">
           <p style={{ color: "var(--ink-soft)" }}>
             Connect your business workspace to unlock your AI Growth Team.
           </p>
           <div style={{ marginTop: 16 }}>
-            <Button variant="primary" mono onClick={() => navigate("/profile")}>View Profile →</Button>
+            <Button variant="primary" mono onClick={() => navigate("/profile")}>
+              View Profile →
+            </Button>
           </div>
         </WindowPanel>
       </section>
     );
   }
 
-  // Map agent name to latest result output
-  const agentOutputMap = new Map<string, any>();
+  const metrics = radar?.metrics;
+  const signals = radar?.signals?.length ?? 0;
+
+  const agentOutputMap = new Map<string, OrchestrationAgentOutput>();
   if (lastRunResult?.agents) {
-    for (const a of lastRunResult.agents) {
-      agentOutputMap.set(a.agent, a);
-    }
+    for (const a of lastRunResult.agents) agentOutputMap.set(a.agent, a);
   }
 
-  // All registered agents from backend or fallback to known 13
-  const allAgentNames = agents?.agents?.map((a) => a.name) || Object.keys(AGENT_PROFILES);
+  const runByAgent = new Map<string, AgentRunRow>();
+  const runCountByAgent = new Map<string, number>();
+  [...liveRuns].reverse().forEach((r) => {
+    if (!runByAgent.has(r.agent_name)) runByAgent.set(r.agent_name, r);
+    runCountByAgent.set(r.agent_name, (runCountByAgent.get(r.agent_name) ?? 0) + 1);
+  });
 
-  const leadershipAgents = allAgentNames.filter((n) => AGENT_PROFILES[n]?.category === "leadership");
-  const coreAgents = allAgentNames.filter((n) => AGENT_PROFILES[n]?.category === "core");
-  const specialistAgents = allAgentNames.filter((n) => AGENT_PROFILES[n]?.category === "specialist");
+  const executedAgentNames: string[] = [];
+  [...liveRuns].reverse().forEach((r) => {
+    if (!executedAgentNames.includes(r.agent_name)) executedAgentNames.push(r.agent_name);
+  });
+  lastRunResult?.agents?.forEach((a) => {
+    if (a.status === "completed" && !executedAgentNames.includes(a.agent)) {
+      executedAgentNames.push(a.agent);
+    }
+  });
 
-  const actionPlan: ActionPlan | null = lastRunResult?.action_plan || null;
+  const allAgentNames = agentsMeta?.agents?.map((a) => a.name) || Object.keys(AGENT_PROFILES);
+  const rosterOrder = [
+    ...AGENT_ORDER.filter((n) => allAgentNames.includes(n)),
+    ...allAgentNames.filter((n) => !AGENT_ORDER.includes(n)),
+  ];
+
+  const actionPlan: ActionPlan | null = lastRunResult?.action_plan ?? null;
+  const totals = lastRunResult?.totals;
+
+  const discovererNames = (lastRunResult?.agents ?? [])
+    .filter((a) => a.status === "completed" && a.opportunities_created > 0)
+    .map((a) => agentProfile(a.agent).label);
+
+  const statusOf = (name: string): AgentUiStatus => {
+    const run = runByAgent.get(name);
+    const out = agentOutputMap.get(name);
+    if (run) {
+      if (run.status === "running") return { label: "WORKING", tone: "accent", marker: "--working" };
+      if (run.status === "completed") {
+        if (run.opportunities_created > 0)
+          return { label: "FOUND SOMETHING", tone: "accent", marker: "--found" };
+        return { label: "COMPLETED", tone: "ok", marker: "--done" };
+      }
+      if (run.status === "failed") return { label: "WAITING", tone: "neutral", marker: "" };
+      return { label: "REVIEWING", tone: "accent", marker: "--working" };
+    }
+    if (out?.status === "completed") {
+      if (out.opportunities_created > 0)
+        return { label: "FOUND SOMETHING", tone: "accent", marker: "--found" };
+      return { label: "COMPLETED", tone: "ok", marker: "--done" };
+    }
+    if (out) return { label: "REVIEWING", tone: "accent", marker: "--working" };
+    return { label: "WAITING", tone: "neutral", marker: "" };
+  };
+
+  const findings = rosterOrder
+    .map((name) => {
+      const output = agentOutputMap.get(name);
+      if (!output || output.status !== "completed") return null;
+      const recs = output.output?.recommendations ?? [];
+      const summary = output.output?.summary ?? "";
+      if (!summary && recs.length === 0) return null;
+      const profile = agentProfile(name);
+      const finding = firstSentence(summary) || recs[0] || "Completed its analysis of your business data.";
+      const action = recs.find((rec) => rec !== (firstSentence(summary) || "")) ?? recs[0] ?? null;
+      const head = firstSentence(summary) ?? "";
+      const rest = summary.replace(head, "").trim();
+      const why = recs[1] ?? (rest ? firstSentence(rest) : null);
+      return {
+        name,
+        label: profile.label,
+        status: statusOf(name),
+        finding,
+        why: why && why !== finding ? why : null,
+        evidence: profile.looksAt,
+        action,
+      };
+    })
+    .filter((f): f is NonNullable<typeof f> => f !== null);
+
+  const runOpps = lastRunResult?.ranked_opportunities ?? [];
+  const sources: Array<{
+    title: string;
+    type?: string;
+    expectedRevenue?: number | null;
+    confidenceValue?: number | null;
+    rank: number;
+  }> = [];
+  if (runOpps.length > 0) {
+    runOpps.forEach((o, idx) => {
+      const sb = (o as { score_breakdown?: { confidence_score?: number } }).score_breakdown;
+      sources.push({
+        title: o.title,
+        type: o.type,
+        expectedRevenue: o.expected_revenue ?? null,
+        confidenceValue: o.confidence ?? sb?.confidence_score ?? null,
+        rank: idx + 1,
+      });
+    });
+  } else if (ranked.length > 0) {
+    ranked.forEach((o) => {
+      sources.push({
+        title: o.title,
+        type: o.type,
+        expectedRevenue: o.expected_revenue ?? null,
+        confidenceValue: o.confidence ?? o.score_breakdown?.confidence_score ?? null,
+        rank: o.rank,
+      });
+    });
+  }
+
+  const opportunities: OpportunityView[] = sources.map((src) => {
+    const initiative = findInitiative(actionPlan, src.title);
+    return {
+      title: src.title,
+      why: translateOpportunityType(src.type),
+      evidence:
+        initiative?.expected_impact ??
+        `Ranked #${src.rank} by the AI team from your live Razorpay business data.`,
+      impact: formatMoney(src.expectedRevenue)
+        ? `Potential revenue impact: ${formatMoney(src.expectedRevenue)}`
+        : null,
+      action: initiative?.next_steps ?? null,
+      discoveredBy: discovererNames.length > 0 ? discovererNames : [],
+      confidence: confidenceWord(src.confidenceValue),
+    };
+  });
+
+  const topOpp = opportunities[0] ?? null;
+  const topInitiative = actionPlan?.initiatives?.[0] ?? null;
+  const matchedTopInitiative = topOpp ? findInitiative(actionPlan, topOpp.title) : topInitiative;
+  const showRecommendation = Boolean(topOpp || actionPlan || topInitiative);
+
+  const latestCompletedAt = liveRuns
+    .map((r) => r.completed_at)
+    .filter((v): v is string => Boolean(v))
+    .sort()
+    .pop();
+  const lastAnalysisTs =
+    lastAnalysisTime ?? (latestCompletedAt ? new Date(latestCompletedAt).getTime() : null);
 
   return (
-    <section className="shell section" aria-labelledby="agents-heading">
-      {/* Header */}
-      <div className="page-hero" style={{ paddingBottom: 0 }}>
-        <p className="meta-label">YOUR BUSINESS · AI WORKFORCE</p>
-        <h1 id="agents-heading" className="display-lg" style={{ marginTop: 10 }}>
-          AI Growth Team Workspace
-        </h1>
-        <p style={{ color: "var(--ink-soft)", maxWidth: "68ch", marginTop: 10 }}>
-          Your autonomous team of 13 AI business specialists works directly on your live Razorpay TEST commerce data —
-          detecting opportunities, auditing payment drops, modeling basket expansion, and locking concrete action plans.
+    <section className="shell section ai-team" aria-labelledby="agents-heading">
+      <header className="ai-team__hero">
+        <div className="ai-team__hero-text">
+          <p className="meta-label">YOUR BUSINESS · AI WORKFORCE</p>
+          <h1 id="agents-heading" className="display-lg">
+            AI Growth Team
+          </h1>
+          <p className="ai-team__hero-lede">
+            Your AI employees continuously analyze your Razorpay business data, find growth
+            opportunities, and prepare actions for your approval.
+          </p>
+        </div>
+        <div className="ai-team__hero-cta">
+          <div className="ai-team-status">
+            <span
+              className={`ai-team-status__dot${isWorking ? " ai-team-status__dot--pulse" : ""}`}
+              aria-hidden="true"
+            />
+            <span style={{ color: "var(--ink)", fontWeight: 700 }}>
+              {isWorking ? "AI TEAM ACTIVE" : "AI TEAM STANDING BY"}
+            </span>
+            <span className="ai-team-status__sep">/</span>
+            <span>
+              {isWorking ? "Specialists working" : `${allAgentNames.length} specialists on the team`}
+            </span>
+            <span className="ai-team-status__sep">/</span>
+            <span>Last analysis: {timeAgo(lastAnalysisTs)}</span>
+          </div>
+          <Button
+            variant="primary"
+            mono
+            disabled={isWorking || !agentsMeta}
+            onClick={() => handleStartAiWork()}
+          >
+            {isWorking ? "Analyzing your business…" : "Start AI Analysis →"}
+          </Button>
+        </div>
+      </header>
+
+      {workError && <div className="ai-team-error">{workError}</div>}
+
+      <WindowPanel title="business-snapshot.app" tone="choc" dark>
+        <p className="meta-label" style={{ marginBottom: 18 }}>
+          BUSINESS SNAPSHOT · LIVE FROM YOUR RAZORPAY TEST ACCOUNT
         </p>
-      </div>
+        <div className="ai-team-snapshot">
+          <SnapshotCell
+            label="Revenue"
+            value={metrics ? (formatMoney(metrics.captured_revenue) ?? "—") : "…"}
+            hint="Money successfully received"
+          />
+          <SnapshotCell
+            label="Successful payments"
+            value={metrics ? String(metrics.successful_payments ?? metrics.captured_transactions) : "…"}
+            hint="Completed purchases"
+          />
+          <SnapshotCell
+            label="Failed payments"
+            value={metrics ? String(metrics.failed_payments) : "…"}
+            hint="Recoverable checkouts"
+            warn={Boolean(metrics && metrics.failed_payments > 0)}
+          />
+          <SnapshotCell
+            label="Customers"
+            value={metrics ? String(metrics.total_customers) : "…"}
+            hint="Unique buyers"
+          />
+          <SnapshotCell
+            label="Orders"
+            value={metrics ? String(metrics.total_orders) : "…"}
+            hint="Across all channels"
+          />
+          <SnapshotCell
+            label="Growth signals"
+            value={radar ? String(signals) : "…"}
+            hint="Patterns worth acting on"
+          />
+        </div>
+      </WindowPanel>
 
-      {/* Control Banner */}
-      <div
-        style={{
-          margin: "24px 0 28px",
-          padding: "20px 24px",
-          background: "var(--paper-deep)",
-          border: "1px solid var(--line)",
-          borderRadius: "var(--radius-window)",
-          boxShadow: "var(--shadow-float-card)",
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      <div>
+        <div className="ai-team__section-head">
           <div>
-            <p style={{ fontWeight: 700, fontSize: "var(--text-body)", color: "var(--ink)" }}>
-              Run Live Business Analysis
-            </p>
-            <p style={{ color: "var(--ink-soft)", fontSize: "var(--text-small)", marginTop: 2 }}>
-              Coordinates all 13 specialists on your real payment and order records to generate your business action plan.
+            <h2>Live AI Work</h2>
+            <p className="ai-team__section-sub">
+              What each specialist is doing on your business data right now — and what they found.
             </p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <Button
-              variant="primary"
-              mono
-              disabled={isWorking || !agents}
-              onClick={() => handleStartAiWork()}
-            >
-              {isWorking ? "Team is Working…" : "Start AI Team Work →"}
-            </Button>
-          </div>
+          {isWorking && <StatusChip tone="accent" pulse>WORKING</StatusChip>}
         </div>
-
-        {/* Live Execution State */}
-        {isWorking && (
-          <div
-            style={{
-              padding: "14px 18px",
-              background: "rgba(112,184,138,0.12)",
-              border: "1px solid var(--green)",
-              borderRadius: "var(--radius-window)",
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-            }}
-          >
-            <StatusChip tone="accent" pulse>
-              WORKING
-            </StatusChip>
-            <p style={{ color: "var(--ink)", fontSize: "var(--text-small)", fontWeight: 600 }}>
-              {currentPhaseText || "Understanding your business data..."}
-            </p>
-          </div>
-        )}
-
-        {/* Completion Announcement */}
-        {!isWorking && lastRunResult && (
-          <div
-            style={{
-              padding: "14px 18px",
-              background: "rgba(112,184,138,0.15)",
-              border: "1px solid var(--green)",
-              borderRadius: "var(--radius-window)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              flexWrap: "wrap",
-              gap: 12,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <StatusChip tone="ok">ACTION PLAN READY</StatusChip>
-              <span style={{ fontSize: "var(--text-small)", color: "var(--ink)" }}>
-                Analysis completed across all 13 specialists.{" "}
-                <strong>{lastRunResult.totals?.opportunities_created ?? 0} opportunities</strong> and{" "}
-                <strong>{lastRunResult.totals?.actions_proposed ?? 0} actions proposed</strong>.
-              </span>
+        <WindowPanel title="ai-live-work.app">
+          {executedAgentNames.length === 0 ? (
+            <div className="ai-team-empty">
+              {isWorking
+                ? "The team is starting — specialists will appear here as soon as they begin work."
+                : "Your AI team is standing by. Start an analysis above to watch the specialists review your live Razorpay data — every task, finding, and recommendation will appear here."}
             </div>
-            <Button variant="secondary" mono onClick={() => setActiveTab("plan")}>
-              View Action Plan ↓
-            </Button>
-          </div>
-        )}
-
-        {workError && (
-          <div
-            style={{
-              padding: "12px 16px",
-              background: "var(--coral-wash)",
-              border: "1px solid var(--coral)",
-              borderRadius: "var(--radius-window)",
-              color: "var(--coral-strong)",
-              fontSize: "var(--text-small)",
-            }}
-          >
-            {workError}
-          </div>
-        )}
-      </div>
-
-      {/* Tabs */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 24, borderBottom: "1px solid var(--line-soft)", paddingBottom: 8 }}>
-        <TabButton
-          active={activeTab === "team"}
-          onClick={() => setActiveTab("team")}
-          label="AI Specialist Team"
-          count={allAgentNames.length}
-        />
-        <TabButton
-          active={activeTab === "plan"}
-          onClick={() => setActiveTab("plan")}
-          label="Business Action Plan"
-          badge={actionPlan ? "Ready" : undefined}
-        />
-        <TabButton
-          active={activeTab === "activity"}
-          onClick={() => setActiveTab("activity")}
-          label="Execution Activity"
-          count={agentRuns.length}
-        />
-      </div>
-
-      {/* TAB 1: Business Action Plan */}
-      {activeTab === "plan" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 24, marginBottom: 36 }}>
-          {actionPlan ? (
-            <WindowPanel title="business-action-plan.app" tone="choc" dark>
-              <div style={{ padding: "8px 0" }}>
-                <p className="meta-label" style={{ marginBottom: 8, color: "var(--cream-muted)" }}>
-                  GROWTH MANAGER · BUSINESS ACTION PLAN
-                </p>
-                <h2 style={{ fontSize: "var(--text-title)", color: "var(--cream)", marginBottom: 12 }}>
-                  Executive Growth Strategy
-                </h2>
-                <p style={{ color: "var(--cream-muted)", fontSize: "var(--text-body)", lineHeight: 1.6, marginBottom: 24, maxWidth: "75ch" }}>
-                  {actionPlan.executive_summary}
-                </p>
-
-                <p className="meta-label" style={{ marginBottom: 14, color: "var(--cream-muted)" }}>
-                  PRIORITIZED BUSINESS INITIATIVES
-                </p>
-                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                  {actionPlan.initiatives?.map((item, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        padding: "16px 20px",
-                        background: "rgba(247, 235, 215, 0.06)",
-                        border: "1px solid rgba(247, 235, 215, 0.15)",
-                        borderRadius: "var(--radius-window)",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 8,
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                        <h3 style={{ fontSize: "var(--text-body)", fontWeight: 700, color: "var(--cream)", margin: 0 }}>
-                          {idx + 1}. {item.title}
-                        </h3>
-                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <span
-                            style={{
-                              fontFamily: "var(--font-mono)",
-                              fontSize: "var(--text-meta)",
-                              padding: "2px 8px",
-                              borderRadius: 4,
-                              background: item.priority === "HIGH" ? "var(--coral)" : "var(--green-deep)",
-                              color: "#fff",
-                              fontWeight: 700,
-                            }}
-                          >
-                            {item.priority} PRIORITY
-                          </span>
-                        </div>
-                      </div>
-
-                      <p style={{ fontSize: "var(--text-small)", color: "var(--cream-muted)", margin: 0 }}>
-                        <strong>Assigned Specialists:</strong> {item.assigned_to}
-                      </p>
-                      <p style={{ fontSize: "var(--text-small)", color: "var(--green)", margin: 0 }}>
-                        <strong>Expected Impact:</strong> {item.expected_impact}
-                      </p>
-                      <p style={{ fontSize: "var(--text-small)", color: "var(--cream-muted)", margin: 0, lineHeight: 1.5 }}>
-                        <strong>Recommended Next Step:</strong> {item.next_steps}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Navigation actions */}
-                <div style={{ marginTop: 24, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-                  <Button variant="primary" mono onClick={() => navigate("/actions")}>
-                    Review Proposed Actions in Action Center →
-                  </Button>
-                  <Button variant="secondary" mono onClick={() => navigate("/debate")}>
-                    Review Team Discussion in Agent Debate →
-                  </Button>
-                </div>
-              </div>
-            </WindowPanel>
           ) : (
-            <WindowPanel title="action-plan.app">
-              <div style={{ padding: "20px 0", textAlign: "center" }}>
-                <p style={{ color: "var(--ink-soft)", fontSize: "var(--text-body)" }}>
-                  No action plan generated yet. Click <strong>"Start AI Team Work"</strong> above to analyze your business data.
-                </p>
-              </div>
-            </WindowPanel>
-          )}
-        </div>
-      )}
-
-      {/* TAB 2: AI Specialist Team Cards */}
-      {activeTab === "team" && (
-        <>
-          {/* Leadership */}
-          {leadershipAgents.length > 0 && (
-            <div style={{ marginBottom: 32 }}>
-              <p className="meta-label" style={{ marginBottom: 14 }}>
-                GROWTH LEADERSHIP &amp; COORDINATION
-              </p>
-              <div style={{ display: "grid", gap: 16, gridTemplateColumns: "1fr" }}>
-                {leadershipAgents.map((name) => (
-                  <AgentCard
-                    key={name}
-                    agentName={name}
-                    isWorking={isWorking}
-                    agentOutput={agentOutputMap.get(name)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Core Growth Team */}
-          {coreAgents.length > 0 && (
-            <div style={{ marginBottom: 32 }}>
-              <p className="meta-label" style={{ marginBottom: 14 }}>
-                CORE GROWTH SPECIALISTS
-              </p>
-              <div
-                style={{
-                  display: "grid",
-                  gap: 16,
-                  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-                }}
-              >
-                {coreAgents.map((name) => (
-                  <AgentCard
-                    key={name}
-                    agentName={name}
-                    isWorking={isWorking}
-                    agentOutput={agentOutputMap.get(name)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Specialists */}
-          {specialistAgents.length > 0 && (
-            <div style={{ marginBottom: 32 }}>
-              <p className="meta-label" style={{ marginBottom: 14 }}>
-                DOMAIN &amp; ANALYTICS SPECIALISTS
-              </p>
-              <div
-                style={{
-                  display: "grid",
-                  gap: 16,
-                  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-                }}
-              >
-                {specialistAgents.map((name) => (
-                  <AgentCard
-                    key={name}
-                    agentName={name}
-                    isWorking={isWorking}
-                    agentOutput={agentOutputMap.get(name)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* TAB 3: Execution Activity */}
-      {activeTab === "activity" && (
-        <div style={{ marginBottom: 36 }}>
-          <WindowPanel title="team-activity.app">
-            <div style={{ padding: "8px 0" }}>
-              <p className="meta-label" style={{ marginBottom: 14 }}>
-                RECENT AGENT EXECUTIONS (TENANT-SCOPED)
-              </p>
-              {agentRuns.length === 0 ? (
-                <p style={{ color: "var(--ink-soft)" }}>
-                  No agent runs recorded yet. Start AI Team work above to view execution logs.
-                </p>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {agentRuns.map((r) => {
-                    const profile = AGENT_PROFILES[r.agent_name];
-                    return (
-                      <div
-                        key={r.id}
-                        style={{
-                          padding: "12px 16px",
-                          border: "1px solid var(--line-soft)",
-                          borderRadius: "var(--radius-window)",
-                          background: "var(--paper-deep)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          flexWrap: "wrap",
-                          gap: 12,
-                        }}
-                      >
-                        <div>
-                          <p style={{ fontWeight: 700, fontSize: "var(--text-small)", color: "var(--ink)", margin: 0 }}>
-                            {profile?.label ?? r.agent_name}
-                          </p>
-                          <p style={{ fontSize: "var(--text-meta)", color: "var(--ink-soft)", margin: "2px 0 0" }}>
-                            Mode: {r.mode} · Latency: {r.total_latency_ms}ms · Opportunities: {r.opportunities_created} · Actions: {r.actions_proposed}
-                          </p>
-                        </div>
-                        <StatusChip tone={r.status === "completed" ? "ok" : r.status === "running" ? "accent" : "neutral"}>
-                          {r.status === "completed" ? "COMPLETED" : r.status.toUpperCase()}
+            <div className="ai-team-live">
+              {executedAgentNames.map((name) => {
+                const profile = agentProfile(name);
+                const status = statusOf(name);
+                const output = agentOutputMap.get(name);
+                const notes = liveNotesFor(name, output, radar);
+                return (
+                  <div className="ai-team-live__entry" key={name}>
+                    <span
+                      className={`ai-team-live__marker ai-team-live__marker${status.marker}`}
+                      aria-hidden="true"
+                    />
+                    <div className="ai-team-live__body">
+                      <div className="ai-team-live__meta">
+                        <p className="ai-team-live__agent">{profile.label}</p>
+                        <StatusChip tone={status.tone} pulse={status.marker === "--working"}>
+                          {status.label}
                         </StatusChip>
                       </div>
-                    );
-                  })}
-                </div>
+                      <p className="ai-team-live__task">
+                        Analyzing {LIVE_TASKS[name] ?? "your live business data"}...
+                      </p>
+                      {notes.length > 0 ? (
+                        <ul className="ai-team-live__notes">
+                          {notes.map((note, i) => (
+                            <li className="ai-team-live__note" key={i}>
+                              {note}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="ai-team-live__hint">Findings will appear as they are produced</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {isWorking && currentPhaseText && (
+                <p className="ai-team-live__hint">{currentPhaseText}</p>
               )}
+            </div>
+          )}
+        </WindowPanel>
+      </div>
+
+      <div>
+        <div className="ai-team__section-head">
+          <div>
+            <h2>Agent Findings</h2>
+            <p className="ai-team__section-sub">
+              What each specialist concluded from your data, in plain business language.
+            </p>
+          </div>
+          {findings.length > 0 && (
+            <span className="ai-team-status">{findings.length} COMPLETED</span>
+          )}
+        </div>
+        {findings.length === 0 ? (
+          <div className="ai-team-empty">
+            No findings yet. Once the specialists finish analyzing your business data, their
+            conclusions will be summarized here.
+          </div>
+        ) : (
+          <div className="ai-team-findings">
+            {findings.map((f) => (
+              <article className="ai-team-finding" key={f.name}>
+                <div className="ai-team-finding__head">
+                  <p className="ai-team-finding__agent">{f.label}</p>
+                  <StatusChip tone={f.status.tone}>{f.status.label}</StatusChip>
+                </div>
+                <div className="ai-team-finding__grid">
+                  <span className="ai-team-finding__label">Finding</span>
+                  <p className="ai-team-finding__text ai-team-finding__text--strong">{f.finding}</p>
+                  {f.why && (
+                    <>
+                      <span className="ai-team-finding__label">Why it matters</span>
+                      <p className="ai-team-finding__text">{f.why}</p>
+                    </>
+                  )}
+                  <span className="ai-team-finding__label">Evidence</span>
+                  <p className="ai-team-finding__text">{f.evidence}</p>
+                  {f.action && (
+                    <>
+                      <span className="ai-team-finding__label">Recommended action</span>
+                      <p className="ai-team-finding__text">{f.action}</p>
+                    </>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div className="ai-team__section-head">
+          <div>
+            <h2>Growth Opportunities Found</h2>
+            <p className="ai-team__section-sub">
+              Ranked by the AI team from your live Razorpay TEST data — with the recommended next
+              move for each.
+            </p>
+          </div>
+        </div>
+        {opportunities.length === 0 ? (
+          <div className="ai-team-empty">
+            No clear growth opportunity has been found yet. The AI team is still analyzing your
+            latest business activity — start an analysis above and check back in a moment.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            {opportunities.map((opp, idx) => (
+              <article className="ai-team-opp" key={`${opp.title}-${idx}`}>
+                <div className="ai-team-opp__head">
+                  <div>
+                    <p className="meta-label" style={{ marginBottom: 4 }}>
+                      OPPORTUNITY {idx + 1}
+                    </p>
+                    <h3 className="ai-team-opp__title">{opp.title}</h3>
+                  </div>
+                  {opp.impact && <p className="ai-team-opp__impact">{opp.impact}</p>}
+                </div>
+                <div className="ai-team-opp__grid">
+                  <span className="ai-team-opp__label">Why it matters</span>
+                  <p className="ai-team-opp__text">{opp.why}</p>
+                  <span className="ai-team-opp__label">Evidence</span>
+                  <p className="ai-team-opp__text">{opp.evidence}</p>
+                  {opp.action && (
+                    <>
+                      <span className="ai-team-opp__label">Recommended action</span>
+                      <p className="ai-team-opp__text ai-team-opp__text--strong">{opp.action}</p>
+                    </>
+                  )}
+                  {opp.discoveredBy.length > 0 && (
+                    <>
+                      <span className="ai-team-opp__label">Discovered by</span>
+                      <p className="ai-team-opp__text">{opp.discoveredBy.join(" + ")}</p>
+                    </>
+                  )}
+                  {opp.confidence && (
+                    <>
+                      <span className="ai-team-opp__label">Confidence</span>
+                      <p className="ai-team-opp__text">{opp.confidence}</p>
+                    </>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div className="ai-team__section-head">
+          <div>
+            <h2>How the AI Team Works</h2>
+            <p className="ai-team__section-sub">
+              From your real business data to an approved action — every step is shown above.
+            </p>
+          </div>
+        </div>
+        <WindowPanel title="ai-workflow.app" flush>
+          <div className="ai-team-pipeline">
+            <PipelineStep num="01" name="Real business data" hint="Payments, orders, customers" reached />
+            <PipelineStep num="02" name="AI agents analyze" hint="Specialists work in parallel" reached={executedAgentNames.length > 0} />
+            <PipelineStep num="03" name="Signals found" hint="Patterns worth acting on" reached={(totals?.signals_detected ?? 0) > 0 || signals > 0} />
+            <PipelineStep num="04" name="Findings challenged" hint="Agents cross-examine in debate" reached={Boolean(lastRunResult?.debate_id)} />
+            <PipelineStep num="05" name="Opportunities ranked" hint="Best ideas first" reached={opportunities.length > 0} />
+            <PipelineStep num="06" name="Action prepared" hint="Ready for approval" reached={Boolean(actionPlan)} />
+            <PipelineStep num="07" name="Human approval" hint="You stay in control" reached={false} />
+          </div>
+        </WindowPanel>
+      </div>
+
+      {showRecommendation && (
+        <div>
+          <div className="ai-team__section-head">
+            <div>
+              <h2>AI Team Recommendation</h2>
+              <p className="ai-team__section-sub">
+                The team&apos;s single highest-impact recommendation for your business right now.
+              </p>
+            </div>
+          </div>
+          <WindowPanel title="ai-recommendation.app" tone="choc" dark flush>
+            <div className="ai-team-rec">
+              <div className="ai-team-rec__main">
+                <p className="meta-label" style={{ color: "var(--cream-muted)" }}>
+                  PRIORITY OPPORTUNITY
+                </p>
+                <h3 className="ai-team-rec__title">
+                  {topOpp?.title ?? topInitiative?.title ?? "Growth action plan"}
+                </h3>
+                <div className="ai-team-rec__grid">
+                  <span className="ai-team-rec__label">Why we recommend this</span>
+                  <p className="ai-team-rec__text">
+                    {topOpp?.why ??
+                      sentences(actionPlan?.executive_summary, 2) ??
+                      "The team identified this as the strongest opportunity in your current business data."}
+                  </p>                  <span className="ai-team-rec__label">Evidence</span>
+                  <p className="ai-team-rec__text">
+                    {topOpp?.evidence ??
+                      matchedTopInitiative?.expected_impact ??
+                      "Based on the team's analysis of your live Razorpay TEST data."}
+                  </p>
+                  {(topOpp?.impact || matchedTopInitiative?.expected_impact) && (
+                    <>
+                      <span className="ai-team-rec__label">Expected impact</span>
+                      <p className="ai-team-rec__text ai-team-rec__text--strong">
+                        {topOpp?.impact ?? matchedTopInitiative?.expected_impact}
+                      </p>
+                    </>
+                  )}
+                  <span className="ai-team-rec__label">Next step</span>
+                  <p className="ai-team-rec__text">
+                    {matchedTopInitiative?.next_steps ??
+                      topOpp?.action ??
+                      "Review and approve the recommended action below."}
+                  </p>
+                </div>
+              </div>
+              <div className="ai-team-rec__side">
+                <div className="ai-team-rec__side-stat">
+                  <span className="ai-team-rec__side-label">Opportunities found</span>
+                  <span className="ai-team-rec__side-value">
+                    {totals?.opportunities_created ?? opportunities.length}
+                  </span>
+                </div>
+                <div className="ai-team-rec__side-stat">
+                  <span className="ai-team-rec__side-label">Actions prepared</span>
+                  <span className="ai-team-rec__side-value">
+                    {totals?.actions_proposed ?? actionPlan?.initiatives?.length ?? 0}
+                  </span>
+                </div>
+                <Button variant="primary" mono onClick={() => navigate("/actions")}>
+                  Review &amp; Approve →
+                </Button>
+              </div>
             </div>
           </WindowPanel>
         </div>
       )}
 
-      {/* Optional Contextual Link to Agent Debate */}
-      <div
-        style={{
-          marginTop: 36,
-          padding: "20px 24px",
-          background: "var(--paper-deep)",
-          border: "1px solid var(--line-soft)",
-          borderRadius: "var(--radius-window)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 16,
-        }}
-      >
-        <div>
-          <p style={{ fontWeight: 700, fontSize: "var(--text-body)", color: "var(--ink)", margin: 0 }}>
-            Want to see how the specialists debate conclusions?
-          </p>
-          <p style={{ fontSize: "var(--text-small)", color: "var(--ink-soft)", margin: "4px 0 0" }}>
-            The Agent Debate workspace lets specialists cross-examine each other's assumptions and challenge recommendations.
-          </p>
+      <div>
+        <div className="ai-team__section-head">
+          <div>
+            <h2>The AI Team</h2>
+            <p className="ai-team__section-sub">
+              {allAgentNames.length} specialists. Click any agent to see the actual work it
+              performed.
+            </p>
+          </div>
         </div>
-        <Button variant="secondary" mono onClick={() => navigate("/debate")}>
-          Review Team Discussion in Agent Debate →
-        </Button>
+        <WindowPanel title="ai-team-roster.app" flush>
+          <div className="ai-team-roster">
+            {rosterOrder.map((name) => {
+              const profile = agentProfile(name);
+              const status = statusOf(name);
+              const output = agentOutputMap.get(name);
+              const run = runByAgent.get(name);
+              const workCount = runCountByAgent.get(name) ?? 0;
+              const summary = output?.output?.summary ?? "";
+              const recs = output?.output?.recommendations ?? [];
+              const latestFinding =
+                firstSentence(summary) || recs[0] || (run?.opportunities_created ? "Contributed to a growth opportunity" : "");
+              const isOpen = expandedAgent === name;
+              return (
+                <div key={name}>
+                  <button
+                    type="button"
+                    className="ai-team-roster__row"
+                    aria-expanded={isOpen}
+                    onClick={() => setExpandedAgent(isOpen ? null : name)}
+                  >
+                    <span className="ai-team-roster__id">
+                      <span className="ai-team-roster__name">{profile.label}</span>
+                      <span className="ai-team-roster__spec">{profile.specialty}</span>
+                    </span>
+                    <StatusChip tone={status.tone} pulse={status.marker === "--working"}>
+                      {status.label}
+                    </StatusChip>
+                    <span className="ai-team-roster__work">
+                      <span className="ai-team-roster__task">
+                        <span className="ai-team-roster__muted">Analyzed: </span>
+                        {LIVE_TASKS[name] ?? "your live business data"}
+                      </span>
+                      {latestFinding && (
+                        <span className="ai-team-roster__finding">
+                          Latest finding: <b>{latestFinding}</b>
+                        </span>
+                      )}
+                    </span>
+                    <span className="ai-team-roster__meta">
+                      <span className="ai-team-roster__count">
+                        {workCount > 0 ? `${workCount} completed ${workCount === 1 ? "analysis" : "analyses"}` : "Not run yet"}
+                      </span>
+                      <span className="ai-team-roster__toggle">{isOpen ? "Hide work" : "View work"}</span>
+                    </span>
+                  </button>
+                  {isOpen && (
+                    <div className="ai-team-work">
+                      <div className="ai-team-work__grid">
+                        <span className="ai-team-work__label">Agent</span>
+                        <p className="ai-team-work__text ai-team-work__text--strong">
+                          {profile.label} — {profile.specialty}
+                        </p>
+                        <span className="ai-team-work__label">Task</span>
+                        <p className="ai-team-work__text">
+                          {LIVE_TASKS[name] ?? "Analyze your live business data"}
+                        </p>
+                        <span className="ai-team-work__label">Data reviewed</span>
+                        <p className="ai-team-work__text">{profile.looksAt}</p>
+                        <span className="ai-team-work__label">Status</span>
+                        <p className="ai-team-work__text">{status.label === "COMPLETED" ? "Completed this analysis" : status.label === "WORKING" ? "Currently working" : status.label === "WAITING" ? "Waiting for the next analysis" : "Reviewing results"}</p>
+                        {summary && (
+                          <>
+                            <span className="ai-team-work__label">What it discovered</span>
+                            <p className="ai-team-work__text">{summary}</p>
+                          </>
+                        )}
+                        {recs.length > 0 && (
+                          <>
+                            <span className="ai-team-work__label">Recommendations</span>
+                            <ul className="ai-team-work__recs">
+                              {recs.map((rec, i) => (
+                                <li className="ai-team-work__text" key={i}>
+                                  {rec}
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                        {run && (run.opportunities_created > 0 || run.actions_proposed > 0) && (
+                          <>
+                            <span className="ai-team-work__label">Contribution</span>
+                            <p className="ai-team-work__text">
+                              {[
+                                run.opportunities_created > 0
+                                  ? `Contributed to ${run.opportunities_created} growth opportunit${run.opportunities_created === 1 ? "y" : "ies"}`
+                                  : null,
+                                run.actions_proposed > 0
+                                  ? `Prepared ${run.actions_proposed} action${run.actions_proposed === 1 ? "" : "s"} for your approval`
+                                  : null,
+                              ]
+                                .filter(Boolean)
+                                .join(" and ")}
+                              .
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </WindowPanel>
       </div>
 
-      {/* Workflow Navigation Footer */}
-      <div
-        style={{
-          marginTop: 24,
-          paddingTop: 20,
-          borderTop: "1px solid var(--line-soft)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 12,
-        }}
-      >
+      <footer className="ai-team__footer">
         <Button variant="ghost-dark" mono onClick={() => navigate("/growth-radar")}>
           ← Growth Radar
         </Button>
-        <Button variant="primary" mono onClick={() => navigate("/actions")}>
-          View Actions Center →
-        </Button>
-      </div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <Button variant="secondary" mono onClick={() => navigate("/debate")}>
+            Agent Debate →
+          </Button>
+          <Button variant="primary" mono onClick={() => navigate("/actions")}>
+            Review &amp; Approve Actions →
+          </Button>
+        </div>
+      </footer>
     </section>
   );
 }
 
-/* ── Agent Card Component ────────────────────────────────────────────────── */
-
-interface AgentCardProps {
-  agentName: string;
-  isWorking: boolean;
-  agentOutput?: {
-    status: string;
-    opportunities_created: number;
-    actions_proposed: number;
-    latency_ms?: { total: number };
-    output?: {
-      summary?: string;
-      recommendations?: string[];
-      [key: string]: unknown;
-    };
-  };
-}
-
-function AgentCard({ agentName, isWorking, agentOutput }: AgentCardProps) {
-  const [showDetails, setShowDetails] = useState(false);
-  const profile = AGENT_PROFILES[agentName] || {
-    label: agentName,
-    specialty: "Specialist Consultant",
-    looksAt: "Commerce records",
-    focus: "Analyzes business telemetry.",
-    category: "specialist",
-    tone: "neutral",
-  };
-
-  const isCompleted = agentOutput && agentOutput.status === "completed";
-  const outputSummary = agentOutput?.output?.summary;
-  const outputRecommendations = agentOutput?.output?.recommendations;
-
-  let statusTone: "ok" | "accent" | "neutral" = "neutral";
-  let statusText = "Waiting";
-
-  if (isWorking) {
-    statusTone = "accent";
-    statusText = "Working";
-  } else if (isCompleted) {
-    statusTone = "ok";
-    statusText = "Completed";
-  }
-
+function SnapshotCell({
+  label,
+  value,
+  hint,
+  warn = false,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  warn?: boolean;
+}) {
   return (
-    <WindowPanel title={`${profile.label.toLowerCase().replace(/\s+/g, "-")}.app`}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-          <div>
-            <h3
-              style={{
-                fontSize: "var(--text-title)",
-                fontWeight: 700,
-                color: "var(--ink)",
-                margin: 0,
-                lineHeight: 1.2,
-              }}
-            >
-              {profile.label}
-            </h3>
-            <p style={{ fontSize: "var(--text-meta)", color: "var(--ink-soft)", margin: "4px 0 0" }}>
-              {profile.specialty}
-            </p>
-          </div>
-          <StatusChip tone={statusTone} pulse={statusTone === "accent"}>
-            {statusText.toUpperCase()}
-          </StatusChip>
-        </div>
-
-        {/* What it looks at & Focus */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: "var(--text-small)" }}>
-          <p style={{ margin: 0, color: "var(--ink-soft)", lineHeight: 1.5 }}>
-            <strong style={{ color: "var(--ink)" }}>Looks at:</strong> {profile.looksAt}
-          </p>
-          <p style={{ margin: 0, color: "var(--ink-soft)", lineHeight: 1.5 }}>
-            <strong style={{ color: "var(--ink)" }}>Focus:</strong> {profile.focus}
-          </p>
-        </div>
-
-        {/* Real Discovered Result (shown after real execution) */}
-        {isCompleted && (
-          <div
-            style={{
-              marginTop: 4,
-              padding: "10px 14px",
-              background: "var(--paper-deep)",
-              border: "1px solid var(--line-soft)",
-              borderRadius: "var(--radius-window)",
-              borderLeft: "3px solid var(--green)",
-            }}
-          >
-            <p className="meta-label" style={{ marginBottom: 4 }}>
-              WHAT IT DISCOVERED
-            </p>
-            <p style={{ fontSize: "var(--text-small)", color: "var(--ink)", margin: 0, lineHeight: 1.5 }}>
-              {outputSummary || "Analyzed real Razorpay transactions and verified growth opportunities."}
-            </p>
-
-            {outputRecommendations && outputRecommendations.length > 0 && (
-              <div style={{ marginTop: 8 }}>
-                <p className="meta-label" style={{ marginBottom: 4 }}>
-                  RECOMMENDED WORK
-                </p>
-                <ul style={{ margin: 0, paddingLeft: 16, fontSize: "var(--text-small)", color: "var(--ink-soft)" }}>
-                  {outputRecommendations.map((rec, i) => (
-                    <li key={i} style={{ marginBottom: 2 }}>{rec}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Technical Details Toggle */}
-        <div style={{ marginTop: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          {agentOutput?.latency_ms?.total ? (
-            <span style={{ fontSize: "var(--text-meta)", color: "var(--ink-faint)", fontFamily: "var(--font-mono)" }}>
-              Latency: {agentOutput.latency_ms.total}ms
-            </span>
-          ) : <span />}
-          <button
-            type="button"
-            onClick={() => setShowDetails(!showDetails)}
-            style={{
-              background: "none",
-              border: "none",
-              fontSize: "var(--text-meta)",
-              color: "var(--ink-soft)",
-              cursor: "pointer",
-              padding: 0,
-              textDecoration: "underline",
-            }}
-          >
-            {showDetails ? "Hide details" : "View details"}
-          </button>
-        </div>
-
-        {showDetails && (
-          <div
-            style={{
-              padding: "8px 12px",
-              background: "var(--paper-deep)",
-              borderRadius: "var(--radius-window)",
-              fontSize: "var(--text-meta)",
-              fontFamily: "var(--font-mono)",
-              color: "var(--ink-soft)",
-            }}
-          >
-            <p style={{ margin: "0 0 4px" }}>Agent ID: {agentName}</p>
-            <p style={{ margin: "0 0 4px" }}>Status: {agentOutput?.status ?? "ready"}</p>
-            <p style={{ margin: 0 }}>
-              Opportunities: {agentOutput?.opportunities_created ?? 0} · Actions: {agentOutput?.actions_proposed ?? 0}
-            </p>
-          </div>
-        )}
-      </div>
-    </WindowPanel>
+    <div className="ai-team-snapshot__cell">
+      <p className="meta-label" style={{ color: "var(--cream-muted)" }}>
+        {label}
+      </p>
+      <p
+        className={`ai-team-snapshot__value${warn ? " ai-team-snapshot__value--warn" : ""}`}
+        style={{ color: warn ? "var(--coral)" : "var(--green)" }}
+      >
+        {value}
+      </p>
+      <p className="ai-team-snapshot__hint">{hint}</p>
+    </div>
   );
 }
 
-function TabButton({
-  active,
-  onClick,
-  label,
-  count,
-  badge,
+function PipelineStep({
+  num,
+  name,
+  hint,
+  reached,
 }: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  count?: number;
-  badge?: string;
+  num: string;
+  name: string;
+  hint: string;
+  reached: boolean;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        padding: "8px 16px",
-        background: active ? "var(--paper-deep)" : "transparent",
-        border: active ? "1px solid var(--line)" : "1px solid transparent",
-        borderRadius: "var(--radius-window)",
-        color: active ? "var(--ink)" : "var(--ink-soft)",
-        fontWeight: active ? 700 : 500,
-        fontSize: "var(--text-small)",
-        cursor: "pointer",
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        transition: "all 0.15s ease",
-      }}
-    >
-      <span>{label}</span>
-      {count !== undefined && (
-        <span
-          style={{
-            fontSize: "var(--text-meta)",
-            padding: "1px 6px",
-            background: active ? "var(--line)" : "rgba(0,0,0,0.06)",
-            borderRadius: 10,
-          }}
-        >
-          {count}
-        </span>
-      )}
-      {badge && (
-        <span
-          style={{
-            fontSize: "var(--text-meta)",
-            padding: "1px 6px",
-            background: "var(--green-deep)",
-            color: "#fff",
-            borderRadius: 10,
-            fontWeight: 700,
-          }}
-        >
-          {badge}
-        </span>
-      )}
-    </button>
+    <div className="ai-team-pipeline__step" style={{ opacity: reached ? 1 : 0.5 }}>
+      <span className="ai-team-pipeline__num">{num}</span>
+      <span className="ai-team-pipeline__name">{name}</span>
+      <span className="ai-team-pipeline__hint">{hint}</span>
+    </div>
   );
 }
