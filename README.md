@@ -75,7 +75,7 @@ PAYMENT RESULT — success verified server-side,
 failure handled gracefully (safe state, no fake results, retry available)
 ```
 
-Use test card `4111 1111 1111 1111` (any future expiry, any CVV) for success; a declined test card demonstrates the graceful failure state honestly.
+Use test card `4100 2800 0000 1007` (any future expiry, any CVV) for success; a declined test card demonstrates the graceful failure state honestly.
 
 ## Real Razorpay TEST Data
 
@@ -326,7 +326,7 @@ A 10-minute judge walkthrough:
 5. **Agent Debate** — open a debate, read the cross-examination, ask the Groq AI Assistant a question
 6. **Growth Actions** — see the prepared action: why, evidence, scope, boundaries, amount
 7. **Approve → Run** — execute the approved action and view the audit trail
-8. **Checkout** — AI Buyer: select a real product, create the order (real Razorpay TEST order ID), pay with test card `4111 1111 1111 1111`
+8. **Checkout** — AI Buyer: select a real product, create the order (real Razorpay TEST order ID), pay with test card `4100 2800 0000 1007`
 9. **Failure demo** — dismiss the payment window or use a declined test card: the safe failure state appears (no money captured, retry available)
 
 ## Screenshots

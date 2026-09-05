@@ -412,13 +412,13 @@ export function Checkout() {
                 <p>
                   <strong>Recommended next step:</strong> Try the payment again — in TEST mode you can
                   use the successful test card, or deliberately use the declined test card
-                  (4111 1111 1111 1111 with any future expiry and CVV) to see this safe failure state.
+                  (4100 2800 0000 1007 with any future expiry and CVV) to see this safe failure state.
                 </p>
               </div>
             )}
 
             <p className="buyer-hint">
-              TEST MODE — use card 4111 1111 1111 1111 with any future expiry and any CVV to simulate
+              TEST MODE — use card 4100 2800 0000 1007 with any future expiry and any CVV to simulate
               success. No real money is ever charged.
             </p>
           </div>
