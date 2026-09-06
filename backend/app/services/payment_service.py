@@ -161,7 +161,10 @@ class PaymentService:
         
         razorpay_order_id = order_result.metadata.get("order_id")
         
-        # Create payment link for hosted checkout
+        # Create payment link for hosted checkout (optional).
+        # Razorpay TEST mode caps payment links at 30/day; the primary
+        # checkout path uses the Razorpay order id + key directly, so a
+        # link failure (quota / rate limit) must not fail the checkout.
         link_result = client.create_payment_link(
             amount_inr=amount_inr,
             currency=currency,
@@ -170,12 +173,17 @@ class PaymentService:
             notes=notes,
             callback_url=callback_url,
         )
-        
-        if not link_result.ok:
-            raise ValueError(f"Failed to create payment link: {link_result.error}")
-        
-        payment_link_id = link_result.metadata.get("payment_link_id")
-        short_url = link_result.metadata.get("short_url")
+
+        payment_link_id = None
+        short_url = None
+        if link_result.ok:
+            payment_link_id = link_result.metadata.get("payment_link_id")
+            short_url = link_result.metadata.get("short_url")
+        else:
+            log.warning(
+                "Payment link unavailable (checkout continues via Razorpay order): %s",
+                link_result.error,
+            )
 
         if not customer_email:
             raise ValueError("customer_email is required for checkout persistence")
