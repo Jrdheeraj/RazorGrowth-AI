@@ -25,6 +25,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.db.base import Base
@@ -33,6 +34,8 @@ from backend.app.db.session import init_db, get_session_factory
 from backend.app.core.config import get_settings
 from backend.app.models import (
     Merchant,
+    MerchantMembership,
+    User,
     Product,
     Customer,
     Order,
@@ -43,12 +46,14 @@ from backend.app.models import (
 from backend.app.models.enums import (
     Currency,
     CustomerSegment,
+    MembershipStatus,
     MerchantStatus,
     OpportunityStatus,
     OpportunityType,
     OrderStatus,
     PaymentProvider,
     PaymentStatus,
+    UserRole,
 )
 
 log = logging.getLogger(__name__)
@@ -451,6 +456,60 @@ def ensure_catalog_for_merchant(db: Session, merchant: Merchant) -> dict[str, Pr
     same real, purchasable catalog used across the system.
     """
     return _get_or_create_products(db, merchant)
+
+
+def initialize_user_workspace(db: Session, user: User) -> Merchant:
+    """
+    Bootstrap a NEW workspace for a freshly registered user.
+
+    Creates, inside the caller's transaction:
+      1. a new Merchant (workspace) — never an existing one
+      2. exactly one owner MerchantMembership (user ↔ new workspace)
+      3. the workspace's own independent default catalog via
+         ensure_catalog_for_merchant (idempotent, deterministic per-
+         merchant product UUIDs, static application-defined data — never
+         a copy of any other merchant's rows or Razorpay business data)
+
+    The slug is derived from the user's email with a uniqueness suffix.
+    Re-running on the same user is not expected (signup creates the user
+    and workspace in one transaction), but catalog provisioning itself
+    is idempotent per workspace.
+    """
+    import re as _re
+
+    base_slug = _re.sub(r"[^a-z0-9]+", "-", user.email.split("@")[0].lower()).strip("-") or "workspace"
+    slug = base_slug
+    suffix = 1
+    while db.execute(select(Merchant).where(Merchant.slug == slug)).scalar_one_or_none() is not None:
+        suffix += 1
+        slug = f"{base_slug}-{suffix}"
+
+    merchant = Merchant(
+        id=uuid.uuid4(),
+        name=user.full_name or user.email,
+        slug=slug,
+        email=user.email,
+        status=MerchantStatus.active,
+        currency=Currency.INR,
+    )
+    db.add(merchant)
+    db.flush()  # merchant.id needed for membership + catalog keys
+
+    membership = MerchantMembership(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        merchant_id=merchant.id,
+        role=UserRole.owner,
+        status=MembershipStatus.active,
+    )
+    db.add(membership)
+
+    ensure_catalog_for_merchant(db, merchant)
+    log.info(
+        "Workspace initialized. user=%s merchant=%s slug=%s",
+        str(user.id), str(merchant.id), slug,
+    )
+    return merchant
 
 
 def run_seed(db: Session) -> None:

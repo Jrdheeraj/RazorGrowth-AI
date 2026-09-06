@@ -114,36 +114,12 @@ def register(
     db.add(user)
     db.flush()  # assign user.id before creating the workspace
 
-    # Multi-tenant signup: every new user gets their OWN merchant workspace.
+    # Multi-tenant signup: every new user gets their OWN workspace with an
+    # independent default catalog (idempotent bootstrap in backend.app.data.seed).
     # No user is ever attached to an existing merchant's data here.
-    import re as _re
+    from backend.app.data.seed import initialize_user_workspace
 
-    base_slug = _re.sub(r"[^a-z0-9]+", "-", user.email.split("@")[0].lower()).strip("-") or "workspace"
-    slug = base_slug
-    suffix = 1
-    while db.execute(select(Merchant).where(Merchant.slug == slug)).scalar_one_or_none() is not None:
-        suffix += 1
-        slug = f"{base_slug}-{suffix}"
-
-    merchant = Merchant(
-        id=uuid.uuid4(),
-        name=payload.full_name or user.email,
-        slug=slug,
-        email=user.email,
-        status=MerchantStatus.active,
-        currency=Currency.INR,
-    )
-    db.add(merchant)
-    db.flush()
-
-    membership = MerchantMembership(
-        id=uuid.uuid4(),
-        user_id=user.id,
-        merchant_id=merchant.id,
-        role=UserRole.owner,
-        status=MembershipStatus.active,
-    )
-    db.add(membership)
+    merchant = initialize_user_workspace(db, user)
 
     db.commit()
     log.info("User registered. user=%s merchant=%s", str(user.id), str(merchant.id))
