@@ -1,29 +1,37 @@
+# ============================================================================
+# RazorGrowth AI — Python dependencies
+#
+# Direct runtime and development dependencies, verified against the actual
+# repository imports (no unused packages). Frontend (npm) dependencies live
+# in frontend/package.json.
+# ============================================================================
+
 # ── Core framework ──────────────────────────────────────────────────────────
-fastapi==0.141.1
-uvicorn[standard]==0.52.4
+fastapi==0.141.1                 # backend API framework (routes, deps, validation)
+uvicorn[standard]==0.52.4         # ASGI server: uvicorn backend.app.main:app
 
 # ── Database ─────────────────────────────────────────────────────────────────
-sqlalchemy==2.0.52
-psycopg2-binary==2.9.12
-alembic==1.16.4
-pgvector==0.3.6
+sqlalchemy==2.0.52               # ORM, engine, tenant-scoped models
+psycopg2-binary==2.9.12          # PostgreSQL DBAPI driver for SQLAlchemy
+alembic==1.16.4                   # schema migrations (migrations/versions)
+pgvector==0.3.6                   # VECTOR column type for the knowledge store
 
-# ── Validation / settings ────────────────────────────────────────────────────
-pydantic==2.13.4
-pydantic-settings==2.15.0
-python-dotenv==1.2.3
+# ── Validation / settings ───────────────────────────────────────────────────
+pydantic==2.13.4                  # request/response schemas, model validation
+pydantic-settings==2.15.0         # .env-backed application settings (core/config.py)
 
-# ── Auth (Phase 6) ───────────────────────────────────────────────────────────
-PyJWT==2.7.0
+# ── Authentication ──────────────────────────────────────────────────────────
+PyJWT==2.7.0                      # JWT access-token signing/verification (core/security.py)
 
-# ── HTTP / networking ────────────────────────────────────────────────────────
-httpx==0.28.1
-razorpay==2.0.1
+# ── HTTP / networking ───────────────────────────────────────────────────────
+httpx==0.28.1                     # HTTP client (tooling, tests, integration paths)
 
-# ── AI ───────────────────────────────────────────────────────────────────────
-openai==1.58.1
-tiktoken==0.8.0
+# ── Payments ────────────────────────────────────────────────────────────────
+razorpay==2.0.1                   # Razorpay TEST-mode orders, payments, webhooks
 
-# ── Testing ──────────────────────────────────────────────────────────────────
-pytest==9.1.1
-pytest-asyncio==0.24.0
+# ── AI / LLM ────────────────────────────────────────────────────────────────
+openai==1.58.1                    # OpenAI SDK powering the provider layer
+                                  # (OpenRouter free-only / Groq / OpenAI — backend/app/ai/llm)
+
+# ── Testing ─────────────────────────────────────────────────────────────────
+pytest==9.1.1                     # backend test suite (673 tests, SQLite-compatible)
