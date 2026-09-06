@@ -108,18 +108,19 @@ class GrowthRadarService:
         """Build a read-time radar response strictly from the merchant's real Razorpay data."""
         settings = get_settings()
         if getattr(settings, 'REAL_TEST_INTEGRATION_ENABLED', False) and settings.RAZORPAY_KEY_ID and settings.RAZORPAY_KEY_SECRET:
-            # Only auto-sync the merchant that actually owns the configured
-            # Razorpay TEST account: one with existing Razorpay-provider
-            # payments. This prevents the single configured TEST account's
-            # data from being copied into every newly registered merchant's
-            # workspace (multi-tenant isolation).
-            has_razorpay_data = bool(self.db.scalar(
-                select(func.count(Payment.id)).where(
-                    Payment.merchant_id == merchant_id,
-                    Payment.provider == PaymentProvider.razorpay.value,
-                ).limit(1)
-            ))
-            if has_razorpay_data:
+            # Auto-sync ONLY the merchant that owns the configured Razorpay
+            # TEST account: the one holding the OLDEST Razorpay-provider
+            # payment (the account's original ingest of its history).
+            # Records created afterwards by any merchant's checkout are
+            # ownership-claimed by the ingestion service's cross-tenant guard
+            # and are never copied across workspaces.
+            oldest_rzp_merchant = self.db.scalar(
+                select(Payment.merchant_id)
+                .where(Payment.provider == PaymentProvider.razorpay.value)
+                .order_by(Payment.created_at.asc())
+                .limit(1)
+            )
+            if merchant_id == oldest_rzp_merchant:
                 try:
                     from backend.app.services.razorpay_ingestion import RazorpayIngestionService
                     RazorpayIngestionService(self.db, merchant_id).ingest_all()

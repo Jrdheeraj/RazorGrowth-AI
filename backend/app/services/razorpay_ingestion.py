@@ -117,6 +117,42 @@ class RazorpayIngestionService:
         self.payments = PaymentRepository(db)
         self.products = ProductRepository(db)
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Cross-tenant ownership guard
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _razorpay_order_owner(self, rp_order_id: str) -> uuid.UUID | None:
+        """
+        Return the merchant that owns this Razorpay order locally, if any.
+
+        The application uses ONE shared Razorpay TEST account: checkout for
+        any merchant creates Razorpay orders visible in the shared account's
+        list. Ingestion must therefore treat an existing local order with the
+        same Razorpay order_number as an ownership claim by THAT merchant —
+        a different merchant must never re-ingest it into its own workspace.
+        """
+        return self.db.execute(
+            select(Order.merchant_id).where(Order.order_number == rp_order_id).limit(1)
+        ).scalar_one_or_none()
+
+    def _razorpay_payment_owner(self, rp_payment_id: str) -> uuid.UUID | None:
+        """Return the merchant that owns this Razorpay payment locally, if any."""
+        return self.db.execute(
+            select(Payment.merchant_id).where(
+                Payment.provider_payment_id == rp_payment_id
+            ).limit(1)
+        ).scalar_one_or_none()
+
+    def _order_claimed_by_other(self, rp_order_id: str) -> bool:
+        """True when another merchant's local checkout already owns this order."""
+        owner = self._razorpay_order_owner(rp_order_id)
+        return owner is not None and owner != self.merchant_id
+
+    def _payment_claimed_by_other(self, rp_payment_id: str) -> bool:
+        """True when another merchant's local checkout already owns this payment."""
+        owner = self._razorpay_payment_owner(rp_payment_id)
+        return owner is not None and owner != self.merchant_id
+
     def ingest_all(self) -> RazorpayIngestionResult:
         """
         Run full ingestion: customers → orders → payments.
@@ -240,6 +276,13 @@ class RazorpayIngestionService:
         created_at_ts = rp_order.get("created_at")
 
         if not rp_order_id:
+            result.orders.skipped += 1
+            return
+
+        # Cross-tenant guard: if another merchant's local checkout already
+        # owns this Razorpay order (or the payment that belongs to it),
+        # never copy it into this merchant's workspace.
+        if self._order_claimed_by_other(rp_order_id):
             result.orders.skipped += 1
             return
 
@@ -473,6 +516,12 @@ class RazorpayIngestionService:
         paid_at_ts = rp_payment.get("paid_at")
 
         if not rp_payment_id:
+            result.payments.skipped += 1
+            return
+
+        # Cross-tenant guard: a payment owned by another merchant's local
+        # checkout must never be re-ingested into this merchant's workspace.
+        if self._payment_claimed_by_other(rp_payment_id):
             result.payments.skipped += 1
             return
 

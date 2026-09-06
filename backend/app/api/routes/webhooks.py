@@ -107,6 +107,58 @@ class WebhookProcessingResult:
         self.details = details or {}
 
 
+def _razorpay_account_owner_merchant(db: Session) -> uuid.UUID | None:
+    """
+    The merchant that owns the configured (single) Razorpay account:
+    the holder of the OLDEST Razorpay-provider payment — the workspace
+    that originally ingested the account's history. Used only to make
+    webhook lookups deterministic; webhook events themselves carry no
+    merchant identity.
+    """
+    from backend.app.models.enums import PaymentProvider
+
+    return db.execute(
+        select(Payment.merchant_id)
+        .where(Payment.provider == PaymentProvider.razorpay.value)
+        .order_by(Payment.created_at.asc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def _find_payment_by_provider_id(db: Session, rp_payment_id: str) -> Payment | None:
+    """Find a local payment by provider id; deterministic across legacy
+    cross-merchant duplicates by preferring the Razorpay account owner."""
+    rows = db.execute(
+        select(Payment).where(Payment.provider_payment_id == rp_payment_id)
+    ).scalars().all()
+    if not rows:
+        return None
+    if len(rows) == 1:
+        return rows[0]
+    owner = _razorpay_account_owner_merchant(db)
+    for r in rows:
+        if r.merchant_id == owner:
+            return r
+    return rows[0]
+
+
+def _find_order_by_provider_id(db: Session, rp_order_id: str) -> Order | None:
+    """Find a local order by Razorpay order number; deterministic across
+    legacy cross-merchant duplicates by preferring the account owner."""
+    rows = db.execute(
+        select(Order).where(Order.order_number == rp_order_id)
+    ).scalars().all()
+    if not rows:
+        return None
+    if len(rows) == 1:
+        return rows[0]
+    owner = _razorpay_account_owner_merchant(db)
+    for r in rows:
+        if r.merchant_id == owner:
+            return r
+    return rows[0]
+
+
 async def _process_webhook_event(db: Session, event_type: str, payload: dict) -> WebhookProcessingResult:
     """
     Process a Razorpay webhook event and sync local database state.
@@ -149,9 +201,8 @@ async def _handle_payment_captured(db: Session, payload: dict) -> WebhookProcess
     if not rp_payment_id:
         return WebhookProcessingResult(action="skipped_missing_payment_id")
 
-    # Find local payment by provider_payment_id
-    stmt = select(Payment).where(Payment.provider_payment_id == rp_payment_id)
-    payment = db.execute(stmt).scalar_one_or_none()
+    # Find local payment by provider_payment_id (deterministic owner-first)
+    payment = _find_payment_by_provider_id(db, rp_payment_id)
 
     if not payment:
         # Payment not in local DB yet - could be from manual creation or ingestion lag
@@ -193,8 +244,7 @@ async def _handle_payment_failed(db: Session, payload: dict) -> WebhookProcessin
     if not rp_payment_id:
         return WebhookProcessingResult(action="skipped_missing_payment_id")
 
-    stmt = select(Payment).where(Payment.provider_payment_id == rp_payment_id)
-    payment = db.execute(stmt).scalar_one_or_none()
+    payment = _find_payment_by_provider_id(db, rp_payment_id)
 
     if not payment:
         log.info("Payment failed but not found locally: %s", rp_payment_id)
@@ -226,8 +276,7 @@ async def _handle_payment_authorized(db: Session, payload: dict) -> WebhookProce
     if not rp_payment_id:
         return WebhookProcessingResult(action="skipped_missing_payment_id")
 
-    stmt = select(Payment).where(Payment.provider_payment_id == rp_payment_id)
-    payment = db.execute(stmt).scalar_one_or_none()
+    payment = _find_payment_by_provider_id(db, rp_payment_id)
 
     if not payment:
         return WebhookProcessingResult(action="skipped_payment_not_found")
@@ -252,16 +301,14 @@ async def _handle_order_paid(db: Session, payload: dict) -> WebhookProcessingRes
     if not rp_order_id:
         return WebhookProcessingResult(action="skipped_missing_order_id")
 
-    # Find local order by provider order ID (stored as order_number)
-    stmt = select(Order).where(Order.order_number == rp_order_id)
-    order = db.execute(stmt).scalar_one_or_none()
+    # Find local order by provider order ID (deterministic owner-first)
+    order = _find_order_by_provider_id(db, rp_order_id)
 
     if not order:
         # Try finding by receipt if different
         receipt = entity.get("receipt")
         if receipt:
-            stmt = select(Order).where(Order.order_number == receipt)
-            order = db.execute(stmt).scalar_one_or_none()
+            order = _find_order_by_provider_id(db, receipt)
 
     if not order:
         log.info("Order paid but not found locally: %s", rp_order_id)
