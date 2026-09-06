@@ -230,7 +230,9 @@ export function GrowthRadar() {
       .then(setRadar)
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : "Failed to load";
-        if (msg.includes("NO_MERCHANT_MEMBERSHIP") || msg.includes("403")) {
+        if (msg.includes("NOT_AUTHENTICATED") || msg.includes("TOKEN_EXPIRED") || msg.includes("401")) {
+          setError("login_required");
+        } else if (msg.includes("NO_MERCHANT_MEMBERSHIP") || msg.includes("403")) {
           setError("no_workspace");
         } else {
           setError(msg);
@@ -242,6 +244,31 @@ export function GrowthRadar() {
     const objective = `Investigate opportunity: ${opportunity}. Signal: ${signalTitle}`;
     navigate(`/agents?objective=${encodeURIComponent(objective)}`);
   };
+
+  if (error === "login_required") {
+    return (
+      <section className="shell section" aria-labelledby="radar-heading">
+        <div className="page-hero" style={{ paddingBottom: 0 }}>
+          <p className="meta-label">YOUR BUSINESS · GROWTH RADAR</p>
+          <h1 id="radar-heading" className="display-lg" style={{ marginTop: 10 }}>
+            Growth Radar
+          </h1>
+        </div>
+        <WindowPanel title="login-required.app">
+          <p className="meta-label" style={{ marginBottom: 12 }}>SIGN IN REQUIRED</p>
+          <p style={{ fontSize: "var(--text-body)", lineHeight: "var(--leading-body)", color: "var(--ink-soft)" }}>
+            Growth Radar shows your business data — payments, orders, and customers.
+            Sign in to view your live Razorpay TEST business intelligence.
+          </p>
+          <div style={{ marginTop: 20, display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <Button variant="primary" mono onClick={() => navigate("/login")}>
+              Sign in
+            </Button>
+          </div>
+        </WindowPanel>
+      </section>
+    );
+  }
 
   if (error === "no_workspace") {
     return (

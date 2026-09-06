@@ -108,13 +108,25 @@ class GrowthRadarService:
         """Build a read-time radar response strictly from the merchant's real Razorpay data."""
         settings = get_settings()
         if getattr(settings, 'REAL_TEST_INTEGRATION_ENABLED', False) and settings.RAZORPAY_KEY_ID and settings.RAZORPAY_KEY_SECRET:
-            try:
-                from backend.app.services.razorpay_ingestion import RazorpayIngestionService
-                RazorpayIngestionService(self.db, merchant_id).ingest_all()
-                self.db.commit()
-            except Exception as e:
-                log.warning("GrowthRadar real test data auto-sync failed: %s", e)
-                self.db.rollback()
+            # Only auto-sync the merchant that actually owns the configured
+            # Razorpay TEST account: one with existing Razorpay-provider
+            # payments. This prevents the single configured TEST account's
+            # data from being copied into every newly registered merchant's
+            # workspace (multi-tenant isolation).
+            has_razorpay_data = bool(self.db.scalar(
+                select(func.count(Payment.id)).where(
+                    Payment.merchant_id == merchant_id,
+                    Payment.provider == PaymentProvider.razorpay.value,
+                ).limit(1)
+            ))
+            if has_razorpay_data:
+                try:
+                    from backend.app.services.razorpay_ingestion import RazorpayIngestionService
+                    RazorpayIngestionService(self.db, merchant_id).ingest_all()
+                    self.db.commit()
+                except Exception as e:
+                    log.warning("GrowthRadar real test data auto-sync failed: %s", e)
+                    self.db.rollback()
 
         now = _utcnow()
         start = now - timedelta(days=window_days)

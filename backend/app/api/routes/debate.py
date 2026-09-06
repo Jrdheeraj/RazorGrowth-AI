@@ -61,10 +61,24 @@ def _run_debate_worker(debate_id: uuid.UUID, merchant_id: uuid.UUID, objective: 
         ):
             raise RuntimeError("REAL_RAZORPAY_TEST_INTEGRATION_NOT_CONFIGURED")
 
-        # Refresh the same real TEST integration used by the rest of the app.
-        ingestion = RazorpayIngestionService(db, merchant_id).ingest_all()
-        if ingestion.errors:
-            raise RuntimeError("RAZORPAY_TEST_INGESTION_FAILED")
+        # Refresh the same real TEST integration used by the rest of the app —
+        # only for the merchant that owns the configured Razorpay TEST account
+        # (has Razorpay-provider payments). New/empty workspaces are not synced
+        # with another merchant's TEST account data (multi-tenant isolation).
+        from sqlalchemy import func, select as _select
+        from backend.app.models.payment import Payment as _Payment
+        from backend.app.models.enums import PaymentProvider as _PP
+
+        has_razorpay_data = bool(db.scalar(
+            _select(func.count(_Payment.id)).where(
+                _Payment.merchant_id == merchant_id,
+                _Payment.provider == _PP.razorpay.value,
+            ).limit(1)
+        ))
+        if has_razorpay_data:
+            ingestion = RazorpayIngestionService(db, merchant_id).ingest_all()
+            if ingestion.errors:
+                raise RuntimeError("RAZORPAY_TEST_INGESTION_FAILED")
         from backend.app.ai.llm.provider import build_llm_provider
 
         llm = build_llm_provider(

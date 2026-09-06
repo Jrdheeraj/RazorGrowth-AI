@@ -331,7 +331,11 @@ export function AgentsPage() {
       .catch((e) => {
         const msg = e instanceof Error ? e.message : "Failed to load";
         setError(
-          msg.includes("NO_MERCHANT_MEMBERSHIP") || msg.includes("403") ? "no_workspace" : msg,
+          msg.includes("NOT_AUTHENTICATED") || msg.includes("TOKEN_EXPIRED") || msg.includes("401")
+            ? "login_required"
+            : msg.includes("NO_MERCHANT_MEMBERSHIP") || msg.includes("403")
+              ? "no_workspace"
+              : msg,
         );
       });
     fetchGrowthRadar(30)
@@ -429,6 +433,31 @@ export function AgentsPage() {
       setCurrentPhaseText("");
     }
   };
+
+  if (error === "login_required") {
+    return (
+      <section className="shell section" aria-labelledby="agents-heading">
+        <div className="page-hero" style={{ paddingBottom: 0 }}>
+          <p className="meta-label">AI GROWTH TEAM</p>
+          <h1 id="agents-heading" className="display-lg" style={{ marginTop: 10 }}>
+            AI Growth Team
+          </h1>
+        </div>
+        <WindowPanel title="login-required.app">
+          <p className="meta-label" style={{ marginBottom: 12 }}>SIGN IN REQUIRED</p>
+          <p style={{ fontSize: "var(--text-body)", lineHeight: "var(--leading-body)", color: "var(--ink-soft)" }}>
+            Your AI Growth Team analyses your business data. Sign in to start
+            an analysis of your live Razorpay TEST commerce data.
+          </p>
+          <div style={{ marginTop: 20, display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <Button variant="primary" mono onClick={() => navigate("/login")}>
+              Sign in
+            </Button>
+          </div>
+        </WindowPanel>
+      </section>
+    );
+  }
 
   if (error === "no_workspace") {
     return (

@@ -413,14 +413,22 @@ class ProductAgent(BaseGrowthAgent):
                 .where(OrderItem.product_id == affinity["product_a_id"])
             ).scalar_one()
 
+            # Count customers who bought BOTH products — the inner GROUP BY
+            # returns one row per dual-product customer, so aggregate the
+            # rows into a single count (scalar_one on the raw GROUP BY
+            # raises MultipleResultsFound when more than one customer
+            # bought both products).
             buyers_both = db.execute(
-                select(func.count(func.distinct(Order.customer_id)))
-                .join(OrderItem, Order.id == OrderItem.order_id)
-                .where(Order.merchant_id == merchant_id)
-                .where(Order.status == "paid")
-                .where(OrderItem.product_id.in_([affinity["product_a_id"], affinity["product_b_id"]]))
-                .group_by(Order.customer_id)
-                .having(func.count(func.distinct(OrderItem.product_id)) == 2)
+                select(func.count())
+                .select_from(
+                    select(Order.customer_id)
+                    .join(OrderItem, Order.id == OrderItem.order_id)
+                    .where(Order.merchant_id == merchant_id)
+                    .where(Order.status == "paid")
+                    .where(OrderItem.product_id.in_([affinity["product_a_id"], affinity["product_b_id"]]))
+                    .group_by(Order.customer_id)
+                    .having(func.count(func.distinct(OrderItem.product_id)) == 2)
+                )
             ).scalar_one() or 0
 
             target_count = buyers_a - buyers_both

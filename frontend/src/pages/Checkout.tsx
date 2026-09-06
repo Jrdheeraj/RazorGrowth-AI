@@ -13,6 +13,7 @@
  * REAL DATA ONLY — no hardcoded products, prices, or results.
  */
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { createCheckoutSession, verifyPayment, fetchProducts } from "../lib/api";
 import type { ProductResponse, CheckoutSessionResponse } from "../types/api";
 import { WindowPanel } from "../components/WindowPanel";
@@ -30,6 +31,7 @@ type Outcome =
   | { kind: "failed"; reason: string };
 
 export function Checkout() {
+  const navigate = useNavigate();
   const [products, setProducts] = useState<ProductResponse[] | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -51,9 +53,14 @@ export function Checkout() {
         if (firstPurchasable) setSelectedId(firstPurchasable.id);
       })
       .catch((err: unknown) => {
-        setCatalogError(
-          err instanceof Error ? err.message : "The product catalog could not be loaded"
-        );
+        const msg = err instanceof Error ? err.message : "";
+        if (msg.includes("NOT_AUTHENTICATED") || msg.includes("TOKEN_EXPIRED") || msg.includes("401")) {
+          setCatalogError("login_required");
+        } else {
+          setCatalogError(
+            err instanceof Error ? err.message : "The product catalog could not be loaded"
+          );
+        }
       });
   }, []);
 
@@ -201,7 +208,22 @@ export function Checkout() {
         <main aria-label="AI-readable product catalog">
           <p className="meta-label" style={{ marginBottom: 12 }}>THE CATALOG THE AI BUYER READS</p>
 
-          {catalogError && (
+          {catalogError === "login_required" && (
+            <WindowPanel title="login-required.app">
+              <p className="meta-label" style={{ marginBottom: 12 }}>SIGN IN REQUIRED</p>
+              <p style={{ fontSize: "var(--text-body)", lineHeight: "var(--leading-body)", color: "var(--ink-soft)" }}>
+                Checkout reads your merchant catalog and creates Razorpay TEST orders for your
+                workspace. Sign in to continue.
+              </p>
+              <div style={{ marginTop: 20 }}>
+                <Button variant="primary" mono onClick={() => navigate("/login")}>
+                  Sign in
+                </Button>
+              </div>
+            </WindowPanel>
+          )}
+
+          {catalogError && catalogError !== "login_required" && (
             <WindowPanel title="catalog.app">
               <p style={{ color: "var(--coral-strong)" }}>
                 The catalog could not be loaded. Please try again.

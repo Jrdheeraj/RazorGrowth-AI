@@ -49,12 +49,17 @@ router = APIRouter(tags=["agents"])
 @router.get("/agents", response_model=AgentsListResponse)
 def list_agents(
     db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(merchant_ctx),
 ) -> Any:
-    """Agent registry with capability transparency (Feature 13/15)."""
+    """Agent registry with capability transparency (Feature 13/15).
+
+    The static agent catalog is product-level information; the
+    observability summary is merchant-scoped to the authenticated caller.
+    """
     runs = AgentRunService(db)
     return {
         "agents": agent_catalog(),
-        "observability": runs.observability_summary(),
+        "observability": runs.observability_summary(ctx.merchant_id),
     }
 
 

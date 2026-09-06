@@ -38,7 +38,7 @@ from backend.app.core.security import (
     validate_password_policy,
 )
 from backend.app.db.session import get_db
-from backend.app.models.enums import MembershipStatus, UserRole, UserStatus
+from backend.app.models.enums import Currency, MembershipStatus, MerchantStatus, UserRole, UserStatus
 from backend.app.models.membership import MerchantMembership
 from backend.app.models.merchant import Merchant
 from backend.app.models.user import User
@@ -112,24 +112,41 @@ def register(
         status=UserStatus.active,
     )
     db.add(user)
+    db.flush()  # assign user.id before creating the workspace
 
-    # Attach to the real Razorpay TEST merchant workspace (Live Audit Merchant)
-    primary_merchant_id = uuid.UUID("dbec6e31-1327-4c3b-a046-2c10a208145d")
-    merchant = db.get(Merchant, primary_merchant_id)
-    if not merchant:
-        merchant = db.execute(select(Merchant)).scalars().first()
-    if merchant:
-        membership = MerchantMembership(
-            id=uuid.uuid4(),
-            user_id=user.id,
-            merchant_id=merchant.id,
-            role=UserRole.owner,
-            status=MembershipStatus.active,
-        )
-        db.add(membership)
+    # Multi-tenant signup: every new user gets their OWN merchant workspace.
+    # No user is ever attached to an existing merchant's data here.
+    import re as _re
+
+    base_slug = _re.sub(r"[^a-z0-9]+", "-", user.email.split("@")[0].lower()).strip("-") or "workspace"
+    slug = base_slug
+    suffix = 1
+    while db.execute(select(Merchant).where(Merchant.slug == slug)).scalar_one_or_none() is not None:
+        suffix += 1
+        slug = f"{base_slug}-{suffix}"
+
+    merchant = Merchant(
+        id=uuid.uuid4(),
+        name=payload.full_name or user.email,
+        slug=slug,
+        email=user.email,
+        status=MerchantStatus.active,
+        currency=Currency.INR,
+    )
+    db.add(merchant)
+    db.flush()
+
+    membership = MerchantMembership(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        merchant_id=merchant.id,
+        role=UserRole.owner,
+        status=MembershipStatus.active,
+    )
+    db.add(membership)
 
     db.commit()
-    log.info("User registered. user=%s", str(user.id))
+    log.info("User registered. user=%s merchant=%s", str(user.id), str(merchant.id))
     return {
         "id": str(user.id),
         "email": user.email,
@@ -158,28 +175,10 @@ def login(
     if user.status == UserStatus.disabled:
         raise _forbidden("USER_DISABLED")
 
-    # Ensure user has access to the real Razorpay TEST workspace
-    has_membership = db.execute(
-        select(MerchantMembership).where(
-            MerchantMembership.user_id == user.id,
-            MerchantMembership.status == MembershipStatus.active,
-        )
-    ).scalars().first()
-    if not has_membership:
-        primary_merchant_id = uuid.UUID("dbec6e31-1327-4c3b-a046-2c10a208145d")
-        merchant = db.get(Merchant, primary_merchant_id)
-        if not merchant:
-            merchant = db.execute(select(Merchant)).scalars().first()
-        if merchant:
-            membership = MerchantMembership(
-                id=uuid.uuid4(),
-                user_id=user.id,
-                merchant_id=merchant.id,
-                role=UserRole.owner,
-                status=MembershipStatus.active,
-            )
-            db.add(membership)
-            db.commit()
+    # Login only verifies credentials and mints a token. Workspace access
+    # comes strictly from the user's existing memberships — a user without
+    # one gets NO_MERCHANT_MEMBERSHIP on protected endpoints; login never
+    # silently attaches anyone to any merchant.
 
     token, expires_in = create_access_token(user.id, user.email)
     return {
