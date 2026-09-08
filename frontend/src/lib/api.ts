@@ -39,6 +39,10 @@ import type {
   AgentDashboardAgent,
   ProductResponse,
   ProductListResponse,
+  AnalyticsOverviewResponse,
+  RevenueTimeSeriesResponse,
+  OrderTimeSeriesResponse,
+  CustomerTimeSeriesResponse,
 } from "../types/api";
 
 export type {
@@ -72,6 +76,10 @@ export type {
   AgentDashboardAgent,
   ProductResponse,
   ProductListResponse,
+  AnalyticsOverviewResponse,
+  RevenueTimeSeriesResponse,
+  OrderTimeSeriesResponse,
+  CustomerTimeSeriesResponse,
 };
 export class ApiError extends Error {
   status: number;
@@ -183,6 +191,24 @@ export function buildRAGContext(
 
 export function fetchRankedOpportunities(): Promise<RankedOpportunitiesResponse> {
   return request<RankedOpportunitiesResponse>("/api/opportunities/ranked");
+}
+
+/* ── Analytics (for Growth Radar charts) ────────────────────────────────── */
+
+export function fetchAnalyticsOverview(periodDays = 30): Promise<AnalyticsOverviewResponse> {
+  return request<AnalyticsOverviewResponse>(`/api/analytics/overview?period_days=${periodDays}`);
+}
+
+export function fetchRevenueSeries(periodDays = 30, granularity: "day" | "week" | "month" = "day"): Promise<RevenueTimeSeriesResponse> {
+  return request<RevenueTimeSeriesResponse>(`/api/analytics/revenue?period_days=${periodDays}&granularity=${granularity}`);
+}
+
+export function fetchOrdersTrend(periodDays = 30, granularity: "day" | "week" | "month" = "day"): Promise<OrderTimeSeriesResponse> {
+  return request<OrderTimeSeriesResponse>(`/api/analytics/orders/trend?period_days=${periodDays}&granularity=${granularity}`);
+}
+
+export function fetchCustomersTrend(periodDays = 30, granularity: "day" | "week" | "month" = "day"): Promise<CustomerTimeSeriesResponse> {
+  return request<CustomerTimeSeriesResponse>(`/api/analytics/customers/trend?period_days=${periodDays}&granularity=${granularity}`);
 }
 
 /* ── Agents / Investigation ───────────────────────────────────────────── */

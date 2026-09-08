@@ -3,6 +3,60 @@
  * Mirrors the FastAPI response schemas (Phase 3–6).
  */
 
+/* ── Analytics ────────────────────────────────────────────────────────── */
+
+export interface AnalyticsOverviewResponse {
+  merchant_id: string;
+  period_days: number;
+  generated_at: string;
+  revenue: {
+    current_period: number;
+    previous_period: number;
+    change_percentage: number | null;
+    trend: string;
+  };
+  orders: {
+    total_orders: number;
+    completed_orders: number;
+    cancelled_orders: number;
+    average_order_value: number;
+    orders_by_status: Record<string, number>;
+  };
+  customers: {
+    total_customers: number;
+    new_customers: number;
+    returning_customers: number;
+    repeat_customers: number;
+    at_risk_customers: number;
+    churned_customers: number;
+    average_ltv: number;
+  };
+  opportunities: Record<string, unknown>;
+  recommendations: Record<string, unknown>;
+  executions: Record<string, unknown>;
+  agent_activity: Record<string, unknown>;
+  experiments: Record<string, unknown>;
+  predicted_vs_actual: unknown[];
+}
+
+export interface RevenueTimeSeriesResponse {
+  merchant_id: string;
+  period_days: number;
+  data: Array<{ date: string; value: number | string }>;
+}
+
+export interface OrderTimeSeriesResponse {
+  merchant_id: string;
+  period_days: number;
+  data: Array<{ date: string; value: number | string }>;
+}
+
+export interface CustomerTimeSeriesResponse {
+  merchant_id: string;
+  period_days: number;
+  data: Array<{ date: string; value: number | string }>;
+}
+
 /* ── Auth ─────────────────────────────────────────────────────────────── */
 
 export interface UserOut {
