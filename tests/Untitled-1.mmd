@@ -1,0 +1,79 @@
+---
+references:
+  - "File: /backend/app/api/routes/products.py"
+generationTime: 2026-08-29T06:43:37.447Z
+---
+flowchart TD
+    Start["Incoming HTTP Request"] --> Route["FastAPI Route Handler"]
+
+    subgraph Products["Product API Routes"]
+        listProducts["list_products()"]
+        getProduct["get_product()"]
+        createProduct["create_product()"]
+        updateProduct["update_product()"]
+        deleteProduct["delete_product()"]
+    end
+
+    Route --> listProducts
+    Route --> getProduct
+    Route --> createProduct
+    Route --> updateProduct
+    Route --> deleteProduct
+
+    listProducts --> LP1["Resolve get_db + merchant_ctx"]
+    LP1 --> LP2["ProductService(db)"]
+    LP2 --> LP3["svc.list_products(merchant_id, active_only, limit, offset)"]
+    LP3 --> LP4{"Request parameters valid?"}
+    LP4 -->|Yes| LP5["Build ProductListResponse"]
+    LP4 -->|No| LP6["Request validation error"]
+    LP5 --> LP7["Return products"]
+
+    getProduct --> GP1{"product_id valid UUID?"}
+    GP1 -->|No| GP2["HTTP 400: Invalid product_id format"]
+    GP1 -->|Yes| GP3["ProductService(db)"]
+    GP3 --> GP4["svc.get_product_by_merchant(...)"]
+    GP4 --> GP5{"Product found?"}
+    GP5 -->|No| GP6["HTTP 404: PRODUCT_NOT_FOUND"]
+    GP5 -->|Yes| GP7["ProductResponse.model_validate(...)"]
+    GP7 --> GP8["Return product"]
+
+    createProduct --> CP1["Resolve operator_ctx + payload"]
+    CP1 --> CP2["Decimal(str(payload.price))"]
+    CP2 --> CP3["svc.create_product(...)"]
+    CP3 --> CP4{"ValueError caught?"}
+    CP4 -->|Yes| CP5["HTTP 400 with validation detail"]
+    CP4 -->|No| CP6["db.commit()"]
+    CP6 --> CP7["ProductResponse.model_validate(...)"]
+    CP7 --> CP8["HTTP 201: Created product"]
+
+    updateProduct --> UP1{"product_id valid UUID?"}
+    UP1 -->|No| UP2["HTTP 400: Invalid product_id format"]
+    UP1 -->|Yes| UP3["svc.get_product_by_merchant(...)"]
+    UP3 --> UP4{"Product exists?"}
+    UP4 -->|No| UP5["HTTP 404: PRODUCT_NOT_FOUND"]
+    UP4 -->|Yes| UP6["Set price only if payload.price is present"]
+    UP6 --> UP7["svc.update_product(...)"]
+    UP7 --> UP8{"ValueError caught?"}
+    UP8 -->|Yes| UP9["HTTP 400 with validation detail"]
+    UP8 -->|No| UP10["db.commit()"]
+    UP10 --> UP11["ProductResponse.model_validate(...)"]
+    UP11 --> UP12["Return updated product"]
+
+    deleteProduct --> DP1{"product_id valid UUID?"}
+    DP1 -->|No| DP2["HTTP 400: Invalid product_id format"]
+    DP1 -->|Yes| DP3["svc.get_product_by_merchant(...)"]
+    DP3 --> DP4B{"Product exists?"}
+    DP4B -->|No| DP5["HTTP 404: PRODUCT_NOT_FOUND"]
+    DP4B -->|Yes| DP6["svc.delete_product(pid)"]
+    DP6 --> DP7{"deleted == True?"}
+    DP7 -->|No| DP8["HTTP 404: PRODUCT_NOT_FOUND"]
+    DP7 -->|Yes| DP9["db.commit()"]
+    DP9 --> DP10["Return { deleted: True, id: ... }"]
+
+    Service[[ProductService]] -->|used by| listProducts
+    Service -->|used by| getProduct
+    Service -->|used by| createProduct
+    Service -->|used by| updateProduct
+    Service -->|used by| deleteProduct
+
+    DB[(Database)] -->|read/write| Service
