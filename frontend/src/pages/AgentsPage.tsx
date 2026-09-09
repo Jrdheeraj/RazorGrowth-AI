@@ -1552,176 +1552,6 @@ export function AgentsPage() {
             </div>
           </WindowPanel>
 
-          {/* Workflow visualization */}
-          <WindowPanel title="workflow.graph — agent-handoff.app">
-            <div className="agents-cc__sectionIntro">
-              <h3>Workflow — how work moves through the team</h3>
-              <p>From real business data to human approval. Nodes light up as the workflow is actually traversed.</p>
-            </div>
-            <WorkflowGraphViz
-              executedCount={executedAgentNames.length}
-              signalsCount={radar?.signals.length ?? 0}
-              opportunitiesCount={opportunities.length}
-              hasDebate={Boolean(lastRunResult?.debate_id)}
-              hasActionPlan={Boolean(actionPlan)}
-              selectedId={workflowSel}
-              onSelect={setWorkflowSel}
-            />
-            {workflowSel && (
-              <div className="wflow__detail">
-                <span className="meta-label">SELECTED NODE</span>
-                <p>
-                  <strong>{workflowSel.toUpperCase()}</strong> — {workflowSel === "data" ? "Raw Razorpay payments, orders, and customers from your workspace." : workflowSel === "memory" ? "Historical context retained across analyses — past decisions and outcomes." : workflowSel === "specialists" ? "Domain specialists examine payments, customers, products, and campaigns in parallel." : workflowSel === "findings" ? "Evidence-backed findings with reasoning and confidence scoring." : workflowSel === "debate" ? "Agents cross-examine findings before a recommendation is locked." : workflowSel === "ranking" ? "Opportunities ranked by revenue, confidence, and effort." : workflowSel === "action" ? "Action plan prepared for your explicit approval — no auto-execution." : "You review and approve — the team never acts without consent."}
-                </p>
-                <button type="button" className="wflow__close" onClick={() => setWorkflowSel(null)}>
-                  Clear
-                </button>
-              </div>
-            )}
-          </WindowPanel>
-
-          {/* Agent Findings */}
-          <div className="agents-cc__sectionHead">
-            <div>
-              <h2>Agent Findings</h2>
-              <p>What each specialist concluded — with evidence, reasoning, and next step. Not a single paragraph: real work.</p>
-            </div>
-            {findings.length > 0 && <span className="agents-cc__count">{findings.length} FINDINGS</span>}
-          </div>
-          {findings.length === 0 ? (
-            <div className="agents-cc__empty">
-              {executedAgentNames.length === 0 ? "WAITING FOR ANALYSIS — findings will appear here once the team starts working. Every conclusion is backed by evidence from your live data." : "No summarized findings yet — the team may still be working, or conclusions were brief. Open a workstation above to inspect raw output."}
-            </div>
-          ) : (
-            <div className="agents-cc__findings">
-              {findings.map((f) => (
-                <article key={f.name} className="finding">
-                  <div className="finding__head">
-                    <span className="finding__agent">{f.label.toUpperCase()}</span>
-                    <span className="finding__spec">{f.specialty}</span>
-                    {f.confidence && <span className={`finding__conf finding__conf--${f.confidence.toLowerCase()}`}>{f.confidence.toUpperCase()} confidence</span>}
-                  </div>
-                  <div className="finding__grid">
-                    <span className="finding__label">Finding</span>
-                    <p className="finding__text finding__text--strong">{f.finding}</p>
-                    {f.why && (
-                      <>
-                        <span className="finding__label">Why it matters</span>
-                        <p className="finding__text">{f.why}</p>
-                      </>
-                    )}
-                    <span className="finding__label">Evidence</span>
-                    <p className="finding__text">{f.evidence}</p>
-                    {f.action && (
-                      <>
-                        <span className="finding__label">Recommended action</span>
-                        <p className="finding__text">{f.action}</p>
-                      </>
-                    )}
-                    <span className="finding__label">Data examined</span>
-                    <p className="finding__text">{agentProfile(f.name).looksAt}</p>
-                  </div>
-                  <div className="finding__foot">
-                    <button type="button" className="finding__link" onClick={() => setSelectedAgent(f.name)}>
-                      Open workstation →
-                    </button>
-                    <span className="finding__meta">Confidence: {f.confidence ?? "—"} · Related: Priority Ranking · Technical Feasibility · Growth Manager</span>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-
-          {/* Opportunities */}
-          {opportunities.length > 0 && (
-            <>
-              <div className="agents-cc__sectionHead">
-                <div>
-                  <h2>Growth Opportunities</h2>
-                  <p>Ranked by the AI team from your live data — strongest evidence first.</p>
-                </div>
-              </div>
-              <div className="agents-cc__opps">
-                {opportunities.map((opp, idx) => (
-                  <article key={`${opp.title}-${idx}`} className="opp">
-                    <div className="opp__head">
-                      <div>
-                        <p className="meta-label">OPPORTUNITY {String(idx + 1).padStart(2, "0")}</p>
-                        <h3 className="opp__title">{opp.title}</h3>
-                      </div>
-                      {opp.impact && <span className="opp__impact">{opp.impact}</span>}
-                    </div>
-                    <div className="opp__grid">
-                      <span className="opp__label">Why it matters</span>
-                      <p className="opp__text">{opp.why}</p>
-                      <span className="opp__label">Evidence</span>
-                      <p className="opp__text">{opp.evidence}</p>
-                      {opp.action && (
-                        <>
-                          <span className="opp__label">Recommended action</span>
-                          <p className="opp__text opp__text--strong">{opp.action}</p>
-                        </>
-                      )}
-                      {opp.discoveredBy.length > 0 && (
-                        <>
-                          <span className="opp__label">Discovered by</span>
-                          <p className="opp__text">{opp.discoveredBy.join(" + ")}</p>
-                        </>
-                      )}
-                      {opp.confidence && (
-                        <>
-                          <span className="opp__label">Confidence</span>
-                          <p className="opp__text">{opp.confidence}</p>
-                        </>
-                      )}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </>
-          )}
-
-          {/* Recommendation */}
-          {showRecommendation && (
-            <WindowPanel title="ai-recommendation.app" tone="choc" dark flush>
-              <div className="rec">
-                <div className="rec__main">
-                  <p className="meta-label" style={{ color: "var(--cream-muted)" }}>
-                    PRIORITY OPPORTUNITY
-                  </p>
-                  <h3 className="rec__title">{topOpp?.title ?? topInitiative?.title ?? "Growth action plan"}</h3>
-                  <div className="rec__grid">
-                    <span className="rec__label">Why we recommend this</span>
-                    <p className="rec__text">{topOpp?.why ?? sentences(actionPlan?.executive_summary, 2) ?? "The team identified this as the strongest opportunity in your current business data."}</p>
-                    <span className="rec__label">Evidence</span>
-                    <p className="rec__text">{topOpp?.evidence ?? matchedTopInitiative?.expected_impact ?? "Based on the team's analysis of your live Razorpay TEST data."}</p>
-                    {(topOpp?.impact || matchedTopInitiative?.expected_impact) && (
-                      <>
-                        <span className="rec__label">Expected impact</span>
-                        <p className="rec__text rec__text--strong">{topOpp?.impact ?? matchedTopInitiative?.expected_impact}</p>
-                      </>
-                    )}
-                    <span className="rec__label">Next step</span>
-                    <p className="rec__text">{matchedTopInitiative?.next_steps ?? topOpp?.action ?? "Review and approve the recommended action below."}</p>
-                  </div>
-                </div>
-                <div className="rec__side">
-                  <div className="rec__stat">
-                    <span className="rec__statLabel">Opportunities found</span>
-                    <span className="rec__statValue">{totals?.opportunities_created ?? opportunities.length}</span>
-                  </div>
-                  <div className="rec__stat">
-                    <span className="rec__statLabel">Actions prepared</span>
-                    <span className="rec__statValue">{totals?.actions_proposed ?? actionPlan?.initiatives?.length ?? 0}</span>
-                  </div>
-                  <Button variant="primary" mono onClick={() => navigate("/actions")}>
-                    Review & Approve →
-                  </Button>
-                  <p className="rec__hint">No action executes without your explicit approval.</p>
-                </div>
-              </div>
-            </WindowPanel>
-          )}
         </div>
 
         {/* RIGHT — COMMAND CENTER CONSOLE */}
@@ -2101,6 +1931,178 @@ export function AgentsPage() {
           </WindowPanel>
         </aside>
       </div>
+
+      {/* Workflow visualization */}
+      <WindowPanel title="workflow.graph — agent-handoff.app">
+        <div className="agents-cc__sectionIntro">
+          <h3>Workflow — how work moves through the team</h3>
+          <p>From real business data to human approval. Nodes light up as the workflow is actually traversed.</p>
+        </div>
+        <WorkflowGraphViz
+          executedCount={executedAgentNames.length}
+          signalsCount={radar?.signals.length ?? 0}
+          opportunitiesCount={opportunities.length}
+          hasDebate={Boolean(lastRunResult?.debate_id)}
+          hasActionPlan={Boolean(actionPlan)}
+          selectedId={workflowSel}
+          onSelect={setWorkflowSel}
+        />
+        {workflowSel && (
+          <div className="wflow__detail">
+            <span className="meta-label">SELECTED NODE</span>
+            <p>
+              <strong>{workflowSel.toUpperCase()}</strong> — {workflowSel === "data" ? "Raw Razorpay payments, orders, and customers from your workspace." : workflowSel === "memory" ? "Historical context retained across analyses — past decisions and outcomes." : workflowSel === "specialists" ? "Domain specialists examine payments, customers, products, and campaigns in parallel." : workflowSel === "findings" ? "Evidence-backed findings with reasoning and confidence scoring." : workflowSel === "debate" ? "Agents cross-examine findings before a recommendation is locked." : workflowSel === "ranking" ? "Opportunities ranked by revenue, confidence, and effort." : workflowSel === "action" ? "Action plan prepared for your explicit approval — no auto-execution." : "You review and approve — the team never acts without consent."}
+            </p>
+            <button type="button" className="wflow__close" onClick={() => setWorkflowSel(null)}>
+              Clear
+            </button>
+          </div>
+        )}
+      </WindowPanel>
+
+      {/* Agent Findings */}
+      <div className="agents-cc__sectionHead">
+        <div>
+          <h2>Agent Findings</h2>
+          <p>What each specialist concluded — with evidence, reasoning, and next step. Not a single paragraph: real work.</p>
+        </div>
+        {findings.length > 0 && <span className="agents-cc__count">{findings.length} FINDINGS</span>}
+      </div>
+      {findings.length === 0 ? (
+        <div className="agents-cc__empty">
+          {executedAgentNames.length === 0 ? "WAITING FOR ANALYSIS — findings will appear here once the team starts working. Every conclusion is backed by evidence from your live data." : "No summarized findings yet — the team may still be working, or conclusions were brief. Open a workstation above to inspect raw output."}
+        </div>
+      ) : (
+        <div className="agents-cc__findings">
+          {findings.map((f) => (
+            <article key={f.name} className="finding">
+              <div className="finding__head">
+                <span className="finding__agent">{f.label.toUpperCase()}</span>
+                <span className="finding__spec">{f.specialty}</span>
+                {f.confidence && <span className={`finding__conf finding__conf--${f.confidence.toLowerCase()}`}>{f.confidence.toUpperCase()} confidence</span>}
+              </div>
+              <div className="finding__grid">
+                <span className="finding__label">Finding</span>
+                <p className="finding__text finding__text--strong">{f.finding}</p>
+                {f.why && (
+                  <>
+                    <span className="finding__label">Why it matters</span>
+                    <p className="finding__text">{f.why}</p>
+                  </>
+                )}
+                <span className="finding__label">Evidence</span>
+                <p className="finding__text">{f.evidence}</p>
+                {f.action && (
+                  <>
+                    <span className="finding__label">Recommended action</span>
+                    <p className="finding__text">{f.action}</p>
+                  </>
+                )}
+                <span className="finding__label">Data examined</span>
+                <p className="finding__text">{agentProfile(f.name).looksAt}</p>
+              </div>
+              <div className="finding__foot">
+                <button type="button" className="finding__link" onClick={() => setSelectedAgent(f.name)}>
+                  Open workstation →
+                </button>
+                <span className="finding__meta">Confidence: {f.confidence ?? "—"} · Related: Priority Ranking · Technical Feasibility · Growth Manager</span>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {/* Opportunities */}
+      {opportunities.length > 0 && (
+        <>
+          <div className="agents-cc__sectionHead">
+            <div>
+              <h2>Growth Opportunities</h2>
+              <p>Ranked by the AI team from your live data — strongest evidence first.</p>
+            </div>
+          </div>
+          <div className="agents-cc__opps">
+            {opportunities.map((opp, idx) => (
+              <article key={`${opp.title}-${idx}`} className="opp">
+                <div className="opp__head">
+                  <div>
+                    <p className="meta-label">OPPORTUNITY {String(idx + 1).padStart(2, "0")}</p>
+                    <h3 className="opp__title">{opp.title}</h3>
+                  </div>
+                  {opp.impact && <span className="opp__impact">{opp.impact}</span>}
+                </div>
+                <div className="opp__grid">
+                  <span className="opp__label">Why it matters</span>
+                  <p className="opp__text">{opp.why}</p>
+                  <span className="opp__label">Evidence</span>
+                  <p className="opp__text">{opp.evidence}</p>
+                  {opp.action && (
+                    <>
+                      <span className="opp__label">Recommended action</span>
+                      <p className="opp__text opp__text--strong">{opp.action}</p>
+                    </>
+                  )}
+                  {opp.discoveredBy.length > 0 && (
+                    <>
+                      <span className="opp__label">Discovered by</span>
+                      <p className="opp__text">{opp.discoveredBy.join(" + ")}</p>
+                    </>
+                  )}
+                  {opp.confidence && (
+                    <>
+                      <span className="opp__label">Confidence</span>
+                      <p className="opp__text">{opp.confidence}</p>
+                    </>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Recommendation */}
+      {showRecommendation && (
+        <WindowPanel title="ai-recommendation.app" tone="choc" dark flush>
+          <div className="rec">
+            <div className="rec__main">
+              <p className="meta-label" style={{ color: "var(--cream-muted)" }}>
+                PRIORITY OPPORTUNITY
+              </p>
+              <h3 className="rec__title">{topOpp?.title ?? topInitiative?.title ?? "Growth action plan"}</h3>
+              <div className="rec__grid">
+                <span className="rec__label">Why we recommend this</span>
+                <p className="rec__text">{topOpp?.why ?? sentences(actionPlan?.executive_summary, 2) ?? "The team identified this as the strongest opportunity in your current business data."}</p>
+                <span className="rec__label">Evidence</span>
+                <p className="rec__text">{topOpp?.evidence ?? matchedTopInitiative?.expected_impact ?? "Based on the team's analysis of your live Razorpay TEST data."}</p>
+                {(topOpp?.impact || matchedTopInitiative?.expected_impact) && (
+                  <>
+                    <span className="rec__label">Expected impact</span>
+                    <p className="rec__text rec__text--strong">{topOpp?.impact ?? matchedTopInitiative?.expected_impact}</p>
+                  </>
+                )}
+                <span className="rec__label">Next step</span>
+                <p className="rec__text">{matchedTopInitiative?.next_steps ?? topOpp?.action ?? "Review and approve the recommended action below."}</p>
+              </div>
+            </div>
+            <div className="rec__side">
+              <div className="rec__stat">
+                <span className="rec__statLabel">Opportunities found</span>
+                <span className="rec__statValue">{totals?.opportunities_created ?? opportunities.length}</span>
+              </div>
+              <div className="rec__stat">
+                <span className="rec__statLabel">Actions prepared</span>
+                <span className="rec__statValue">{totals?.actions_proposed ?? actionPlan?.initiatives?.length ?? 0}</span>
+              </div>
+              <Button variant="primary" mono onClick={() => navigate("/actions")}>
+                Review & Approve →
+              </Button>
+              <p className="rec__hint">No action executes without your explicit approval.</p>
+            </div>
+          </div>
+        </WindowPanel>
+      )}
+
 
       {/* ── BOTTOM TEAM ROSTER (horizontal, always visible) ─────────────── */}
       <WindowPanel title="team-roster.app — click-any-agent.app" flush>

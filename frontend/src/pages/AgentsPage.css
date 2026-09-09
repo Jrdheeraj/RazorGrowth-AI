@@ -12,11 +12,11 @@
   padding-block: 18px 56px;
 }
 .agents-cc--wide {
-  width: min(1920px, 94vw);
+  width: min(1920px, calc(100vw - 24px));
   max-width: none;
   margin-inline: auto;
   padding-inline: 0;
-  /* 94vw centered = 3% outer margins each side — satisfies 92-97% / 90-96vw spec, minimal margins, centered */
+  /* calc(100vw - 24px) = 12px outer margins each side — uses available viewport width, minimal gutters, centered, responsive */
 }
 
 /* ── Hero ─────────────────────────────────────────────────────────────── */
