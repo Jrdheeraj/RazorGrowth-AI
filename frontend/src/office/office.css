@@ -1,0 +1,16 @@
+/* Office canvas — pixel-art rendering */
+.office-host {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  /* match munder-difflin floor wrapper: dark ink background while Pixi boots */
+  background: #1a1320;
+  box-shadow: inset 0 0 0 1px #a899b5;
+}
+.office-host canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
