@@ -534,7 +534,7 @@ export function GrowthRadar() {
   /* ——— early returns ——— */
   if (error === "login_required") {
     return (
-      <section className="shell rg-page" aria-labelledby="radar-heading">
+      <section className="rg-page rg-page--wide" aria-labelledby="radar-heading">
         <div className="rg-topHead">
           <p className="meta-label">YOUR BUSINESS · GROWTH RADAR</p>
           <h1 id="radar-heading" className="display-lg">Growth Radar</h1>
@@ -551,7 +551,7 @@ export function GrowthRadar() {
   }
   if (error === "no_workspace") {
     return (
-      <section className="shell rg-page" aria-labelledby="radar-heading">
+      <section className="rg-page rg-page--wide" aria-labelledby="radar-heading">
         <div className="rg-topHead">
           <p className="meta-label">YOUR BUSINESS · GROWTH RADAR</p>
           <h1 id="radar-heading" className="display-lg">Growth Radar</h1>
@@ -566,7 +566,7 @@ export function GrowthRadar() {
   }
   if (error) {
     return (
-      <section className="shell rg-page">
+      <section className="rg-page rg-page--wide">
         <WindowPanel title="growth-radar.app">
           <p className="meta-label" style={{ color: "var(--coral-strong)", marginBottom: 8 }}>RADAR DATA UNAVAILABLE</p>
           <p style={{ color: "var(--ink-soft)", lineHeight: "var(--leading-body)" }}>{error}</p>
@@ -578,7 +578,7 @@ export function GrowthRadar() {
   }
   if (loading && !radar) {
     return (
-      <section className="shell rg-page">
+      <section className="rg-page rg-page--wide">
         <div className="rg-topHead rg-topHead--skeleton">
           <div className="rg-skeleton rg-skeleton--title" />
           <div className="rg-skeleton rg-skeleton--line" />
@@ -597,12 +597,12 @@ export function GrowthRadar() {
   }
   if (!radar || !metrics || !sufficiency) {
     return (
-      <section className="shell rg-page"><WindowPanel title="growth-radar.app"><p className="meta-label">Analysing your business…</p></WindowPanel></section>
+      <section className="rg-page rg-page--wide"><WindowPanel title="growth-radar.app"><p className="meta-label">Analysing your business…</p></WindowPanel></section>
     );
   }
 
   return (
-    <section className="shell rg-page" aria-labelledby="radar-heading">
+    <section className="rg-page rg-page--wide" aria-labelledby="radar-heading">
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <header className="rg-header">
         <div className="rg-header__main">
