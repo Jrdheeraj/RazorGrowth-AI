@@ -1,13 +1,12 @@
 /**
  * /actions — Growth Actions console.
  *
- * The merchant-facing half of the Phase 4 human-in-the-loop workflow:
- * AI-proposed money actions → review (explainable + bounded) →
- * approve / reject → execute → audit trail.
+ * Dashboard design adapted from the munder-difflin-main workflow board
+ * (TasksKanban + TaskDetail overlay + TriggerHistoryTab approval cards):
+ * a status-column board with accent-edged cards, a KPI strip, a detail
+ * overlay per action, and approve / reject / run controls inline.
  *
- * All data comes from the existing actions APIs. Nothing is fabricated:
- * if no action has been proposed yet, the page says so.
- *
+ * All data comes from the existing actions APIs. Nothing is fabricated.
  * MERCHANT LANGUAGE ONLY — no API endpoints, enums, or developer terms.
  */
 import { useCallback, useEffect, useState } from "react";
@@ -41,6 +40,18 @@ function timeOf(iso: string | null | undefined): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function relTime(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "";
+  const mins = Math.round((Date.now() - t) / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
 }
 
 /* ── Plain-English translation of action types (no enums shown) ─────────── */
@@ -116,7 +127,7 @@ function actionCopy(type: string): ActionCopy {
   );
 }
 
-/* ── Status presentation ────────────────────────────────────────────────── */
+/* ── Status presentation ───────────────────────────────────────────────── */
 
 function statusLabel(status: string): string {
   switch (status) {
@@ -140,6 +151,57 @@ function statusTone(status: string): string {
     case "failed": return "failed";
     default: return "waiting";
   }
+}
+
+/** Board column definition — adapted from the reference kanban's COLUMNS. */
+const BOARD_COLUMNS: Array<{
+  key: string;
+  label: string;
+  accent: string;
+  statuses: string[];
+}> = [
+  { key: "awaiting", label: "Awaiting approval", accent: "awaiting", statuses: ["requested"] },
+  { key: "approved", label: "Approved", accent: "approved", statuses: ["approved"] },
+  { key: "running", label: "Running", accent: "running", statuses: ["executing"] },
+  { key: "completed", label: "Completed", accent: "completed", statuses: ["completed"] },
+  { key: "stopped", label: "Stopped", accent: "stopped", statuses: ["rejected", "failed"] },
+];
+
+/* ── Expected impact — derived from real payload values only ────────────── */
+
+/** Money involved in the action, from the real payload. */
+function amountOf(action: AgentAction): number | null {
+  const input = action.input_payload ?? {};
+  const meta = (input.metadata ?? {}) as Record<string, unknown>;
+  if (typeof meta.amount_inr === "number") return meta.amount_inr;
+  if (action.action_type === "create_discount" && typeof input.proposed_amount === "number") {
+    return input.proposed_amount;
+  }
+  return null;
+}
+
+/** Audience size for campaigns, from the real payload. */
+function audienceOf(action: AgentAction): number | null {
+  const input = action.input_payload ?? {};
+  return typeof input.target_count === "number" ? input.target_count : null;
+}
+
+/** 1–5 impact meter (reference PriorityDots) over the real money involved. */
+function impactLevel(amount: number | null): number {
+  if (amount === null || amount <= 0) return 0;
+  if (amount >= 5000) return 5;
+  if (amount >= 2000) return 4;
+  if (amount >= 1000) return 3;
+  if (amount >= 250) return 2;
+  return 1;
+}
+
+function impactTooltip(action: AgentAction): string {
+  const amount = amountOf(action);
+  if (amount !== null) return `Expected impact: up to ${rupees(amount)}`;
+  const audience = audienceOf(action);
+  if (audience !== null) return `Expected impact: ${audience} selected customers`;
+  return "No monetary impact recorded for this action";
 }
 
 /* ── Audit trail: translate event types into merchant language ──────────── */
@@ -267,18 +329,140 @@ function payloadView(action: AgentAction): PayloadView {
   }
 }
 
+/* ── Small presentational pieces (adapted from the reference) ───────────── */
+
+/** Impact meter — reference PriorityDots, driven by the real money involved. */
+function ImpactDots({ action }: { action: AgentAction }) {
+  const level = impactLevel(amountOf(action));
+  const title = impactTooltip(action);
+  if (level === 0) {
+    return (
+      <span className="impact-dots impact-dots--none" title={title}>
+        no money involved
+      </span>
+    );
+  }
+  const color = level >= 4 ? "var(--coral-strong)" : level === 3 ? "var(--act-amber-deep)" : "var(--green-deep)";
+  return (
+    <span className="impact-dots" title={title} aria-label={title}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <span
+          key={i}
+          className="impact-dot"
+          style={{
+            background: i <= level ? color : "var(--paper-deep)",
+            boxShadow: "inset 0 0 0 1px var(--line-soft)",
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/** One board card — reference TaskCard: accent edge, id, title, hint of detail. */
+function BoardCard({
+  action,
+  accent,
+  onOpen,
+  onApprove,
+  onReject,
+  onRun,
+  busy,
+  result,
+}: {
+  action: AgentAction;
+  accent: string;
+  onOpen: () => void;
+  onApprove: () => void;
+  onReject: () => void;
+  onRun: () => void;
+  busy: boolean;
+  result: ExecutionResponse | undefined;
+}) {
+  const copy = actionCopy(action.action_type);
+  const audience = audienceOf(action);
+  return (
+    <div className={`board-card board-card--${accent}`}>
+      <button type="button" className="board-card__main" onClick={onOpen} title="Open action details">
+        <span className={`board-card__edge board-card__edge--${accent}`} aria-hidden="true" />
+        <span className="board-card__body">
+          <span className="board-card__id">{action.id}</span>
+          <span className="board-card__title">{copy.title}</span>
+          <span className="board-card__facts">
+            <ImpactDots action={action} />
+            {audience !== null && (
+              <span className="board-card__audience">{audience} customers</span>
+            )}
+          </span>
+          <span className="board-card__time">{relTime(action.created_at)}</span>
+        </span>
+        {action.status === "requested" && (
+          <span className="board-card__you">needs you</span>
+        )}
+      </button>
+      {/* Controls render as siblings (never nested buttons) — reference pattern. */}
+      {action.status === "requested" && (
+        <div className="board-card__controls">
+          <Button variant="primary" mono size="sm" disabled={busy} onClick={onApprove}>
+            {busy ? "Saving…" : "Approve"}
+          </Button>
+          <Button variant="secondary" mono size="sm" disabled={busy} onClick={onReject}>
+            Reject
+          </Button>
+        </div>
+      )}
+      {action.status === "approved" && (
+        <div className="board-card__controls">
+          <Button variant="primary" mono size="sm" disabled={busy} onClick={onRun}>
+            {busy ? "Running…" : "Run now"}
+          </Button>
+        </div>
+      )}
+      {action.status === "executing" && (
+        <div className="board-card__controls">
+          <span className="action-status action-status--running">
+            <span className="action-status__dot" aria-hidden="true" />
+            Running…
+          </span>
+        </div>
+      )}
+      {(action.status === "failed" || action.status === "rejected") && (
+        <div className="board-card__controls">
+          <span className={`action-status action-status--${statusTone(action.status)}`}>
+            <span className="action-status__dot" aria-hidden="true" />
+            {statusLabel(action.status)}
+          </span>
+        </div>
+      )}
+      {result && (
+        <div className={`board-card__result${result.status === "failed" ? " board-card__result--failure" : ""}`}>
+          {result.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Page ───────────────────────────────────────────────────────────────── */
 
 type Tab = "waiting" | "approved" | "completed" | "all";
+
+interface ActivityItem {
+  kind: string;
+  accent: "awaiting" | "completed" | "failed";
+  text: string;
+  at: string | null;
+}
 
 export function ActionsPage() {
   const navigate = useNavigate();
   const [actions, setActions] = useState<AgentAction[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("waiting");
+  const [tab, setTab] = useState<Tab>("all");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, ExecutionResponse>>({});
   const [audits, setAudits] = useState<Record<string, AuditEventRow[]>>({});
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -294,6 +478,17 @@ export function ActionsPage() {
     load();
   }, [load]);
 
+  /* Close the overlay on Escape — reference detail-overlay behavior. */
+  useEffect(() => {
+    if (!openId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [openId]);
+
+  /* Filtering — the original tab semantics, preserved exactly. */
   const visible = (actions ?? []).filter((a) => {
     if (tab === "all") return true;
     if (tab === "waiting") return a.status === "requested";
@@ -301,7 +496,42 @@ export function ActionsPage() {
     return a.status === "completed" || a.status === "failed";
   });
 
-  const waitingCount = (actions ?? []).filter((a) => a.status === "requested").length;
+  const all = actions ?? [];
+  const waitingCount = all.filter((a) => a.status === "requested").length;
+  const inFlightCount = all.filter((a) => a.status === "approved" || a.status === "executing").length;
+  const completedCount = all.filter((a) => a.status === "completed").length;
+  const failedCount = all.filter((a) => a.status === "failed").length;
+  const atStake = all
+    .filter((a) => a.status === "requested")
+    .reduce((sum, a) => sum + (amountOf(a) ?? 0), 0);
+
+  /* Priority order for the awaiting column: highest expected impact first. */
+  const byPriority = (a: AgentAction, b: AgentAction) => {
+    const la = impactLevel(amountOf(a));
+    const lb = impactLevel(amountOf(b));
+    if (la !== lb) return lb - la;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  };
+
+  /* Recent activity — derived only from real timestamps on the records. */
+  const activity: ActivityItem[] = all
+    .flatMap<ActivityItem>((a) => {
+      const copy = actionCopy(a.action_type);
+      const items: ActivityItem[] = [
+        { kind: "proposed", accent: "awaiting", text: `AI team prepared "${copy.title}"`, at: a.created_at },
+      ];
+      if (a.completed_at) {
+        items.push(
+          a.status === "failed"
+            ? { kind: "failed", accent: "failed", text: `"${copy.title}" could not complete — stopped safely`, at: a.completed_at }
+            : { kind: "completed", accent: "completed", text: `"${copy.title}" finished running`, at: a.completed_at },
+        );
+      }
+      return items;
+    })
+    .filter((i) => i.at !== null)
+    .sort((x, y) => new Date(y.at ?? 0).getTime() - new Date(x.at ?? 0).getTime())
+    .slice(0, 8);
 
   /* Approve / reject / execute — existing APIs, unchanged. */
   const handle = async (action: AgentAction, op: "approve" | "reject" | "execute") => {
@@ -330,28 +560,26 @@ export function ActionsPage() {
     }
   };
 
-  const loadAudit = async (action: AgentAction) => {
-    if (audits[action.id]) {
-      setAudits((a) => {
-        const next = { ...a };
-        delete next[action.id];
-        return next;
-      });
-      return;
-    }
-    try {
-      const data = await fetchActionAudit(action.id);
-      // Ascending — story order: proposed → decision → execution → result.
-      const events = [...(data.audit_events ?? [])].reverse();
-      setAudits((a) => ({ ...a, [action.id]: events }));
-    } catch {
-      setError("The audit trail could not be loaded. Please try again.");
+  /* Audit trail — loaded when a detail overlay opens (existing API). */
+  const openDetail = async (action: AgentAction) => {
+    setOpenId(action.id);
+    if (!audits[action.id]) {
+      try {
+        const data = await fetchActionAudit(action.id);
+        // Ascending — story order: proposed → decision → execution → result.
+        const events = [...(data.audit_events ?? [])].reverse();
+        setAudits((a) => ({ ...a, [action.id]: events }));
+      } catch {
+        setError("The audit trail could not be loaded. Please try again.");
+      }
     }
   };
 
+  const openAction = openId ? all.find((a) => a.id === openId) ?? null : null;
+
   return (
-    <section className="shell section" aria-labelledby="actions-heading">
-      {/* Header */}
+    <section className="shell section actions-page" aria-labelledby="actions-heading">
+      {/* Header — reference toolbar composition: title left, live state right. */}
       <div className="actions-header">
         <div>
           <p className="meta-label">YOUR BUSINESS · GROWTH ACTIONS</p>
@@ -360,81 +588,94 @@ export function ActionsPage() {
           </h1>
           <p className="actions-header__lead">
             When your AI team finds an opportunity worth acting on, it prepares the action — you decide
-            whether it runs. Every action below shows exactly what will happen, what it will not do,
+            whether it runs. Every action shows exactly what will happen, what it will not do,
             and who approved it.
           </p>
         </div>
-        <span className="actions-live">
+        <span className={`actions-live${waitingCount > 0 ? " actions-live--hot" : ""}`}>
           <span className="actions-live__dot" aria-hidden="true" />
           {waitingCount > 0 ? `${waitingCount} awaiting your decision` : "No decisions pending"}
         </span>
       </div>
 
-      {/* Journey strip */}
-      <div className="actions-journey" aria-hidden="true">
-        <span>Radar detects</span>
-        <span className="actions-journey__rule" />
-        <span>AI team analyses</span>
-        <span className="actions-journey__rule" />
-        <span className="actions-journey__step--active">You approve</span>
-        <span className="actions-journey__rule" />
-        <span>System executes</span>
-        <span className="actions-journey__rule" />
-        <span>Audit records</span>
-      </div>
-
       {/* Error */}
       {error && (
-        <div className="actions-section">
+        <div className="actions-banner">
           <WindowPanel title="status.app">
             <p style={{ color: "var(--coral-strong)" }}>{error}</p>
           </WindowPanel>
         </div>
       )}
 
-      {/* Actions list */}
-      <div className="actions-section">
-        <div className="actions-section__head">
-          <h2 className="meta-label" style={{ margin: 0 }}>PREPARED ACTIONS</h2>
-        </div>
-        <p className="actions-section__lede">
-          Each action was proposed by the AI team from your real Razorpay TEST data. Approving an action
-          lets it run — rejecting stops it permanently. Actions are bounded: they only touch the
-          customers and payments named below.
-        </p>
-
-        {!actions && !error && (
+      {/* Loading */}
+      {!actions && !error && (
+        <div className="actions-banner">
           <WindowPanel title="growth-actions.app">
-            <p className="meta-label" style={{ color: "var(--ink-soft)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "var(--tracking-meta)" }}>
-              Loading your actions…
-            </p>
+            <p className="meta-label">Loading your actions…</p>
           </WindowPanel>
-        )}
+        </div>
+      )}
 
-        {actions && actions.length === 0 && (
-          <div className="actions-empty">
-            <p className="meta-label" style={{ color: "var(--coral-strong)" }}>NO ACTIONS PREPARED YET</p>
-            <p>
-              The AI team has not proposed any actions yet. Run the AI Team analysis from your Growth Radar
-              — when an opportunity is strong enough, the team will prepare an action for your approval.
-            </p>
-            <div style={{ marginTop: 16 }}>
-              <Button variant="primary" mono onClick={() => navigate("/growth-radar")}>
-                Open Growth Radar →
-              </Button>
+      {actions && actions.length === 0 && (
+        <div className="actions-empty">
+          <p className="meta-label" style={{ color: "var(--coral-strong)" }}>NO ACTIONS PREPARED YET</p>
+          <p>
+            The AI team has not proposed any actions yet. Run the AI Team analysis from your Growth Radar
+            — when an opportunity is strong enough, the team will prepare an action for your approval.
+          </p>
+          <div style={{ marginTop: 16 }}>
+            <Button variant="primary" mono onClick={() => navigate("/growth-radar")}>
+              Open Growth Radar →
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {actions && actions.length > 0 && (
+        <>
+          {/* KPI strip */}
+          <div className="actions-kpis" role="group" aria-label="Actions overview">
+            <div className="actions-kpi">
+              <span className="actions-kpi__label">Total actions</span>
+              <span className="actions-kpi__value">{all.length}</span>
+              <span className="actions-kpi__sub">prepared by your AI team</span>
+            </div>
+            <div className="actions-kpi actions-kpi--attention">
+              <span className="actions-kpi__label">Awaiting approval</span>
+              <span className="actions-kpi__value">{waitingCount}</span>
+              <span className="actions-kpi__sub">
+                {atStake > 0 ? `${rupees(atStake)} at stake` : "no money at stake"}
+              </span>
+            </div>
+            <div className="actions-kpi">
+              <span className="actions-kpi__label">Approved & running</span>
+              <span className="actions-kpi__value">{inFlightCount}</span>
+              <span className="actions-kpi__sub">cleared by you — executing next</span>
+            </div>
+            <div className="actions-kpi">
+              <span className="actions-kpi__label">Completed</span>
+              <span className="actions-kpi__value">{completedCount}</span>
+              <span className="actions-kpi__sub">finished successfully</span>
+            </div>
+            <div className="actions-kpi">
+              <span className="actions-kpi__label">Failed</span>
+              <span className="actions-kpi__value">{failedCount}</span>
+              <span className="actions-kpi__sub">stopped safely — no unauthorized action</span>
             </div>
           </div>
-        )}
 
-        {actions && actions.length > 0 && (
-          <>
-            <div className="actions-tabs" role="tablist" aria-label="Filter actions by status">
+          {/* Board toolbar — count left, filter chips right (reference pattern). */}
+          <div className="actions-boardbar">
+            <span className="actions-boardbar__count">
+              {visible.length} of {all.length} shown
+            </span>
+            <div className="actions-filters" role="tablist" aria-label="Filter actions by status">
               {(
                 [
-                  ["waiting", "Waiting approval"],
+                  ["all", "All"],
+                  ["waiting", `Waiting approval${waitingCount > 0 ? ` (${waitingCount})` : ""}`],
                   ["approved", "Approved"],
                   ["completed", "Executed"],
-                  ["all", "All"],
                 ] as Array<[Tab, string]>
               ).map(([key, label]) => (
                 <button
@@ -442,188 +683,87 @@ export function ActionsPage() {
                   type="button"
                   role="tab"
                   aria-selected={tab === key}
-                  className={`actions-tab${tab === key ? " actions-tab--active" : ""}`}
+                  className={`actions-filter${tab === key ? " actions-filter--active" : ""}`}
                   onClick={() => setTab(key)}
                 >
                   {label}
                 </button>
               ))}
             </div>
+          </div>
 
-            <div className="actions-list">
-              {visible.map((action) => {
-                const copy = actionCopy(action.action_type);
-                const view = payloadView(action);
-                const result = results[action.id];
-                const audit = audits[action.id];
-                return (
-                  <article className="action-card" key={action.id}>
-                    <div className="action-card__bar">
-                      <span>GROWTH ACTION · {copy.title.toUpperCase()}</span>
-                      <span className={`action-status action-status--${statusTone(action.status)}`}>
-                        <span className="action-status__dot" aria-hidden="true" />
-                        {statusLabel(action.status)}
-                      </span>
-                    </div>
-                    <div className="action-card__body">
-                      <h3 className="action-card__title">{copy.title}</h3>
-
-                      <div className="action-card__grid">
-                        <div className="action-card__cell">
-                          <p className="action-cell-label">WHY THIS WAS RECOMMENDED</p>
-                          <p>{copy.what}</p>
-                        </div>
-                        <div className="action-card__cell">
-                          <p className="action-cell-label">WHAT THE AI WILL DO</p>
-                          <p>{view.actionLine}</p>
-                        </div>
-                        <div className="action-card__cell">
-                          <p className="action-cell-label">SCOPE — WHO / WHAT IS AFFECTED</p>
-                          <p>{view.scopeLine}</p>
-                        </div>
-                        <div className="action-card__cell">
-                          <p className="action-cell-label">MAXIMUM AMOUNT INVOLVED</p>
-                          <p>{view.amountLine ?? "No money is moved by this action."}</p>
-                        </div>
-                      </div>
-
-                      <div className="action-card__bounds">
-                        <p className="action-cell-label" style={{ marginBottom: 0, color: "var(--green-deep)" }}>
-                          BOUNDARIES
-                        </p>
-                        <ul>
-                          {copy.willDo.map((line) => (
-                            <li key={line}>{line}</li>
-                          ))}
-                          {copy.wontDo.map((line) => (
-                            <li key={line}>Will NOT: {line.replace(/^(Charge|Contact|Send|Exceed|Apply|Retry|Create|Take|Run|Record) /, (m) => `${m.toLowerCase()}`)}</li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      <div className="action-card__footer">
-                        <p className="action-card__approval-note">
-                          Prepared {timeOf(action.created_at)}
-                          {action.requested_by ? " · by the AI team" : ""}
-                        </p>
-                        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                          {action.status === "requested" && (
-                            <>
-                              <Button
-                                variant="primary"
-                                mono
-                                disabled={busyId === action.id}
-                                onClick={() => handle(action, "approve")}
-                              >
-                                {busyId === action.id ? "Saving…" : "Approve"}
-                              </Button>
-                              <Button
-                                variant="secondary"
-                                mono
-                                disabled={busyId === action.id}
-                                onClick={() => handle(action, "reject")}
-                              >
-                                Reject
-                              </Button>
-                            </>
-                          )}
-                          {action.status === "approved" && (
-                            <Button
-                              variant="primary"
-                              mono
-                              disabled={busyId === action.id}
-                              onClick={() => handle(action, "execute")}
-                            >
-                              {busyId === action.id ? "Running…" : "Run now"}
-                            </Button>
-                          )}
-                          {action.status === "executing" && (
-                            <span className="action-status action-status--running">
-                              <span className="action-status__dot" aria-hidden="true" />
-                              Running…
-                            </span>
-                          )}
-                          <Button variant="ghost-dark" mono onClick={() => loadAudit(action)}>
-                            {audit ? "Hide audit trail" : "View audit trail"}
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Execution result */}
-                      {result && (
-                        <div className={`action-result${result.status === "failed" ? " action-result--failure" : ""}`}>
-                          <p className="action-cell-label" style={{ marginBottom: 6, color: result.status === "failed" ? "var(--coral-strong)" : "var(--green-deep)" }}>
-                            EXECUTION RESULT
-                          </p>
-                          <p>{result.message}</p>
-                        </div>
-                      )}
-                      {action.status === "completed" && !result && (
-                        <div className="action-result">
-                          <p className="action-cell-label" style={{ marginBottom: 6, color: "var(--green-deep)" }}>
-                            EXECUTION RESULT
-                          </p>
-                          <p>
-                            This action was executed{action.completed_at ? ` on ${timeOf(action.completed_at)}` : ""}.
-                            Open the audit trail below for the full recorded sequence.
-                          </p>
-                        </div>
-                      )}
-                      {action.status === "failed" && !result && (
-                        <div className="action-result action-result--failure">
-                          <p className="action-cell-label" style={{ marginBottom: 6, color: "var(--coral-strong)" }}>
-                            EXECUTION FAILED — SAFE STATE
-                          </p>
-                          <p>
-                            This action could not complete. It stopped safely — no unauthorized money
-                            action was taken. You can review the audit trail to see exactly what happened.
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Audit trail */}
-                      {audit && (
-                        <div style={{ marginTop: 16 }}>
-                          <p className="meta-label" style={{ marginBottom: 12 }}>AUDIT TRAIL</p>
-                          {audit.length === 0 ? (
-                            <p style={{ fontSize: "var(--text-small)", color: "var(--ink-soft)" }}>
-                              No audit events were recorded for this action yet.
-                            </p>
-                          ) : (
-                            <div className="audit-timeline">
-                              {audit.map((event) => {
-                                const step = auditStep(event);
-                                return (
-                                  <div className={`audit-step audit-step--${step.actor}`} key={event.id}>
-                                    <span className="audit-step__marker" aria-hidden="true">
-                                      {step.actor === "human" ? "YOU" : step.actor === "ai" ? "AI" : "SYS"}
-                                    </span>
-                                    <div className="audit-step__body">
-                                      <p className="audit-step__title">{step.title}</p>
-                                      <p className="audit-step__meta">{timeOf(event.created_at)}</p>
-                                      <p className="audit-step__detail">{step.detail}</p>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </article>
+          {/* Status-column board — reference TasksKanban composition. */}
+          <div className="actions-board">
+            {BOARD_COLUMNS.map((col) => {
+              const cards = visible
+                .filter((a) => col.statuses.includes(a.status))
+                .sort(col.key === "awaiting" ? byPriority : (a, b) =>
+                  new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
                 );
-              })}
-
-              {visible.length === 0 && (
-                <div className="actions-empty">
-                  <p>No actions match this filter right now.</p>
+              return (
+                <div key={col.key} className={`board-column board-column--${col.accent}`}>
+                  <div className={`board-column__head board-column__head--${col.accent}`}>
+                    <span>{col.label}</span>
+                    <span className="board-column__count">{cards.length}</span>
+                  </div>
+                  <div className="board-column__body">
+                    {cards.length === 0 && (
+                      <div className="board-column__empty">—</div>
+                    )}
+                    {cards.map((action) => (
+                      <BoardCard
+                        key={action.id}
+                        action={action}
+                        accent={col.accent}
+                        busy={busyId === action.id}
+                        result={results[action.id]}
+                        onOpen={() => void openDetail(action)}
+                        onApprove={() => void handle(action, "approve")}
+                        onReject={() => void handle(action, "reject")}
+                        onRun={() => void handle(action, "execute")}
+                      />
+                    ))}
+                  </div>
                 </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
+              );
+            })}
+          </div>
+
+          {/* Recent activity — reference activity-feed pattern. */}
+          <div className="actions-activity">
+            <p className="meta-label" style={{ marginBottom: 10 }}>RECENT ACTIVITY</p>
+            {activity.length === 0 ? (
+              <p className="actions-activity__empty">Nothing has happened yet.</p>
+            ) : (
+              <div className="actions-activity__list">
+                {activity.map((item, i) => (
+                  <div className="actions-activity__row" key={`${item.at}-${i}`}>
+                    <span className={`actions-activity__kind actions-activity__kind--${item.accent}`}>
+                      {item.kind}
+                    </span>
+                    <span className="actions-activity__text">{item.text}</span>
+                    <span className="actions-activity__time">{relTime(item.at)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Detail overlay — reference TaskDetail: full breakdown, big stage. */}
+      {openAction && (
+        <ActionDetailOverlay
+          action={openAction}
+          audit={audits[openAction.id]}
+          result={results[openAction.id]}
+          busy={busyId === openAction.id}
+          onApprove={() => void handle(openAction, "approve")}
+          onReject={() => void handle(openAction, "reject")}
+          onRun={() => void handle(openAction, "execute")}
+          onClose={() => setOpenId(null)}
+        />
+      )}
 
       {/* Footer */}
       <div className="actions-footer">
@@ -636,5 +776,211 @@ export function ActionsPage() {
         </Button>
       </div>
     </section>
+  );
+}
+
+/* ── Detail overlay — reference TaskDetail, adapted to Actions content ──── */
+
+function ActionDetailOverlay({
+  action,
+  audit,
+  result,
+  busy,
+  onApprove,
+  onReject,
+  onRun,
+  onClose,
+}: {
+  action: AgentAction;
+  audit: AuditEventRow[] | undefined;
+  result: ExecutionResponse | undefined;
+  busy: boolean;
+  onApprove: () => void;
+  onReject: () => void;
+  onRun: () => void;
+  onClose: () => void;
+}) {
+  const copy = actionCopy(action.action_type);
+  const view = payloadView(action);
+  const col =
+    BOARD_COLUMNS.find((c) => c.statuses.includes(action.status)) ?? BOARD_COLUMNS[0];
+
+  return (
+    <div
+      className="action-overlay"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${copy.title} details`}
+    >
+      <div className="action-overlay__panel" onClick={(e) => e.stopPropagation()}>
+        <header className="action-overlay__bar">
+          <span className="action-overlay__filename">action-detail.app</span>
+          <div className="action-overlay__bar-right">
+            <span className="action-overlay__kind">GROWTH ACTION · {copy.title.toUpperCase()}</span>
+            <button
+              type="button"
+              className="action-overlay__close"
+              onClick={onClose}
+              aria-label="Close action details"
+            >
+              ✕
+            </button>
+          </div>
+        </header>
+
+        <div className="action-overlay__content">
+          {/* Title under a status-colored edge — reference detail pattern. */}
+          <div className={`action-overlay__title-row action-overlay__title-row--${col.accent}`}>
+            <h2 className="action-overlay__title">{copy.title}</h2>
+          </div>
+
+          {/* Fact row — reference: id, badge, impact meter, timestamp. */}
+          <div className="action-overlay__facts">
+            <span className="action-overlay__id">{action.id}</span>
+            <span className={`action-status action-status--${statusTone(action.status)}`}>
+              <span className="action-status__dot" aria-hidden="true" />
+              {statusLabel(action.status)}
+            </span>
+            {action.requested_by && (
+              <span className="action-overlay__badge action-overlay__badge--ai">AI TEAM</span>
+            )}
+            {action.approved_by && (
+              <span className="action-overlay__badge action-overlay__badge--human">YOU APPROVED</span>
+            )}
+            <ImpactDots action={action} />
+            <span className="action-overlay__stamp">Prepared {timeOf(action.created_at)}</span>
+          </div>
+
+          {/* What this is / why */}
+          <div className="action-overlay__section">
+            <p className="action-cell-label">WHY THIS WAS RECOMMENDED</p>
+            <p className="action-overlay__prose">{copy.what}</p>
+          </div>
+
+          {/* The prepared action, line by line — reference contract box. */}
+          <div className="action-overlay__section">
+            <p className="action-cell-label">WHAT THE AI WILL DO</p>
+            <div className="action-overlay__contract">
+              <p>{view.actionLine}</p>
+              <p className="action-overlay__contract-sep" />
+              <p>{view.scopeLine}</p>
+              <p className="action-overlay__contract-sep" />
+              <p>{view.amountLine ?? "No money is moved by this action."}</p>
+            </div>
+          </div>
+
+          {/* Boundaries — reference Q/A trail: paired light boxes. */}
+          <div className="action-overlay__bounds">
+            <div className="action-overlay__bound action-overlay__bound--will">
+              <p className="action-overlay__bound-label">WILL DO</p>
+              <ul>
+                {copy.willDo.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="action-overlay__bound action-overlay__bound--wont">
+              <p className="action-overlay__bound-label">WILL NOT DO</p>
+              <ul>
+                {copy.wontDo.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {/* Execution outcome — real result / failure messages only. */}
+          {result && (
+            <div className={`action-result${result.status === "failed" ? " action-result--failure" : ""}`}>
+              <p className="action-cell-label" style={{ marginBottom: 6, color: result.status === "failed" ? "var(--coral-strong)" : "var(--green-deep)" }}>
+                EXECUTION RESULT
+              </p>
+              <p>{result.message}</p>
+            </div>
+          )}
+          {action.status === "completed" && !result && (
+            <div className="action-result">
+              <p className="action-cell-label" style={{ marginBottom: 6, color: "var(--green-deep)" }}>
+                EXECUTION RESULT
+              </p>
+              <p>
+                This action was executed{action.completed_at ? ` on ${timeOf(action.completed_at)}` : ""}.
+                The full recorded sequence is in the audit trail below.
+              </p>
+            </div>
+          )}
+          {action.status === "failed" && !result && (
+            <div className="action-result action-result--failure">
+              <p className="action-cell-label" style={{ marginBottom: 6, color: "var(--coral-strong)" }}>
+                EXECUTION FAILED — SAFE STATE
+              </p>
+              <p>
+                This action could not complete. It stopped safely — no unauthorized money action
+                was taken.{action.error_message ? ` Reason recorded: ${action.error_message}` : ""}
+              </p>
+            </div>
+          )}
+
+          {/* Audit trail — story order, loaded on open. */}
+          <div className="action-overlay__section action-overlay__section--audit">
+            <p className="meta-label" style={{ marginBottom: 12 }}>AUDIT TRAIL</p>
+            {!audit ? (
+              <p className="actions-activity__empty">Loading the recorded sequence…</p>
+            ) : audit.length === 0 ? (
+              <p className="actions-activity__empty">
+                No audit events were recorded for this action yet.
+              </p>
+            ) : (
+              <div className="audit-timeline">
+                {audit.map((event) => {
+                  const step = auditStep(event);
+                  return (
+                    <div className={`audit-step audit-step--${step.actor}`} key={event.id}>
+                      <span className="audit-step__marker" aria-hidden="true">
+                        {step.actor === "human" ? "YOU" : step.actor === "ai" ? "AI" : "SYS"}
+                      </span>
+                      <div className="audit-step__body">
+                        <p className="audit-step__title">{step.title}</p>
+                        <p className="audit-step__meta">{timeOf(event.created_at)}</p>
+                        <p className="audit-step__detail">{step.detail}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Controls — reference detail footer: primary decisions left. */}
+          <div className="action-overlay__controls">
+            {action.status === "requested" && (
+              <>
+                <Button variant="primary" mono disabled={busy} onClick={onApprove}>
+                  {busy ? "Saving…" : "Approve"}
+                </Button>
+                <Button variant="secondary" mono disabled={busy} onClick={onReject}>
+                  Reject
+                </Button>
+              </>
+            )}
+            {action.status === "approved" && (
+              <Button variant="primary" mono disabled={busy} onClick={onRun}>
+                {busy ? "Running…" : "Run now"}
+              </Button>
+            )}
+            {action.status === "executing" && (
+              <span className="action-status action-status--running">
+                <span className="action-status__dot" aria-hidden="true" />
+                Running…
+              </span>
+            )}
+            <Button variant="ghost-dark" mono onClick={onClose} style={{ marginLeft: "auto" }}>
+              Close
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
