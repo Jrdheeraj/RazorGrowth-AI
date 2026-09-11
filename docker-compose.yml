@@ -1,22 +1,115 @@
+# ============================================================================
+# RazorGrowth AI — full application stack
+#
+# One command from a fresh clone:
+#     docker compose up --build
+#
+# Brings up:
+#   db       — PostgreSQL 16 + pgvector (pre-installed in the image)
+#   backend  — FastAPI (waits for db health, runs Alembic migrations, then
+#              starts uvicorn)
+#   frontend — Vite build served by nginx, proxying /api to the backend
+#
+# The database is created automatically inside the container on first boot —
+# no manual PostgreSQL setup, no manual `alembic upgrade head`.
+#
+# Reset the local database (destructive — drops all data):
+#     docker compose down -v
+# ============================================================================
 services:
   db:
-    # pgvector/pgvector:pg16 is PostgreSQL 16 with the pgvector extension
-    # pre-installed. Drop-in replacement for postgres:16.
+    # pgvector/pgvector:pg16 = PostgreSQL 16 with the pgvector extension
+    # pre-installed (drop-in replacement for postgres:16).
     image: pgvector/pgvector:pg16
+    container_name: razorgrowth-db
     environment:
-      POSTGRES_DB: razorgrowth
-      POSTGRES_USER: razorgrowth
-      POSTGRES_PASSWORD: razorgrowth
+      POSTGRES_DB: ${POSTGRES_DB:-razorgrowth}
+      POSTGRES_USER: ${POSTGRES_USER:-razorgrowth}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-razorgrowth}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U razorgrowth -d razorgrowth"]
+      # pg_isready inside the container; -d must match POSTGRES_DB.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-razorgrowth} -d ${POSTGRES_DB:-razorgrowth}"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
       start_period: 10s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: razorgrowth-backend
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      # Inside Compose the backend connects via the SERVICE NAME (db),
+      # never localhost. Credentials match the db service above.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-razorgrowth}:${POSTGRES_PASSWORD:-razorgrowth}@db:5432/${POSTGRES_DB:-razorgrowth}
+      # Idempotent demo seed (off by default — signup bootstraps its own
+      # workspace + catalog). Set SEED_DEMO_DATA=true in .env to enable.
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
+      # ---- Auth ----
+      AUTH_MODE: ${AUTH_MODE:-required}
+      # Local-evaluation default so signup/login work with zero configuration.
+      # NOT a real secret — always override with a random value for any real
+      # deployment (and the app refuses weak keys in APP_ENV=production).
+      AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:-razorgrowth-local-dev-secret-change-me-0123456789}
+      AUTH_ENABLE_REGISTRATION: ${AUTH_ENABLE_REGISTRATION:-true}
+      PASSWORD_MIN_LENGTH: ${PASSWORD_MIN_LENGTH:-12}
+      # ---- Security middleware ----
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      TRUSTED_HOSTS: ${TRUSTED_HOSTS:-*}
+      SECURITY_HEADERS_ENABLED: ${SECURITY_HEADERS_ENABLED:-true}
+      ENABLE_DOCS: ${ENABLE_DOCS:-true}
+      # ---- Rate limiting ----
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      RATE_LIMIT_AUTH_REQUESTS: ${RATE_LIMIT_AUTH_REQUESTS:-10}
+      RATE_LIMIT_AUTH_WINDOW_SECONDS: ${RATE_LIMIT_AUTH_WINDOW_SECONDS:-300}
+      RATE_LIMIT_WEBHOOK_REQUESTS: ${RATE_LIMIT_WEBHOOK_REQUESTS:-60}
+      RATE_LIMIT_WEBHOOK_WINDOW_SECONDS: ${RATE_LIMIT_WEBHOOK_WINDOW_SECONDS:-60}
+      # ---- Razorpay (optional — TEST mode only) ----
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_ENABLED: ${RAZORPAY_ENABLED:-false}
+      RAZORPAY_TEST_MODE: ${RAZORPAY_TEST_MODE:-false}
+      REAL_TEST_INTEGRATION_ENABLED: ${REAL_TEST_INTEGRATION_ENABLED:-false}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+      # ---- Safety switches ----
+      EXECUTION_ENABLED: ${EXECUTION_ENABLED:-false}
+      GUARDRAIL_MAX_AMOUNT_INR: ${GUARDRAIL_MAX_AMOUNT_INR:-50000}
+      GUARDRAIL_REQUIRE_APPROVAL: ${GUARDRAIL_REQUIRE_APPROVAL:-true}
+      # ---- AI / LLM (optional — agents degrade to deterministic mode) ----
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openai}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-1536}
+    ports:
+      - "${BACKEND_PORT:-8001}:8001"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: razorgrowth-frontend
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+    driver: local

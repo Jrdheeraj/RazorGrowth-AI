@@ -1,0 +1,5 @@
+# Ensure shell scripts keep LF line endings everywhere.
+# Without this, a Windows clone with core.autocrlf=true converts start.sh to
+# CRLF, which breaks its execution inside the backend container ("no such
+# file or directory" from a corrupted shebang).
+*.sh text eol=lf

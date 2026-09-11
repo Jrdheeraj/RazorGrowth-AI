@@ -763,3 +763,167 @@ export interface AgentDashboardResponse {
   final_synthesis: string | null;
   recommendation: string | null;
 }
+
+
+/* -- Marketing AGI — autonomous marketing employee ---------------------- */
+
+export interface MarketingAGIStatus {
+  agent: string;
+  llm_configured: boolean;
+  llm_provider: string | null;
+  llm_model: string | null;
+  integration_status: Record<string, string>;
+  tools_available: number;
+  workflows_available: number;
+}
+
+export interface MarketingAGIRunEvent {
+  id: string;
+  run_id: string;
+  seq: number;
+  phase: string;
+  event_type: string;
+  message: string;
+  data: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketingAGIStateSummary {
+  objective: string | null;
+  observations: string[];
+  hypotheses: Array<{
+    statement: string;
+    confidence: number;
+    status: string;
+    supporting_evidence: string[];
+    opposing_evidence: string[];
+    next_investigation: string | null;
+  }>;
+  knowledge_gaps: string[];
+  evidence: Array<{ source: string; source_kind: string; statement: string }>;
+  retrieval_log: Array<{
+    question: string;
+    rounds: number;
+    strategy: string;
+    sufficient: boolean;
+    gaps: string[];
+    retrievals: Array<{ query: string; tool: string; item_count: number; statements: string[] }>;
+  }>;
+  tool_calls: Array<{ tool: string; params: Record<string, unknown>; ok: boolean; latency_ms?: number }>;
+  workflow: string | null;
+  plan: Array<{ step: string; tool: string; status: string }>;
+  campaign_draft: Record<string, unknown> | null;
+  verification: {
+    passed: boolean;
+    checks: Array<{ name: string; passed: boolean; detail: string }>;
+    failed: string[];
+  } | null;
+  prepared_action: { action_id: string; status: string; approval_state: string } | null;
+  iterations: number;
+  tool_call_count: number;
+  duplicate_tool_calls: number;
+  errors: string[];
+}
+
+export interface MarketingAGIRun {
+  id: string;
+  merchant_id: string;
+  objective: string;
+  status: string;
+  phase: string;
+  iterations: number;
+  tool_call_count: number;
+  started_at: string | null;
+  completed_at: string | null;
+  llm_provider: string | null;
+  llm_model: string | null;
+  state: MarketingAGIStateSummary;
+  result: Record<string, unknown> | null;
+  errors: string[];
+}
+
+export interface MarketingAGIRunListResponse {
+  runs: MarketingAGIRun[];
+}
+
+export interface MarketingAGIEventsResponse {
+  run_id: string;
+  events: MarketingAGIRunEvent[];
+}
+
+export interface MarketingAGICampaign {
+  id: string;
+  run_id: string | null;
+  campaign_key: string;
+  workflow: string;
+  name: string;
+  objective: string;
+  channel: string;
+  integration_status: string;
+  lifecycle: string;
+  audience_count: number;
+  audience: Record<string, unknown> | null;
+  content: {
+    message?: string;
+    subject_variants?: string[];
+    cta?: string;
+    timing?: string;
+    variants?: string[];
+  } | null;
+  expected_impact: {
+    rationale?: string;
+    estimated_revenue_inr?: number;
+    risks?: string[];
+  } | null;
+  estimated_revenue_inr: number | null;
+  success_metric: string | null;
+  evidence_refs: string[];
+  verification: Record<string, unknown> | null;
+  action_id: string | null;
+  created_at: string;
+}
+
+export interface MarketingAGICampaignListResponse {
+  campaigns: MarketingAGICampaign[];
+}
+
+export interface MarketingAGILearning {
+  id: string;
+  campaign_id: string | null;
+  action_id: string | null;
+  status: string;
+  expected: Record<string, unknown> | null;
+  actual: Record<string, unknown> | null;
+  verdict: string | null;
+  insights: string | null;
+  created_at: string;
+}
+
+export interface MarketingAGILearningListResponse {
+  learnings: MarketingAGILearning[];
+}
+
+export interface MarketingAGIHandoff {
+  id: string;
+  run_id: string | null;
+  specialist: string;
+  status: string;
+  request: Record<string, unknown> | null;
+  response: Record<string, unknown> | null;
+  responded_at: string | null;
+  created_at: string;
+}
+
+export interface MarketingAGIHandoffListResponse {
+  handoffs: MarketingAGIHandoff[];
+}
+
+export interface MarketingAGIToolCatalogResponse {
+  tools: Array<{
+    name: string;
+    category: string;
+    description: string;
+    capabilities: string[];
+    integration_status: string;
+  }>;
+}

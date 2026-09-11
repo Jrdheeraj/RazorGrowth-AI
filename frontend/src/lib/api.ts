@@ -398,3 +398,49 @@ export function askAgentDebate(debateId: string, question: string): Promise<impo
   });
 }
 
+
+/* -- Marketing AGI — autonomous marketing employee ----------------------- */
+
+export function fetchMarketingAGIStatus(): Promise<import("../types/api").MarketingAGIStatus> {
+  return request("/api/marketing-agi/status");
+}
+
+export function startMarketingAGIRun(
+  objective = "Find and prepare the highest-impact marketing work for this business",
+): Promise<{ run_id: string; status: string; objective: string }> {
+  return request("/api/marketing-agi/runs", {
+    method: "POST",
+    body: { objective },
+  });
+}
+
+export function fetchMarketingAGIRuns(): Promise<import("../types/api").MarketingAGIRunListResponse> {
+  return request("/api/marketing-agi/runs?limit=20");
+}
+
+export function fetchMarketingAGIRun(runId: string): Promise<import("../types/api").MarketingAGIRun> {
+  return request(`/api/marketing-agi/runs/${runId}`);
+}
+
+export function fetchMarketingAGIEvents(
+  runId: string,
+  afterSeq = 0,
+): Promise<import("../types/api").MarketingAGIEventsResponse> {
+  return request(`/api/marketing-agi/runs/${runId}/events?after_seq=${afterSeq}`);
+}
+
+export function cancelMarketingAGIRun(runId: string): Promise<import("../types/api").MarketingAGIRun> {
+  return request(`/api/marketing-agi/runs/${runId}/cancel`, { method: "POST" });
+}
+
+export function fetchMarketingAGICampaigns(): Promise<import("../types/api").MarketingAGICampaignListResponse> {
+  return request("/api/marketing-agi/campaigns");
+}
+
+export function fetchMarketingAGILearnings(): Promise<import("../types/api").MarketingAGILearningListResponse> {
+  return request("/api/marketing-agi/learnings");
+}
+
+export function fetchMarketingAGIHandoffs(): Promise<import("../types/api").MarketingAGIHandoffListResponse> {
+  return request("/api/marketing-agi/handoffs");
+}

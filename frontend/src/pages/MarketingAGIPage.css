@@ -1,0 +1,848 @@
+/* ==========================================================================
+   Marketing AGI workstation — the autonomous marketing employee console.
+   Rendered entirely in RazorGrowth tokens (paper / ink / coral / green,
+   square corners, offset print shadows, mono metadata). Every element is
+   driven by real backend execution state.
+   ========================================================================== */
+
+.magi-page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.magi-banner .window__body {
+  padding: 26px;
+}
+
+.magi-banner__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.magi-banner__actions {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.magi-title {
+  font-family: var(--font-display);
+  font-size: clamp(30px, 4.4vw, 46px);
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--ink);
+  text-transform: uppercase;
+}
+
+.magi-lead {
+  max-width: 62ch;
+  margin-top: 12px;
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+}
+
+.magi-meta {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.magi-meta__phase {
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 4px 10px;
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+}
+
+.magi-meta__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.magi-error {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border: 1px solid rgba(169, 79, 56, 0.5);
+  border-radius: var(--radius-window);
+  background: var(--coral-wash);
+  color: var(--coral-deep);
+  font-size: var(--text-body);
+}
+
+.magi-loading {
+  font-family: var(--font-mono);
+  color: var(--ink-soft);
+}
+
+/* ── grid ─────────────────────────────────────────────────────────────── */
+
+.magi-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 18px;
+}
+
+.magi-panel {
+  grid-column: span 4;
+  display: flex;
+  flex-direction: column;
+}
+
+.magi-panel .window__body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 220px;
+}
+
+.magi-workstream {
+  grid-column: span 5;
+}
+
+.magi-panel__title {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink);
+  margin: 0;
+}
+
+.window--choc .magi-panel__title,
+.window--dark .magi-panel__title {
+  color: var(--paper-bright);
+}
+
+.magi-panel__sub {
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  margin: 0;
+}
+
+.window--dark .magi-panel__sub {
+  color: rgba(247, 235, 215, 0.72);
+}
+
+.magi-objective {
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+}
+
+.window--dark .magi-objective {
+  color: var(--paper-bright);
+  background: rgba(247, 235, 215, 0.06);
+  border-color: rgba(247, 235, 215, 0.2);
+}
+
+/* ── live workstream ──────────────────────────────────────────────────── */
+
+.magi-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 430px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  flex: 1;
+}
+
+.magi-stream__empty {
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  margin: auto 0;
+  line-height: var(--leading-body);
+}
+
+.magi-evt {
+  display: flex;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--radius-window);
+  align-items: baseline;
+}
+
+.magi-evt:nth-child(odd) {
+  background: rgba(42, 24, 16, 0.035);
+}
+
+.magi-evt__seq {
+  color: var(--coral-deep);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.magi-evt__msg {
+  color: var(--ink);
+  line-height: 1.45;
+}
+
+.magi-evt--run_finished .magi-evt__msg,
+.magi-evt--verification_failed .magi-evt__msg {
+  color: var(--coral-deep);
+  font-weight: 600;
+}
+
+.magi-evt--verification_passed .magi-evt__msg,
+.magi-evt--rag_sufficient .magi-evt__msg {
+  color: var(--green-deep, #3f7a58);
+  font-weight: 600;
+}
+
+.magi-evt--live .magi-evt__seq {
+  animation: magi-blink 1.4s infinite;
+}
+
+@keyframes magi-blink {
+  50% { opacity: 0.3; }
+}
+
+/* ── research blocks ──────────────────────────────────────────────────── */
+
+.magi-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.magi-block__title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 6px 0 0;
+}
+
+.window--dark .magi-block__title {
+  color: rgba(247, 235, 215, 0.6);
+}
+
+.magi-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: var(--text-small);
+  color: var(--ink);
+  line-height: var(--leading-body);
+}
+
+.window--dark .magi-list {
+  color: var(--paper-bright);
+}
+
+.magi-list--gaps li {
+  color: var(--coral-deep);
+}
+
+.window--dark .magi-list--gaps li {
+  color: #e8a28f;
+}
+
+.magi-hypo {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: var(--text-small);
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--line-soft);
+}
+
+.window--dark .magi-hypo {
+  border-bottom-color: rgba(247, 235, 215, 0.15);
+}
+
+.magi-hypo:last-child {
+  border-bottom: none;
+}
+
+.magi-hypo__status {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: var(--radius-window);
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.magi-hypo__status--confirmed {
+  color: var(--green-deep, #3f7a58);
+  border-color: rgba(112, 184, 138, 0.5);
+}
+
+.magi-hypo__status--rejected {
+  color: var(--coral-deep);
+  border-color: rgba(169, 79, 56, 0.5);
+}
+
+.magi-hypo__status--open,
+.magi-hypo__status--insufficient_evidence {
+  color: var(--ink-soft);
+}
+
+.magi-hypo__text {
+  color: var(--ink);
+  line-height: 1.4;
+  flex: 1;
+}
+
+.window--dark .magi-hypo__text {
+  color: var(--paper-bright);
+}
+
+.magi-hypo__conf {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+  flex-shrink: 0;
+}
+
+.window--dark .magi-hypo__conf {
+  color: rgba(247, 235, 215, 0.6);
+}
+
+.magi-rag {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.window--dark .magi-rag {
+  border-color: rgba(247, 235, 215, 0.15);
+}
+
+.magi-rag__q {
+  font-size: var(--text-small);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.window--dark .magi-rag__q {
+  color: var(--paper-bright);
+}
+
+.magi-rag__meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+  text-transform: lowercase;
+}
+
+.window--dark .magi-rag__meta {
+  color: rgba(247, 235, 215, 0.6);
+}
+
+.magi-rag__tools {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.magi-tag {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.window--dark .magi-tag {
+  background: rgba(247, 235, 215, 0.08);
+  border-color: rgba(247, 235, 215, 0.2);
+  color: rgba(247, 235, 215, 0.8);
+}
+
+.magi-evidence {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.magi-evidence li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.magi-evidence__stmt {
+  color: var(--ink-soft);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.window--dark .magi-evidence__stmt {
+  color: rgba(247, 235, 215, 0.75);
+}
+
+/* ── campaign workspace ───────────────────────────────────────────────── */
+
+.magi-campaign__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.magi-campaign__name {
+  font-family: var(--font-display);
+  font-size: 20px;
+  margin: 0;
+  color: var(--ink);
+}
+
+.magi-defs {
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.magi-defs > div {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.magi-defs dt {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.magi-defs dd {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+/* ── verification ─────────────────────────────────────────────────────── */
+
+.magi-verify {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: var(--radius-window);
+  align-self: flex-start;
+}
+
+.magi-verify--pass {
+  color: var(--green-deep, #3f7a58);
+  background: rgba(112, 184, 138, 0.15);
+  border: 1px solid rgba(112, 184, 138, 0.5);
+}
+
+.magi-verify--fail {
+  color: var(--coral-deep);
+  background: var(--coral-wash);
+  border: 1px solid rgba(169, 79, 56, 0.5);
+}
+
+.magi-checks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.magi-checks__item {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: var(--radius-window);
+}
+
+.magi-checks__item--ok {
+  background: rgba(112, 184, 138, 0.08);
+}
+
+.magi-checks__item--bad {
+  background: var(--coral-wash);
+}
+
+.magi-checks__mark {
+  font-weight: 700;
+}
+
+.magi-checks__item--ok .magi-checks__mark {
+  color: var(--green-deep, #3f7a58);
+}
+
+.magi-checks__item--bad .magi-checks__mark {
+  color: var(--coral-deep);
+}
+
+.magi-checks__name {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+.magi-checks__detail {
+  grid-column: 2;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+
+.magi-checks__item .magi-checks__name {
+  grid-column: 2;
+}
+
+/* ── action ───────────────────────────────────────────────────────────── */
+
+.magi-action {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.magi-action__row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.magi-action__label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(247, 235, 215, 0.6);
+}
+
+.magi-action__value {
+  font-size: var(--text-small);
+  color: var(--paper-bright);
+  overflow-wrap: anywhere;
+}
+
+.magi-action__value--warn {
+  color: #e8a28f;
+  font-weight: 600;
+}
+
+.magi-action__note {
+  font-size: var(--text-small);
+  color: rgba(247, 235, 215, 0.7);
+  margin: 4px 0 0;
+  line-height: var(--leading-body);
+}
+
+/* ── intelligence ─────────────────────────────────────────────────────── */
+
+.magi-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.magi-note {
+  font-size: 12px;
+  color: var(--coral-deep);
+}
+
+.magi-integrations {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.magi-int {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+}
+
+.magi-int__name {
+  font-size: var(--text-small);
+  color: var(--ink);
+}
+
+.magi-int__status {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--radius-window);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+}
+
+.magi-int__status--connected {
+  color: var(--green-deep, #3f7a58);
+  border-color: rgba(112, 184, 138, 0.5);
+  background: rgba(112, 184, 138, 0.1);
+}
+
+.magi-int__status--draft_only {
+  color: var(--ink);
+  border-color: var(--line);
+  background: var(--paper-bright);
+}
+
+.magi-int__status--requires_integration {
+  color: var(--coral-deep);
+  border-color: rgba(169, 79, 56, 0.4);
+  background: var(--coral-wash);
+}
+
+/* ── learning ─────────────────────────────────────────────────────────── */
+
+.magi-learn {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.magi-learn__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.magi-learn__verdict {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink);
+}
+
+.magi-learn__verdict--met_expectation,
+.magi-learn__verdict--learned {
+  color: var(--green-deep, #3f7a58);
+}
+
+.magi-learn__verdict--underperformed {
+  color: var(--coral-deep);
+}
+
+.magi-learn__verdict--measurement_pending,
+.magi-learn__verdict--measuring {
+  color: var(--ink-soft);
+}
+
+.magi-learn__date {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-soft);
+}
+
+.magi-learn__insight {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+}
+
+/* ── runs history ─────────────────────────────────────────────────────── */
+
+.magi-runs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.magi-run {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 4px 10px;
+  text-align: left;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  box-shadow: var(--shadow-button);
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 120ms var(--ease-out);
+}
+
+.magi-run:hover {
+  transform: translate(-1px, -1px);
+}
+
+.magi-run--active {
+  border-color: var(--coral);
+  background: var(--coral-wash);
+}
+
+.magi-run__status {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
+}
+
+.magi-run__status--waiting_approval {
+  color: var(--coral-deep);
+  font-weight: 700;
+}
+
+.magi-run__status--completed {
+  color: var(--green-deep, #3f7a58);
+}
+
+.magi-run__status--blocked,
+.magi-run__status--failed {
+  color: var(--coral-deep);
+}
+
+.magi-run__objective {
+  font-size: 12px;
+  color: var(--ink);
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.magi-run__meta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  grid-column: 2;
+}
+
+/* ── campaign cards ──────────────────────────────────────────────────── */
+
+.magi-campaigns-panel {
+  grid-column: span 12;
+}
+
+.magi-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.magi-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  box-shadow: var(--shadow-float-card);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.magi-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.magi-card__name {
+  font-family: var(--font-display);
+  font-size: 17px;
+  margin: 0;
+  color: var(--ink);
+}
+
+.magi-card__obj {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+}
+
+.magi-card__meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+}
+
+.magi-card__action {
+  margin: 0;
+  font-size: 12px;
+  color: var(--coral-deep);
+}
+
+/* ── responsive ───────────────────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .magi-workstream {
+    grid-column: span 7;
+  }
+  .magi-panel {
+    grid-column: span 5;
+  }
+}
+
+@media (max-width: 880px) {
+  .magi-grid {
+    grid-template-columns: 1fr;
+  }
+  .magi-workstream,
+  .magi-panel,
+  .magi-campaigns-panel {
+    grid-column: span 1;
+  }
+  .magi-banner__row {
+    flex-direction: column;
+  }
+}

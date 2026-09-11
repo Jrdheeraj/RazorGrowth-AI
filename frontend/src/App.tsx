@@ -6,6 +6,7 @@ import { Login } from "./pages/Login";
 import { Checkout } from "./pages/Checkout";
 import { GrowthRadar } from "./pages/GrowthRadar";
 import { AgentsPage } from "./pages/AgentsPage";
+import { MarketingAGIPage } from "./pages/MarketingAGIPage";
 import { DebatePage } from "./pages/DebatePage";
 import { ActionsPage } from "./pages/ActionsPage";
 import { ProfilePage } from "./pages/ProfilePage";
@@ -19,6 +20,7 @@ import { ProfilePage } from "./pages/ProfilePage";
  *   /checkout      → AI Buyer + Razorpay TEST checkout
  *   /growth-radar  → live Growth Radar
  *   /agents        → AI Growth Team dashboard
+ *   /marketing-agi → Marketing AGI autonomous employee workstation
  *   /debate        → Agent Debate detail
  *   /actions       → Growth Actions approval console + audit trail
  *   /app/*         → redirects to /login (Phase 4 workspace)
@@ -33,6 +35,7 @@ export default function App() {
         <Route path="/checkout"     element={<Checkout />} />
         <Route path="/growth-radar" element={<GrowthRadar />} />
         <Route path="/agents"       element={<AgentsPage />} />
+        <Route path="/marketing-agi" element={<MarketingAGIPage />} />
         <Route path="/debate"       element={<DebatePage />} />
         <Route path="/actions"      element={<ActionsPage />} />
 

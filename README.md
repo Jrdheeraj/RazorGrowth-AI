@@ -206,31 +206,132 @@ flowchart LR
 
 ## ⚡ Quick Start
 
-### Prerequisites
-Python 3.11+ · Node.js 18+ · Docker
+### Run the whole stack with Docker (recommended — one command)
 
-### 1 — Clone and start PostgreSQL
+**STEP 1 — Get the project** into a completely fresh folder. Either clone it:
+
 ```bash
-git clone <repository-url> && cd "RazorGrowth AI"
-docker compose up -d        # PostgreSQL 16 + pgvector on :5432
+git clone https://github.com/Jrdheeraj/RazorGrowth-AI.git
 ```
 
-### 2 — Backend
+or download it as a ZIP from GitHub (`Code` → `Download ZIP`) and extract it.
+
+**STEP 2 — Open the project folder** in a terminal:
+
 ```bash
+cd RazorGrowth-AI
+```
+
+(If you downloaded the ZIP, `cd` into the extracted folder instead.)
+
+**STEP 3 — Make sure Docker Desktop is installed and running.** Install it
+from [docker.com](https://www.docker.com/products/docker-desktop/) if needed,
+then start it and wait until it reports as running — nothing below works
+while Docker is stopped.
+
+**STEP 4 — Start the complete application** with one command:
+
+```bash
+docker compose up --build
+```
+
+That single command starts **everything** — no manual database setup, no
+manual migrations:
+
+1. **PostgreSQL 16 + pgvector** starts in a container (named volume
+   `postgres_data`, health-checked)
+2. The **backend** container waits for the database healthcheck, runs
+   `alembic upgrade head` automatically (idempotent — safe on every
+   restart), then starts FastAPI on port **8001**
+3. The **frontend** builds with Vite and is served by nginx on port **5173**
+   (same origin — nginx proxies `/api/*` to the backend, so no CORS setup)
+
+What happens on a fresh start:
+
+```
+Fresh project
+↓
+Docker Compose starts PostgreSQL + pgvector
+↓
+Database becomes healthy
+↓
+Alembic migrations run automatically
+↓
+Backend starts
+↓
+Frontend starts
+↓
+Open the application at http://localhost:5173
+```
+
+No manual PostgreSQL setup, no `alembic upgrade head`, no separate
+`uvicorn` or `vite` commands — the Compose startup handles all of it.
+
+Then open **http://localhost:5173** and sign up — signup creates **your own
+workspace with its own 10-product default catalog**, so Checkout works
+immediately without any Razorpay connection.
+
+**Configuration:** no `.env` file is needed for a fresh run — Compose ships
+working defaults for everything (database, ports, a local-only JWT signing
+key), so the commands above are enough on their own. Only create one if you
+want to change something:
+
+```bash
+cp .env.example .env
+# optional: your own AUTH_SECRET_KEY, Razorpay TEST keys, LLM keys, ports…
+docker compose up -d
+```
+
+Optional integrations (Razorpay TEST credentials, OpenAI/Groq LLM keys) are
+also set in `.env` — see the [Environment Variables](#-environment-variables)
+table. Without LLM keys the app runs fully; AI endpoints return a clear 503
+and agents fall back to deterministic mode.
+
+| URL | What |
+|---|---|
+| `http://localhost:5173` | Frontend (the application) |
+| `http://localhost:8001/docs` | Backend API docs (interactive Swagger UI) |
+| `http://localhost:8001/api/health` | Backend health check |
+| `localhost:5432` | PostgreSQL (internal, persistent volume) |
+
+**Stopping:** `docker compose down` (stops the containers; the database
+volume survives, so your data is still there on the next `up`).
+**Resetting the database:** `docker compose down -v` — removes the
+`postgres_data` volume (this **deletes all local database data**); the next
+`docker compose up --build` recreates the database and runs the migrations
+again automatically.
+
+**Troubleshooting**
+
+| Symptom | Fix |
+|---|---|
+| Docker Desktop is not running (`Cannot connect to the Docker daemon`) | Start Docker Desktop and wait until it shows as running, then retry |
+| `port is already allocated` (5432/5173/8001 busy) | Change `POSTGRES_PORT` / `FRONTEND_PORT` / `BACKEND_PORT` in `.env` |
+| Backend exits with migration error | Run `docker compose logs backend` — the error is printed and the container stops (never silently broken) |
+| `razorgrowth-db` unhealthy | Run `docker compose logs db`; if a stale volume is corrupted: `docker compose down -v` (destroys local data) then `up` again |
+| pgvector missing | The image `pgvector/pgvector:pg16` ships pgvector pre-installed; `CREATE EXTENSION IF NOT EXISTS vector` runs in the first migration |
+
+### Local development (without Docker for the app code)
+
+Prerequisites: Python 3.11+ · Node.js 18+ · Docker
+
+```bash
+# 1 — PostgreSQL only (Docker)
+docker compose up -d db        # PostgreSQL 16 + pgvector on :5432
+
+# 2 — Backend
 pip install -r requirements.txt
-cp .env.example .env         # then fill in the values from the table below
-alembic upgrade head          # create the schema
+cp .env.example .env           # then fill in the values from the table below
+alembic upgrade head           # create the schema
 uvicorn backend.app.main:app --host 127.0.0.1 --port 8001
-```
 
-### 3 — Frontend
-```bash
+# 3 — Frontend
 cd frontend
 npm install
-npm run dev                   # http://localhost:5173 (Vite proxies /api → :8001)
+npm run dev                    # http://localhost:5173 (Vite proxies /api → :8001)
 ```
 
-### 4 — Create your account
+### Create your account
 Open `http://localhost:5173/login` and sign up — signup creates **your own workspace with its own 10-product default catalog**, so Checkout works immediately without any Razorpay connection.
 
 <details>
@@ -241,11 +342,20 @@ python -m backend.app.data.bootstrap_admin --email <email> --password '<12+ char
 ```
 </details>
 
+<details>
+<summary><b>Optional — seed the deterministic demo dataset</b></summary>
+
+Set `SEED_DEMO_DATA=true` in `.env` (or run `python -m backend.app.data.seed`
+locally). Creates a demo merchant with 10 products, 60 customers and 240
+orders — idempotent, safe to re-run.
+</details>
+
 ---
 
 ## 🔧 Environment Variables
 
-Copy `.env.example` to `.env` and configure. **Variable names only** — never commit real secrets.
+Copy `.env.example` to `.env` only to override defaults (optional — Docker
+Compose runs with safe defaults and no `.env` file). **Variable names only** — never commit real secrets.
 
 | Variable | Purpose |
 |---|---|
@@ -278,7 +388,7 @@ Tests run against an isolated SQLite schema with JSONB-compatible DDL — they n
 
 | Symptom | Cause / fix |
 |---|---|
-| `Database not initialised` on first request | Run `alembic upgrade head` before starting uvicorn |
+| `Database not initialised` on first request | Run `alembic upgrade head` before starting uvicorn (Docker path does this automatically) |
 | `422` on signup | Password policy: ≥ 12 characters, at least one letter and one digit |
 | Empty Radar on a new account | Expected until that workspace connects its own Razorpay data — the default catalog still powers Checkout |
 | `RAZORPAY_CREATE_PAYMENT_LINK_FAILED` in logs | Razorpay TEST caps payment links at 30/day; checkout continues via the order id |
@@ -310,7 +420,9 @@ RazorGrowth AI/
 │   └── styles/              # design tokens (cream / ink / terracotta)
 ├── migrations/versions/     # Alembic migrations (Phases 3–6 + alignment)
 ├── tests/                   # 673-test pytest suite
-├── docker-compose.yml       # PostgreSQL 16 + pgvector
+├── docker-compose.yml       # PostgreSQL 16 + pgvector + backend + frontend
+├── backend/Dockerfile       # FastAPI image (runs migrations on startup)
+├── frontend/Dockerfile      # Vite build + nginx (proxies /api to backend)
 ├── requirements.txt
 └── .env.example             # annotated configuration template (blank secrets)
 ```

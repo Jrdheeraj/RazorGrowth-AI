@@ -123,6 +123,8 @@ from backend.app.api.routes.recommendations import router as recommendations_rou
 from backend.app.api.routes.debate import router as debate_router
 # Phase M — Analytics
 from backend.app.api.routes.analytics import router as analytics_router
+# Marketing AGI — autonomous marketing employee (isolated module)
+from backend.app.api.routes.marketing_agi import router as marketing_agi_router
 
 app.include_router(health_router, prefix="/api")
 app.include_router(opportunities_router, prefix="/api")
@@ -151,6 +153,8 @@ app.include_router(recommendations_router, prefix="/api")
 app.include_router(debate_router, prefix="/api")
 # Phase M routes
 app.include_router(analytics_router, prefix="/api")
+# Marketing AGI routes (isolated autonomous agent)
+app.include_router(marketing_agi_router, prefix="/api")
 
 
 @app.get("/")

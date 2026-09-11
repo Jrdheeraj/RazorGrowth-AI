@@ -61,3 +61,12 @@ from backend.app.models.agent_debate import (  # noqa: F401
     AgentFinding,
     AgentMessage,
 )
+
+# Marketing AGI — autonomous marketing employee (isolated module)
+from backend.app.models.marketing_agi import (  # noqa: F401
+    MarketingAGIRun,
+    MarketingAGIEvent,
+    MarketingAGICampaign,
+    MarketingAGIHandoff,
+    MarketingAGILearning,
+)
