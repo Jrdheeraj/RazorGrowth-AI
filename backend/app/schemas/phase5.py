@@ -69,6 +69,7 @@ class AgentRunRecord(BaseModel):
     agent_name: str
     status: str
     mode: str
+    orchestrator_run_id: str | None = None
     started_at: str
     completed_at: str | None
     total_latency_ms: int

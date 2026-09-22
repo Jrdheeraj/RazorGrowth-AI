@@ -399,7 +399,7 @@ export function askAgentDebate(debateId: string, question: string): Promise<impo
 }
 
 
-/* -- Marketing AGI — autonomous marketing employee ----------------------- */
+/* -- Marketing Agent â€” autonomous marketing employee ----------------------- */
 
 export function fetchMarketingAGIStatus(): Promise<import("../types/api").MarketingAGIStatus> {
   return request("/api/marketing-agi/status");
@@ -414,8 +414,13 @@ export function startMarketingAGIRun(
   });
 }
 
-export function fetchMarketingAGIRuns(): Promise<import("../types/api").MarketingAGIRunListResponse> {
-  return request("/api/marketing-agi/runs?limit=20");
+export function fetchMarketingAGIRuns(
+  analysisCycleId?: string,
+): Promise<import("../types/api").MarketingAGIRunListResponse> {
+  const qs = analysisCycleId
+    ? `/api/marketing-agi/runs?limit=20&analysis_cycle_id=${encodeURIComponent(analysisCycleId)}`
+    : "/api/marketing-agi/runs?limit=20";
+  return request(qs);
 }
 
 export function fetchMarketingAGIRun(runId: string): Promise<import("../types/api").MarketingAGIRun> {
@@ -443,4 +448,54 @@ export function fetchMarketingAGILearnings(): Promise<import("../types/api").Mar
 
 export function fetchMarketingAGIHandoffs(): Promise<import("../types/api").MarketingAGIHandoffListResponse> {
   return request("/api/marketing-agi/handoffs");
+}
+
+export function fetchMarketingAGITools(): Promise<import("../types/api").MarketingAGIToolCatalogResponse> {
+  return request("/api/marketing-agi/tools");
+}
+
+/* -- Marketing Agent integration hub (per-workspace provider connections) -- */
+
+export function fetchMarketingIntegrations(): Promise<{ integrations: import("../types/api").MarketingIntegrationConnection[] }> {
+  return request("/api/marketing-agi/integrations");
+}
+
+export function fetchMarketingIntegration(provider: string): Promise<import("../types/api").MarketingIntegrationConnection> {
+  return request(`/api/marketing-agi/integrations/${provider}`);
+}
+
+export function connectMarketingIntegration(
+  provider: string,
+  body: Record<string, string | undefined>,
+): Promise<import("../types/api").MarketingIntegrationConnection> {
+  return request(`/api/marketing-agi/integrations/${provider}/connect`, {
+    method: "POST",
+    body,
+  });
+}
+
+export function testMarketingIntegration(
+  provider: string,
+): Promise<import("../types/api").MarketingIntegrationTestResult> {
+  return request(`/api/marketing-agi/integrations/${provider}/test`, {
+    method: "POST",
+  });
+}
+
+export function disconnectMarketingIntegration(
+  provider: string,
+): Promise<import("../types/api").MarketingIntegrationConnection> {
+  return request(`/api/marketing-agi/integrations/${provider}/disconnect`, {
+    method: "POST",
+  });
+}
+
+export function startMarketingOAuth(
+  provider: string,
+): Promise<{ provider: string; authorization_url: string; state_expires_in_seconds: number }> {
+  return request(`/api/marketing-agi/integrations/${provider}/oauth/start`);
+}
+
+export function fetchMarketingIntegrationAudit(): Promise<{ audit_events: import("../types/api").MarketingIntegrationAuditEvent[] }> {
+  return request("/api/marketing-agi/integrations/audit?limit=50");
 }

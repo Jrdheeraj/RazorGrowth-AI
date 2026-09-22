@@ -191,6 +191,112 @@ flowchart LR
 
 ---
 
+## 🔌 Marketing Agent Integrations
+
+The **Marketing Agent** is an autonomous employee that can research, plan, and prepare marketing campaigns — it needs connections to real external providers to execute. This section covers the integration layer.
+
+### Provider Overview
+
+| Provider | Key | Type | Connection | Write Actions (Approval-Gated) |
+|---|---|---|---|---|
+| **Email (Resend)** | `resend` | email | API key + verified sender | `send_email` (campaign) |
+| **Google Ads** | `google_ads` | ads | OAuth2 (client + refresh token) + developer token | `create_campaign_paused` (PAUSED by default) |
+| **Meta Ads** | `meta_ads` | ads | OAuth2 (app + access token) | `create_campaign_paused` (PAUSED by default) |
+| **Instagram** | `instagram` | social | OAuth2 (same Meta app) | `publish_photo` |
+| **CRM (Internal)** | `internal` | crm | — (tenant-scoped DB) | — |
+| **Analytics (Internal)** | `internal` | analytics | — (tenant-scoped DB) | — |
+
+### How It Works
+
+1. **No fake connections** — a provider shows **CONNECTED** only after a successful live verification call against the real API. Nothing is marked connected just because a key exists.
+2. **Secrets are encrypted at rest** — per-workspace credentials are stored as Fernet-encrypted blobs in the `integration_connections` table. The `INTEGRATION_CREDENTIAL_KEY` (or derived from `AUTH_SECRET_KEY`) encrypts them. Decrypted values exist only in memory, passed only to provider HTTPS calls, and are never returned by APIs, logged, or audited.
+3. **Approval-gated writes** — the Marketing Agent can **read** live data (campaigns, metrics, accounts) autonomously when connected. **Writes** (`send_email`, `create_campaign_paused`, `publish_photo`) are **never** executed from agent tools. They run exclusively through the human-approved **Actions pipeline** (`/api/actions`):
+   - Agent proposes → Human approves → Executor verifies connection live → Provider call → Audit event.
+4. **Test mode** — when `EXECUTION_ENABLED=false` (default), write actions return an honest test-mode preview (`executed=false`, `mode="test"`) and **never** claim real delivery.
+5. **Tenant isolation** — every connection row is bound to exactly one `merchant_id`. A user from Workspace A can never read or write Workspace B's connections.
+
+### Connecting an Account (UI)
+
+Open the **Marketing Agent** workstation (`/marketing-agent`), go to **Marketing Stack** → click the provider card:
+- **Email (Resend)** — paste your Resend API key + verified sender email/name → "Connect + Verify" (live key check before storing).
+- **Google Ads / Meta Ads / Instagram** — click "Connect with Google/Meta OAuth" (redirects to provider consent) **or** paste a long-lived access token + account ID → "Verify + Store Token" (live verification before storing).
+- **Disconnect** — wipes the encrypted credentials, best-effort revokes the remote token, writes an audit event.
+
+### API Endpoints
+
+```
+GET  /api/marketing-agi/integrations                 — list all providers + live status
+GET  /api/marketing-agi/integrations/{provider}      — one provider detail
+POST /api/marketing-agi/integrations/{provider}/connect  — connect (API key or OAuth code/token)
+POST /api/marketing-agi/integrations/{provider}/test     — re-verify live
+POST /api/marketing-agi/integrations/{provider}/disconnect — disconnect
+GET  /api/marketing-agi/integrations/{provider}/oauth/start — OAuth URL + signed state
+GET  /api/marketing-agi/integrations/{provider}/oauth/callback — provider redirect
+GET  /api/marketing-agi/integrations/audit           — integration audit trail
+```
+
+All endpoints require authentication and enforce merchant-scoped access. The OAuth callback carries no `Authorization` header — the tenant comes from the HMAC-signed state token.
+
+### Test Connection
+
+Every provider implements a **Test Connection** button in the UI and a `/test` API. The result includes:
+- `ok` (success/failure)
+- `error_code` (structured, e.g. `AUTH_EXPIRED`, `RATE_LIMITED`, `INSUFFICIENT_PERMISSIONS`)
+- `message` (human-safe, no secrets)
+- `account` (safe identity: account name, id, last verified timestamp)
+
+Example success:
+```json
+{
+  "ok": true,
+  "provider": "google_ads",
+  "error_code": null,
+  "message": "Google Ads verified (customer 111222).",
+  "account": { "customer_id": "111222", "customer_name": "Acme Ads", "accessible_count": 3 },
+  "verified_at": "2026-09-21T10:31:00Z"
+}
+```
+
+Example failure:
+```json
+{
+  "ok": false,
+  "provider": "meta_ads",
+  "error_code": "AUTH_EXPIRED",
+  "message": "Meta authorization has expired. Reconnect the account.",
+  "account": {},
+  "verified_at": null
+}
+```
+
+### Audit Trail
+
+Every external integration action writes an `AuditEvent` (`entity_type="integration_connection"`) with a **redacted payload** — secrets are replaced with `***REDACTED***` before persisting. Event types:
+- `integration_connected` / `integration_disconnected`
+- `integration_connection_verified` / `integration_connection_failed`
+- `integration_action_executed` / `integration_action_failed`
+
+### Required Environment Variables (Platform Defaults)
+
+| Variable | Purpose |
+|---|---|
+| `RESEND_API_KEY` / `RESEND_FROM_EMAIL` / `RESEND_FROM_NAME` | Platform default Resend sender |
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` / `GOOGLE_OAUTH_REDIRECT_URI` / `GOOGLE_ADS_DEVELOPER_TOKEN` | Platform Google Ads app |
+| `META_APP_ID` / `META_APP_SECRET` / `META_OAUTH_REDIRECT_URI` | Platform Meta/Instagram app |
+| `INTEGRATION_CREDENTIAL_KEY` | Dedicated Fernet key (32-byte urlsafe base64). Empty = derived from `AUTH_SECRET_KEY` (dev only; production should set explicitly — startup logs a warning) |
+
+Workspaces connect **their own** accounts via the UI — these platform defaults are only fallbacks when a workspace hasn't connected its own account.
+
+### Security Notes
+
+- **No credentials in Git / CI / Docker images / logs** — only variable names in `.env.example`.
+- **Signed OAuth state** — 15-min TTL, HMAC-SHA256 over `merchant_id + provider + exp + nonce`, single-use nonces tracked in memory.
+- **Error taxonomy** — structured codes (`ERR_AUTH_EXPIRED`, `ERR_RATE_LIMITED`, `ERR_ACCOUNT_NOT_FOUND`, etc.) surfaced to the agent/UI; never raw provider bodies or stack traces.
+- **Google Ads** — requires developer token + `login-customer-id` when using a manager account; access tokens minted from stored refresh tokens; expired/revoked tokens return `AUTH_EXPIRED` / `AUTH_REVOKED` for honest reconnect UX.
+- **Meta/Instagram** — shares the Meta OAuth app; long-lived tokens extended from short-lived codes; two-step publish (`media` → `media_publish`).
+
+---
+
 ## 🛠️ Tech Stack
 
 | Layer | Technologies |
@@ -278,14 +384,21 @@ want to change something:
 
 ```bash
 cp .env.example .env
-# optional: your own AUTH_SECRET_KEY, Razorpay TEST keys, LLM keys, ports…
+# edit .env — keep it private, never commit it
+# required: AUTH_SECRET_KEY (>=32 random chars)
+# optional: Razorpay TEST keys, LLM keys, Resend / Google Ads / Meta — see below
 docker compose up -d
+# after any .env change: docker compose down && docker compose up --build
 ```
 
-Optional integrations (Razorpay TEST credentials, OpenAI/Groq LLM keys) are
-also set in `.env` — see the [Environment Variables](#-environment-variables)
-table. Without LLM keys the app runs fully; AI endpoints return a clear 503
-and agents fall back to deterministic mode.
+Marketing Agent integrations are configured in the same `.env` — copy
+`.env.example`, fill only the providers you use, keep
+`EXECUTION_ENABLED=false` until you are ready for real external writes.
+Without provider credentials the backend still starts; the Marketing Agent
+simply reports those integrations as **NOT CONNECTED**. See
+[Marketing Agent Integrations](#-marketing-agent-integrations) for
+per-provider setup and the [Environment Variables](#-environment-variables)
+table for the full list.
 
 | URL | What |
 |---|---|
@@ -356,12 +469,15 @@ orders — idempotent, safe to re-run.
 
 Copy `.env.example` to `.env` only to override defaults (optional — Docker
 Compose runs with safe defaults and no `.env` file). **Variable names only** — never commit real secrets.
+Keep `.env` private (`git` already ignores it); `EXECUTION_ENABLED` stays
+`false` during setup and you restart Docker after any `.env` change.
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `AUTH_MODE` | `required` — protected endpoints demand a Bearer token |
-| `AUTH_SECRET_KEY` | JWT signing key (≥ 32 chars) |
+| `DATABASE_URL` / `POSTGRES_*` / `BACKEND_PORT` / `FRONTEND_PORT` | Database + Compose ports |
+| `AUTH_SECRET_KEY` | JWT signing key (≥ 32 chars) — **required** |
+| `INTEGRATION_CREDENTIAL_KEY` | Fernet key for encrypted workspace credentials (empty → derived from `AUTH_SECRET_KEY`; set explicitly in production) |
+| `EXECUTION_ENABLED` | Global kill switch for real external writes — keep `false` until ready |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | Razorpay **TEST** credentials |
 | `RAZORPAY_ENABLED` / `RAZORPAY_TEST_MODE` / `REAL_TEST_INTEGRATION_ENABLED` | TEST-mode switches |
 | `RAZORPAY_WEBHOOK_SECRET` | Webhook signature validation |
@@ -369,7 +485,9 @@ Compose runs with safe defaults and no `.env` file). **Variable names only** —
 | `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | OpenRouter — model id **must** end in `:free` (enforced in code) |
 | `GROQ_API_KEY` / `GROQ_MODEL` | Groq configuration |
 | `LLM_API_KEY` / `LLM_MODEL` | OpenAI configuration |
-| `EXECUTION_ENABLED` | Global action-execution kill switch |
+| `RESEND_API_KEY` / `RESEND_FROM_EMAIL` / `RESEND_FROM_NAME` | Email — Resend platform default (per-workspace keys via UI are preferred) |
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` / `GOOGLE_OAUTH_REDIRECT_URI` / `GOOGLE_ADS_DEVELOPER_TOKEN` / `GOOGLE_ADS_API_VERSION` | Google Ads platform OAuth + developer token |
+| `META_APP_ID` / `META_APP_SECRET` / `META_OAUTH_REDIRECT_URI` / `META_GRAPH_VERSION` | Meta Ads / Instagram platform OAuth |
 | `GUARDRAIL_MAX_AMOUNT_INR` / `GUARDRAIL_REQUIRE_APPROVAL` | Money-action guardrails |
 | `CORS_ORIGINS` / `TRUSTED_HOSTS` | Security middleware |
 

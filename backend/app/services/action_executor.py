@@ -30,6 +30,8 @@ from backend.app.schemas.action import (
     CreateDiscountPayload,
     RetryPaymentPayload,
     GenerateOpportunityPayload,
+    PublishSocialPostPayload,
+    CreateAdCampaignPayload,
     validate_action_payload,
 )
 
@@ -83,7 +85,13 @@ class BaseActionExecutor:
 
 
 class SendCampaignExecutor(BaseActionExecutor):
-    """Executor for send_campaign actions."""
+    """Executor for send_campaign actions.
+
+    Email channel with a reachable Resend key (merchant connection first,
+    platform default second) + EXECUTION_ENABLED sends for REAL through
+    Resend AFTER a live key verification. Every other case returns the
+    honest test-mode result (sent=False) — never a fake delivery.
+    """
 
     action_type = "send_campaign"
     payload_schema = "send_campaign"
@@ -103,20 +111,228 @@ class SendCampaignExecutor(BaseActionExecutor):
                 error=f"CAMPAIGN_TARGET_EXCEEDS_LIMIT: {target_count} > max {settings.CAMPAIGN_MAX_TARGET}",
             )
 
-        # TEST MODE ONLY — no external message is ever sent from here.
-        # The result metadata states this explicitly so nothing upstream can
-        # mistake it for a real delivery.
+        if campaign_type != "email":
+            return self._test_mode(campaign_type, target_count)
+
+        # If no db session, we can't look up connections — honest test mode.
+        if db is None:
+            return self._test_mode(campaign_type, target_count, note=(
+                "No database session available — test preview only"
+            ))
+
+        from backend.app.integrations.marketing.resend_email import ResendProvider
+        from backend.app.services import integration_service as svc
+
+        row = svc.connected_row(db, action.merchant_id, "resend")
+        if row is not None:
+            api_key = svc.decrypt_credentials(row).get("api_key", "")
+            meta = dict(row.connection_metadata or {})
+            from_email = meta.get("from_email") or settings.RESEND_FROM_EMAIL
+            from_name = meta.get("from_name") or settings.RESEND_FROM_NAME
+        else:
+            api_key = settings.RESEND_API_KEY or ""
+            from_email = settings.RESEND_FROM_EMAIL
+            from_name = settings.RESEND_FROM_NAME
+        if not api_key or not from_email:
+            # No sending capability at all — honest test-mode, nothing sent.
+            return self._test_mode(campaign_type, target_count, note=(
+                "No Resend key / sender identity available — no external message sent"
+            ))
+
+        # Live-verify the key before touching the network for a send.
+        # "CONNECTED because the key exists" is forbidden: test the provider.
+        verify = ResendProvider().verify(api_key)
+        if not verify.ok:
+            self._audit_external(
+                db, action, "resend", False,
+                {"error_code": verify.error_code, "message": verify.message,
+                 "stage": "pre_send_verify"},
+            )
+            return ExecutorResult(
+                success=False,
+                error=f"{verify.error_code}: {verify.message}",
+            )
+
+        if not settings.EXECUTION_ENABLED:
+            return self._test_mode(
+                campaign_type, target_count,
+                note=("EXECUTION_ENABLED=false — verified Resend key, send withheld (test preview)"),
+                extra={"provider": "resend", "verified": True, "from": from_email},
+            )
+
+        resolved = self._resolve_email_content(db, action)
+        if resolved is None:
+            return ExecutorResult(
+                success=False,
+                error="UNRESOLVABLE_AUDIENCE: no recipient emails found for this campaign",
+            )
+        to_addrs, subject, html, text = resolved
+        result = ResendProvider().send_email(
+            api_key=api_key,
+            from_email=f"{from_name} <{from_email}>" if from_name else from_email,
+            to=to_addrs,
+            subject=subject,
+            html=html,
+            text=text,
+        )
+        if not result.ok:
+            self._audit_external(
+                db, action, "resend", False,
+                {"error_code": result.error_code, "message": result.message},
+            )
+            return ExecutorResult(
+                success=False,
+                error=f"{result.error_code}: {result.message}",
+            )
+        self._mark_campaign_sent(db, action)
+        self._audit_external(
+            db, action, "resend", True,
+            {"email_id": result.data.get("email_id"), "to_count": len(to_addrs)},
+            provider_request_id=result.provider_request_id,
+        )
         return ExecutorResult(
             success=True,
             result_metadata={
                 "campaign_type": campaign_type,
-                "target_count": target_count,
-                "mode": "test",
-                "sent": False,
-                "execution": f"test_campaign_{campaign_type}",
-                "note": "Development/test mode — no external message sent",
+                "target_count": len(to_addrs),
+                "mode": "live",
+                "sent": True,
+                "executed": True,
+                "provider": "resend",
+                "email_id": result.data.get("email_id"),
+                "from": from_email,
+                "subject": subject,
             },
         )
+
+    @staticmethod
+    def _test_mode(
+        campaign_type: str, target_count: int, note: str | None = None,
+        extra: dict | None = None,
+    ) -> ExecutorResult:
+        # TEST MODE ONLY — no external message is ever sent from here.
+        # The result metadata states this explicitly so nothing upstream can
+        # mistake it for a real delivery.
+        meta: dict[str, Any] = {
+            "campaign_type": campaign_type,
+            "target_count": target_count,
+            "mode": "test",
+            "sent": False,
+            "executed": False,
+            "execution": f"test_campaign_{campaign_type}",
+            "note": note or "Development/test mode — no external message sent",
+        }
+        if extra:
+            meta.update(extra)
+        return ExecutorResult(success=True, result_metadata=meta)
+
+    @staticmethod
+    def _audit_external(
+        db: Any, action: Any, provider: str, success: bool,
+        payload: dict[str, Any], provider_request_id: str | None = None,
+    ) -> None:
+        from backend.app.models.enums import ActorType, AuditEventType
+        from backend.app.services.integration_service import write_integration_audit
+
+        write_integration_audit(
+            db, action.merchant_id,
+            ActorType.merchant_user,
+            AuditEventType.integration_action_executed if success
+            else AuditEventType.integration_action_failed,
+            provider,
+            {
+                "action_id": str(action.id),
+                "action_type": str(getattr(action.action_type, "value", action.action_type)),
+                "provider_request_id": provider_request_id,
+                **payload,
+            },
+            actor_id=str(getattr(action, "approved_by", None) or "executor"),
+            entity_id=str(action.id),
+        )
+
+    @staticmethod
+    def _resolve_email_content(
+        db: Any, action: Any
+    ) -> tuple[list[str], str, str | None, str | None] | None:
+        """Resolve (recipients, subject, html, text) from the linked draft.
+
+        Recipients come from live Customer rows (merchant-scoped, must have
+        an email address). Subject/body come from the verified draft content.
+        Returns None when there is nobody to send to.
+        """
+        import uuid as _uuid
+
+        from sqlalchemy import select
+
+        from backend.app.models.customer import Customer
+        from backend.app.models.marketing_agi import MarketingAGICampaign
+
+        payload = dict(action.input_payload or {})
+        target = payload.get("target") or {}
+        campaign_id = target.get("marketing_agi_campaign_id")
+        draft = None
+        if campaign_id:
+            try:
+                draft = db.get(MarketingAGICampaign, _uuid.UUID(str(campaign_id)))
+            except (ValueError, AttributeError):
+                draft = None
+        audience = (draft.audience if draft and draft.audience else {}) or {}
+        customer_ids = audience.get("customer_ids") or []
+        try:
+            wanted = {_uuid.UUID(str(c)) for c in customer_ids}
+        except (ValueError, AttributeError, TypeError):
+            wanted = set()
+
+        to_addrs: list[str] = []
+        if wanted:
+            rows = list(
+                db.scalars(
+                    select(Customer).where(
+                        Customer.merchant_id == action.merchant_id,
+                        Customer.id.in_(wanted),
+                    )
+                ).all()
+            )
+            for c in rows:
+                email = (getattr(c, "email", None) or "").strip()
+                if email and email not in to_addrs:
+                    to_addrs.append(email)
+        if not to_addrs:
+            return None
+
+        content = (draft.content if draft and draft.content else {}) or {}
+        message = (content.get("message") or "").strip()
+        variants = content.get("subject_variants") or content.get("variants") or []
+        subject = (variants[0] if variants else "") or (draft.name if draft else "") or "News from your store"
+        cta = (content.get("cta") or "").strip()
+        timing = (content.get("timing") or "").strip()
+        paragraphs = [p for p in [message, cta, timing] if p]
+        text = "\n\n".join(paragraphs) if paragraphs else None
+        html = (
+            "".join(f"<p>{p}</p>" for p in paragraphs) if paragraphs else None
+        )
+        return to_addrs, subject, html, text
+
+    @staticmethod
+    def _mark_campaign_sent(db: Any, action: Any) -> None:
+        """Advance the linked draft: it was really sent, record it honestly."""
+        import uuid as _uuid
+
+        from backend.app.models.marketing_agi import MarketingAGICampaign
+
+        payload = dict(action.input_payload or {})
+        campaign_id = (payload.get("target") or {}).get("marketing_agi_campaign_id")
+        if not campaign_id:
+            return
+        try:
+            draft = db.get(MarketingAGICampaign, _uuid.UUID(str(campaign_id)))
+        except (ValueError, AttributeError):
+            return
+        if draft is None or draft.merchant_id != action.merchant_id:
+            return
+        draft.lifecycle = "completed"
+        draft.integration_status = "sent"
+        db.flush()
 
 
 class CreateDiscountExecutor(BaseActionExecutor):
@@ -239,6 +455,169 @@ class RetryPaymentExecutor(BaseActionExecutor):
         )
 
 
+class PublishSocialPostExecutor(BaseActionExecutor):
+    """Executor for publish_social_post actions (Instagram).
+
+    Approval-gated: runs only on human-approved actions. Requires a
+    verified Instagram connection + EXECUTION_ENABLED; otherwise returns
+    an honest TEST_MODE preview (executed=False).
+    """
+
+    action_type = "publish_social_post"
+    payload_schema = "publish_social_post"
+
+    def execute(self, action: Any, db: Any) -> ExecutorResult:
+        ok, err = _validated_payload(self.payload_schema, action)
+        if not ok:
+            return ExecutorResult(success=False, error=f"INVALID_PAYLOAD: {err}")
+        payload = PublishSocialPostPayload.model_validate(ok.model_dump())
+
+        from backend.app.integrations.marketing.instagram import InstagramProvider
+        from backend.app.services import integration_service as svc
+
+        row = svc.connected_row(db, action.merchant_id, "instagram")
+        if row is None:
+            return ExecutorResult(
+                success=False,
+                error="NOT_CONNECTED: Instagram is not connected for this workspace.",
+            )
+        settings = get_settings()
+        if not settings.EXECUTION_ENABLED:
+            SendCampaignExecutor._audit_external(
+                db, action, "instagram", True,
+                {"mode": "test", "executed": False,
+                 "note": "EXECUTION_ENABLED=false — publish withheld (test preview)"},
+            )
+            return ExecutorResult(
+                success=True,
+                result_metadata={
+                    "mode": "test", "executed": False, "provider": "instagram",
+                    "caption_preview": payload.caption[:120],
+                    "note": "EXECUTION_ENABLED=false — nothing published (test preview)",
+                },
+            )
+        creds = svc.decrypt_credentials(row)
+        meta = dict(row.connection_metadata or {})
+        result = InstagramProvider().publish_photo(
+            access_token=creds.get("access_token", ""),
+            instagram_user_id=payload.instagram_user_id or meta.get("instagram_user_id") or (row.account_id or ""),
+            image_url=payload.image_url,
+            caption=payload.caption,
+            graph_version=settings.META_GRAPH_VERSION,
+        )
+        SendCampaignExecutor._audit_external(
+            db, action, "instagram", result.ok,
+            {"error_code": result.error_code, "message": result.message,
+             **result.data} if not result.ok else dict(result.data),
+            provider_request_id=result.provider_request_id,
+        )
+        if not result.ok:
+            return ExecutorResult(success=False, error=f"{result.error_code}: {result.message}")
+        return ExecutorResult(
+            success=True,
+            result_metadata={
+                "mode": "live", "executed": True, "provider": "instagram",
+                "media_id": result.data.get("media_id"),
+            },
+        )
+
+
+class CreateAdCampaignExecutor(BaseActionExecutor):
+    """Executor for create_ad_campaign actions (Google Ads / Meta Ads).
+
+    Campaigns are created PAUSED. Approval-gated + EXECUTION_ENABLED;
+    otherwise an honest TEST_MODE preview.
+    """
+
+    action_type = "create_ad_campaign"
+    payload_schema = "create_ad_campaign"
+
+    def execute(self, action: Any, db: Any) -> ExecutorResult:
+        ok, err = _validated_payload(self.payload_schema, action)
+        if not ok:
+            return ExecutorResult(success=False, error=f"INVALID_PAYLOAD: {err}")
+        payload = CreateAdCampaignPayload.model_validate(ok.model_dump())
+
+        from backend.app.services import integration_service as svc
+
+        row = svc.connected_row(db, action.merchant_id, payload.provider)
+        if row is None:
+            label = svc.PROVIDERS[payload.provider]["label"]
+            return ExecutorResult(
+                success=False,
+                error=f"NOT_CONNECTED: {label} is not connected for this workspace.",
+            )
+        settings = get_settings()
+        if not settings.EXECUTION_ENABLED:
+            SendCampaignExecutor._audit_external(
+                db, action, payload.provider, True,
+                {"mode": "test", "executed": False,
+                 "note": "EXECUTION_ENABLED=false — creation withheld (test preview)"},
+            )
+            return ExecutorResult(
+                success=True,
+                result_metadata={
+                    "mode": "test", "executed": False, "provider": payload.provider,
+                    "name": payload.name,
+                    "note": "EXECUTION_ENABLED=false — nothing created (test preview)",
+                },
+            )
+        creds = svc.decrypt_credentials(row)
+        meta = dict(row.connection_metadata or {})
+        if payload.provider == "google_ads":
+            from backend.app.integrations.marketing.google_ads import GoogleAdsProvider
+
+            if payload.budget_amount_micros is None:
+                return ExecutorResult(
+                    success=False, error="INVALID_PAYLOAD: budget_amount_micros is required for google_ads",
+                )
+            tok = GoogleAdsProvider().refresh_access_token(
+                refresh_token=creds.get("refresh_token", ""),
+                client_id=settings.GOOGLE_OAUTH_CLIENT_ID,
+                client_secret=settings.GOOGLE_OAUTH_CLIENT_SECRET,
+            )
+            if not tok.ok:
+                SendCampaignExecutor._audit_external(
+                    db, action, payload.provider, False,
+                    {"error_code": tok.error_code, "message": tok.message},
+                )
+                return ExecutorResult(success=False, error=f"{tok.error_code}: {tok.message}")
+            result = GoogleAdsProvider().create_campaign(
+                access_token=tok.data["access_token"],
+                developer_token=creds.get("developer_token") or settings.GOOGLE_ADS_DEVELOPER_TOKEN,
+                customer_id=payload.account_id or meta.get("customer_id") or (row.account_id or ""),
+                login_customer_id=meta.get("customer_id"),
+                name=payload.name,
+                budget_amount_micros=payload.budget_amount_micros,
+                api_version=settings.GOOGLE_ADS_API_VERSION,
+            )
+        else:
+            from backend.app.integrations.marketing.meta_ads import MetaAdsProvider
+
+            result = MetaAdsProvider().create_campaign(
+                access_token=creds.get("access_token", ""),
+                ad_account_id=payload.account_id or meta.get("ad_account_id") or (row.account_id or ""),
+                name=payload.name,
+                objective=payload.objective or "OUTCOME_TRAFFIC",
+                graph_version=settings.META_GRAPH_VERSION,
+            )
+        SendCampaignExecutor._audit_external(
+            db, action, payload.provider, result.ok,
+            {"error_code": result.error_code, "message": result.message,
+             **result.data} if not result.ok else dict(result.data),
+            provider_request_id=result.provider_request_id,
+        )
+        if not result.ok:
+            return ExecutorResult(success=False, error=f"{result.error_code}: {result.message}")
+        return ExecutorResult(
+            success=True,
+            result_metadata={
+                "mode": "live", "executed": True, "provider": payload.provider,
+                **result.data,
+            },
+        )
+
+
 class GenerateOpportunityExecutor(BaseActionExecutor):
     """Executor for generate_opportunity actions."""
 
@@ -317,6 +696,8 @@ _executor_registry: dict[str, BaseActionExecutor] = {
     "create_discount": CreateDiscountExecutor(),
     "retry_payment": RetryPaymentExecutor(),
     "generate_opportunity": GenerateOpportunityExecutor(),
+    "publish_social_post": PublishSocialPostExecutor(),
+    "create_ad_campaign": CreateAdCampaignExecutor(),
 }
 
 

@@ -137,6 +137,68 @@ class GenerateOpportunityPayload(BaseActionPayload):
     )
 
 
+class PublishSocialPostPayload(BaseActionPayload):
+    """Payload for publish_social_post actions (Instagram).
+
+    Approval-gated: executed only after human approval + EXECUTION_ENABLED.
+    Otherwise the executor returns an honest TEST_MODE preview.
+    """
+
+    provider: str = Field(default="instagram", description="instagram")
+    image_url: str = Field(..., description="Public HTTPS URL of the image to publish")
+    caption: str = Field(..., min_length=1, max_length=2200, description="Post caption")
+    instagram_user_id: Optional[str] = Field(
+        default=None, description="IG business user id (defaults to the connected account)"
+    )
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Additional metadata"
+    )
+
+    @field_validator("provider")
+    @classmethod
+    def provider_must_be_supported(cls, v: str) -> str:
+        if v != "instagram":
+            raise ValueError(f"provider must be 'instagram', got '{v}'")
+        return v
+
+    @field_validator("image_url")
+    @classmethod
+    def image_url_must_be_https(cls, v: str) -> str:
+        if not v.startswith("https://"):
+            raise ValueError("image_url must be a public https:// URL")
+        return v
+
+
+class CreateAdCampaignPayload(BaseActionPayload):
+    """Payload for create_ad_campaign actions (Google Ads / Meta Ads).
+
+    Campaigns are created PAUSED — the merchant unpauses in the provider
+    UI after review. Approval-gated + EXECUTION_ENABLED, else TEST_MODE.
+    """
+
+    provider: str = Field(..., description="google_ads | meta_ads")
+    name: str = Field(..., min_length=1, max_length=255, description="Campaign name")
+    budget_amount_micros: Optional[int] = Field(
+        default=None, gt=0, description="Google Ads budget in micros (required for google_ads)"
+    )
+    objective: Optional[str] = Field(
+        default="OUTCOME_TRAFFIC", description="Meta Ads objective (meta_ads only)"
+    )
+    account_id: Optional[str] = Field(
+        default=None, description="Customer/ad-account id (defaults to the connected account)"
+    )
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Additional metadata"
+    )
+
+    @field_validator("provider")
+    @classmethod
+    def provider_must_be_supported(cls, v: str) -> str:
+        if v not in ("google_ads", "meta_ads"):
+            raise ValueError(f"provider must be google_ads|meta_ads, got '{v}'")
+        return v
+
+
 # -------------------------------------------------------------------------
 # Payload validation helpers
 # -------------------------------------------------------------------------
@@ -224,6 +286,8 @@ def validate_action_payload(
         "create_discount": CreateDiscountPayload,
         "retry_payment": RetryPaymentPayload,
         "generate_opportunity": GenerateOpportunityPayload,
+        "publish_social_post": PublishSocialPostPayload,
+        "create_ad_campaign": CreateAdCampaignPayload,
     }
 
     schema_class = validators.get(action_type)

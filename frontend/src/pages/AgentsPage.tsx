@@ -7,6 +7,8 @@ import {
   fetchRankedOpportunities,
   fetchGrowthMemory,
   startAiTeamWork,
+  fetchMarketingAGIRuns,
+  fetchMarketingAGICampaigns,
 } from "../lib/api";
 import type {
   ActionPlan,
@@ -15,6 +17,8 @@ import type {
   AgentsListResponse,
   GrowthRadarResponse,
   GrowthMemoryResponse,
+  MarketingAGICampaign,
+  MarketingAGIRun,
   OrchestratorRunResponse,
   OrchestrationAgentOutput,
   RankedOpportunity,
@@ -47,10 +51,10 @@ const AGENT_PROFILES: Record<string, AgentProfile> = {
     focus: "Coordinates the team, resolves disagreements, and locks the final recommendation.",
   },
   MarketingAgent: {
-    label: "Marketing Analyst",
-    specialty: "Customer retention & campaigns",
-    looksAt: "Customer segments, repeat purchases, and failed checkout transactions",
-    focus: "Finds ways to retain customers, win back buyers, and run high-return campaigns.",
+    label: "Marketing Agent",
+    specialty: "Autonomous marketing employee",
+    looksAt: "Live business data, customer segments, failed payments, and campaign evidence",
+    focus: "Autonomous marketing employee that researches business data, builds campaigns, verifies actions, and learns from outcomes.",
   },
   ProductAgent: {
     label: "Product Strategist",
@@ -138,7 +142,7 @@ const AGENT_ORDER: string[] = [
 
 const LIVE_TASKS: Record<string, string> = {
   ManagerAgent: "Team strategy, specialist coordination, and the final recommendation",
-  MarketingAgent: "Failed payments + customer purchase history",
+  MarketingAgent: "Autonomous marketing work — research, campaigns, verification",
   ProductAgent: "Products, order values, and items bought together",
   DesignerAgent: "Checkout experience and payment retry messaging",
   SoftwareAgent: "Automation paths and technical constraints",
@@ -158,7 +162,7 @@ const EXECUTION_PHASES: Record<string, string> = {
   CustomerIntelligenceAgent: "Customer Intelligence is reviewing your customers...",
   RevenueOptimizationAgent: "Revenue Optimisation is looking for ways to increase revenue...",
   PaymentRecoveryAgent: "Payment Recovery is checking unsuccessful payments...",
-  MarketingAgent: "Marketing Analyst is identifying customer and campaign opportunities...",
+  MarketingAgent: "Marketing Agent is working autonomously on your business...",
   ProductAgent: "Product Strategist is reviewing products and order patterns...",
   CampaignStrategistAgent: "Campaign Strategist is planning potential campaigns...",
   DesignerAgent: "Creative & UX Advisor is working on customer experience improvements...",
@@ -408,6 +412,167 @@ function commTargetFor(key: string): string | null {
     MarketingAgent: "GrowthMemoryAgent",
   };
   return map[key] ?? null;
+}
+
+/* ── New Marketing Agent slot — real state from /api/marketing-agi ───────
+   The "MarketingAgent" roster key now renders the NEW autonomous Marketing
+   Agent (same key/position, new presentation + new data source). Nothing
+   here touches the legacy Marketing Analyst backend; only this page's
+   display of that slot changes. */
+
+const MAGI_PHASE_LABELS: Record<string, string> = {
+  load_context: "LOADING CONTEXT",
+  observe: "OBSERVING",
+  investigate: "RESEARCHING",
+  plan: "PLANNING",
+  create: "CREATING",
+  verify: "VERIFYING",
+  prepare: "PREPARING",
+  awaiting_approval: "AWAITING APPROVAL",
+  complete: "COMPLETE",
+};
+
+interface MagiSlot {
+  live: AgentLiveStatus;
+  chip: string;
+  tone: "neutral" | "ok" | "accent";
+  anim: "pulse" | "none";
+  monitor: string;
+  sub: string;
+  progress: number | null;
+  tools: string[];
+}
+
+function marketingAgentSlot(
+  magiRun: MarketingAGIRun | null,
+  magiCampaigns: MarketingAGICampaign[],
+): MagiSlot {
+  const tools: string[] = magiRun
+    ? Array.from(new Set((magiRun.state?.tool_calls ?? []).map((c) => c.tool)))
+    : [];
+  const latestCampaign = magiCampaigns[0] ?? null;
+  if (!magiRun) {
+    return {
+      live: "IDLE",
+      chip: "IDLE",
+      tone: "neutral",
+      anim: "none",
+      monitor: "Ready — autonomous marketing employee",
+      sub: "Researches data · builds campaigns · verifies · learns",
+      progress: null,
+      tools: [],
+    };
+  }
+  const st = magiRun.state;
+  const evidenceCount = st?.evidence.length ?? 0;
+  const toolCount = st?.tool_calls.length ?? 0;
+  const llmCount = st?.llm_decisions.length ?? 0;
+  const engine = magiRun.llm_provider ?? "Groq";
+  const sub = `${evidenceCount} evidence · ${toolCount} tools used · ${llmCount} LLM decisions`;
+  if (magiRun.status === "queued" || magiRun.status === "cancelled") {
+    return { live: "IDLE", chip: "IDLE", tone: "neutral", anim: "none", monitor: "Ready — autonomous marketing employee", sub, progress: null, tools };
+  }
+  if (magiRun.status === "running") {
+    const phase = MAGI_PHASE_LABELS[magiRun.phase] ?? "WORKING";
+    return {
+      live: "WORKING",
+      chip: phase,
+      tone: "accent",
+      anim: "pulse",
+      monitor: `${phase} — ${magiRun.objective}`.slice(0, 90),
+      sub: `${engine} reasoning + tools · ${sub}`,
+      progress: null,
+      tools,
+    };
+  }
+  if (magiRun.status === "waiting_approval") {
+    return {
+      live: "NEEDS_APPROVAL",
+      chip: "READY FOR APPROVAL",
+      tone: "accent",
+      anim: "none",
+      monitor: `Ready for approval — ${latestCampaign?.name ?? magiRun.objective}`.slice(0, 90),
+      sub: `Marketing work prepared / approval required · ${sub}`,
+      progress: 100,
+      tools,
+    };
+  }
+  if (magiRun.status === "completed") {
+    const head = st?.observations[0] ?? magiRun.objective;
+    return {
+      live: "COMPLETED",
+      chip: "COMPLETED",
+      tone: "ok",
+      anim: "none",
+      monitor: head.slice(0, 90),
+      sub: `Marketing work prepared · ${sub}`,
+      progress: 100,
+      tools,
+    };
+  }
+  return {
+    live: "BLOCKED",
+    chip: "BLOCKED",
+    tone: "neutral",
+    anim: "none",
+    monitor: `Blocked — ${(st?.errors[0] ?? magiRun.objective)}`.slice(0, 90),
+    sub: `DEGRADED / FAILED — LLM unavailable · ${sub}`,
+    progress: null,
+    tools,
+  };
+}
+
+interface MagiFinding {
+  finding: string;
+  why: string | null;
+  evidence: string;
+  action: string | null;
+  confidence: string | null;
+}
+
+function marketingAgentFinding(
+  magiRun: MarketingAGIRun | null,
+  magiCampaigns: MarketingAGICampaign[],
+): MagiFinding {
+  if (!magiRun) {
+    return {
+      finding: "No autonomous runs yet — start an AI Team analysis to start the Marketing Agent.",
+      why: "The Marketing Agent starts automatically with Start Analysis and prepares campaigns for human approval.",
+      evidence: "No evidence gathered yet.",
+      action: null,
+      confidence: null,
+    };
+  }
+  const st = magiRun.state;
+  const latestCampaign = magiCampaigns[0] ?? null;
+  const finding =
+    st?.observations[0] ??
+    st?.hypotheses[0]?.statement ??
+    magiRun.objective;
+  const evidenceBits: string[] = [];
+  evidenceBits.push(`${st?.evidence.length ?? 0} evidence items`);
+  evidenceBits.push(`${st?.tool_calls.length ?? 0} tool calls`);
+  if ((st?.retrieval_log.length ?? 0) > 0)
+    evidenceBits.push(`${st?.retrieval_log.length} research round(s)`);
+  const evidence = evidenceBits.join(" · ");
+  let action: string | null = null;
+  const prepared = st?.prepared_action as { action_id?: string; approval_state?: string } | null | undefined;
+  if (prepared?.action_id) {
+    action = `send_campaign prepared for approval (action ${String(prepared.action_id).slice(0, 8)}…) — the agent never approves its own work.`;
+  } else if (latestCampaign) {
+    action = `${latestCampaign.name} — ${latestCampaign.audience_count} customers, lifecycle ${latestCampaign.lifecycle.replace(/_/g, " ")}.`;
+  }
+  const topConf = (st?.hypotheses ?? []).reduce<number | null>(
+    (best, h) => (typeof h.confidence === "number" && (best === null || h.confidence > best) ? h.confidence : best),
+    null,
+  );
+  return {
+    finding,
+    why: magiRun.objective,
+    evidence,
+    action,
+    confidence: confidenceWord(topConf),
+  };
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -931,8 +1096,15 @@ export function AgentsPage() {
   const [cmdTab, setCmdTab] = useState<CmdTab>("ACTIVITY");
   const [activityFilter, setActivityFilter] = useState<"ALL" | "WORKING" | "FOUND" | "COMPLETED">("ALL");
   const [workflowSel, setWorkflowSel] = useState<string | null>(null);
+  // NEW Marketing Agent state (powers the MarketingAgent roster slot only)
+  const [magiRun, setMagiRun] = useState<MarketingAGIRun | null>(null);
+  const [magiCampaigns, setMagiCampaigns] = useState<MarketingAGICampaign[]>([]);
 
   const pollIntervalRef = useRef<number | null>(null);
+  // Backend-owned cycle currently observed by this page (survives polling,
+  // never created by polling — only by Start Analysis POST).
+  const activeCycleIdRef = useRef<string | null>(null);
+  const isPausedRef = useRef(false);
   const autoStartedRef = useRef(false);
   const workingSinceRef = useRef<number | null>(null);
 
@@ -954,12 +1126,71 @@ export function AgentsPage() {
     fetchGrowthRadar(windowDays).then(setRadar).catch(() => undefined);
     fetchRankedOpportunities().then((r) => setRanked(r.opportunities ?? [])).catch(() => undefined);
     fetchGrowthMemory().then(setMemory).catch(() => undefined);
+    // NEW Marketing Agent — latest run + campaigns for the MarketingAgent slot
+    fetchMarketingAGIRuns().then((r) => setMagiRun(r.runs?.[0] ?? null)).catch(() => undefined);
+    fetchMarketingAGICampaigns().then((c) => setMagiCampaigns(c.campaigns ?? [])).catch(() => undefined);
   }, [windowDays]);
+
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
 
   useEffect(() => {
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
+  }, []);
+
+  // Restore persisted backend state on mount (navigation/refresh-safe).
+  // Read-only: never creates a cycle, never auto-starts analysis.
+  useEffect(() => {
+    if (!isAuthenticated()) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [runsResp, magi] = await Promise.all([
+          fetchAgentRuns(50).catch(() => ({ runs: [] as AgentRunRow[] })),
+          fetchMarketingAGIRuns().catch(() => ({ runs: [] })),
+        ]);
+        if (cancelled) return;
+        const runs = runsResp.runs ?? [];
+        if (magi.runs?.length) setMagiRun(magi.runs[0]);
+        if (!runs.length) return;
+        const cycleId = runs[0].orchestrator_run_id ?? null;
+        const cycleRuns = cycleId
+          ? runs.filter((r) => r.orchestrator_run_id === cycleId)
+          : runs;
+        setLiveRuns(cycleRuns);
+        const magiActive = magi.runs?.[0]
+          ? magi.runs[0].status === "queued" || magi.runs[0].status === "running"
+          : false;
+        const teamActive = cycleRuns.some((r) => r.status === "running");
+        if ((teamActive || magiActive) && cycleId) {
+          // An analysis is still running server-side: resume observing it.
+          activeCycleIdRef.current = cycleId;
+          setIsWorking(true);
+          setIsPaused(false);
+          setCurrentPhaseText("Resumed — watching persisted analysis…");
+          workingSinceRef.current = Date.now();
+          startPolling(cycleId);
+        } else {
+          try {
+            const mc = await fetchMarketingAGICampaigns().catch(() => ({ campaigns: [] as MarketingAGICampaign[] }));
+            if (!cancelled) setMagiCampaigns(mc.campaigns ?? []);
+          } catch { /* transient */ }
+        }
+      } catch {
+        /* transient — page stays usable without restored state */
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // auto-start from URL
@@ -993,6 +1224,81 @@ export function AgentsPage() {
     }
   };
 
+  const stopPolling = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  };
+
+  // Read-only cycle poll. Returns true while the cycle is still active.
+  // Never creates/cancels anything server-side.
+  const pollCycle = async (cycleId: string): Promise<boolean> => {
+    try {
+      const runsResp = await fetchAgentRuns(50, cycleId);
+      if (runsResp.runs?.length) {
+        setLiveRuns(runsResp.runs);
+        const latest = runsResp.runs[0];
+        if (latest && EXECUTION_PHASES[latest.agent_name]) setCurrentPhaseText(EXECUTION_PHASES[latest.agent_name]);
+      }
+      try {
+        const magi = await fetchMarketingAGIRuns();
+        if (magi.runs?.length) setMagiRun(magi.runs[0]);
+        const magiActive = magi.runs?.[0]
+          ? magi.runs[0].status === "queued" || magi.runs[0].status === "running"
+          : false;
+        const teamActive = (runsResp.runs ?? []).some((r) => r.status === "running");
+        return teamActive || magiActive;
+      } catch {
+        return (runsResp.runs ?? []).some((r) => r.status === "running");
+      }
+    } catch {
+      return true; /* transient — keep polling */
+    }
+  };
+
+  const finalizeCycle = async (cycleId: string) => {
+    setIsWorking(false);
+    setIsPaused(false);
+    setCurrentPhaseText("");
+    setLastAnalysisTime(Date.now());
+    try {
+      const finalRuns = await fetchAgentRuns(50, cycleId);
+      setLiveRuns(finalRuns.runs || []);
+    } catch {}
+    try {
+      const magi = await fetchMarketingAGIRuns();
+      setMagiRun(magi.runs?.[0] ?? null);
+    } catch {}
+    try {
+      const mc = await fetchMarketingAGICampaigns();
+      setMagiCampaigns(mc.campaigns ?? []);
+    } catch {}
+    try {
+      const rk = await fetchRankedOpportunities();
+      setRanked(rk.opportunities ?? []);
+    } catch {}
+    try {
+      const refreshed = await fetchGrowthRadar(windowDays);
+      setRadar(refreshed);
+    } catch {}
+    fetchGrowthMemory().then(setMemory).catch(() => undefined);
+  };
+
+  const startPolling = (cycleId: string) => {
+    stopPolling();
+    activeCycleIdRef.current = cycleId;
+    pollIntervalRef.current = window.setInterval(async () => {
+      if (isPausedRef.current) return;
+      const active = await pollCycle(cycleId);
+      if (!active) {
+        stopPolling();
+        activeCycleIdRef.current = null;
+        await finalizeCycle(cycleId);
+      }
+    }, 1500);
+  };
+
   const handleStartAiWork = async (targetObjective?: string) => {
     const obj = targetObjective || urlObjective || DEFAULT_OBJECTIVE;
     if (isWorking) return;
@@ -1002,51 +1308,17 @@ export function AgentsPage() {
     setCurrentPhaseText("Starting your business analysis...");
     workingSinceRef.current = Date.now();
     try {
-      const runPromise = startAiTeamWork(obj, { windowDays });
-      let activeRunId: string | null = null;
-      const poll = window.setInterval(async () => {
-        if (isPaused) return;
-        try {
-          const runsResp = await fetchAgentRuns(20, activeRunId || undefined);
-          if (runsResp.runs?.length) {
-            setLiveRuns(runsResp.runs);
-            const latest = runsResp.runs[0];
-            if (latest && EXECUTION_PHASES[latest.agent_name]) setCurrentPhaseText(EXECUTION_PHASES[latest.agent_name]);
-          }
-        } catch {
-          /* transient */
-        }
-      }, 1500);
-      pollIntervalRef.current = poll;
-      const res = await runPromise;
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
-      activeRunId = res.orchestrator_run_id;
+      // 202 fast-return: backend persists the cycle and owns execution.
+      // The browser switches to monitoring mode immediately and never
+      // waits for the full 14-agent plan.
+      const res = await startAiTeamWork(obj, { windowDays });
+      const cycleId = res.orchestrator_run_id;
       setLastRunResult(res);
-      setIsWorking(false);
-      setIsPaused(false);
-      setCurrentPhaseText("");
       setLastAnalysisTime(Date.now());
-      try {
-        const finalRuns = await fetchAgentRuns(25, res.orchestrator_run_id);
-        setLiveRuns(finalRuns.runs || []);
-      } catch {}
-      try {
-        const rk = await fetchRankedOpportunities();
-        setRanked(rk.opportunities ?? []);
-      } catch {}
-      try {
-        const refreshed = await fetchGrowthRadar(windowDays);
-        setRadar(refreshed);
-      } catch {}
-      fetchGrowthMemory().then(setMemory).catch(() => undefined);
+      setCurrentPhaseText(`ANALYSIS STARTED — Cycle ${cycleId.slice(0, 8)}…`);
+      startPolling(cycleId);
     } catch (e) {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
+      stopPolling();
       const msg = e instanceof Error ? e.message : "";
       if (msg.includes("NO_MERCHANT_MEMBERSHIP") || msg.includes("403")) setError("no_workspace");
       else setWorkError(msg || "The AI team could not complete this analysis. Please try again in a moment.");
@@ -1061,24 +1333,33 @@ export function AgentsPage() {
     setIsPaused((p) => {
       const next = !p;
       if (next) {
-        if (pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current);
-          pollIntervalRef.current = null;
-        }
+        stopPolling();
         setCurrentPhaseText("Paused — polling suspended. Backend analysis continues.");
       } else {
         setCurrentPhaseText("Resumed — watching agent activity…");
-        const t = window.setInterval(async () => {
-          try {
-            const resp = await fetchAgentRuns(20);
-            if (resp.runs?.length) {
-              setLiveRuns(resp.runs);
-              const latest = resp.runs[0];
-              if (latest && EXECUTION_PHASES[latest.agent_name]) setCurrentPhaseText(EXECUTION_PHASES[latest.agent_name]);
-            }
-          } catch {}
-        }, 1500);
-        pollIntervalRef.current = t;
+        // Resume observing the SAME persisted cycle (or latest if unknown).
+        const cycleId = activeCycleIdRef.current;
+        if (cycleId) {
+          startPolling(cycleId);
+        } else {
+          pollIntervalRef.current = window.setInterval(async () => {
+            if (isPausedRef.current) return;
+            try {
+              const resp = await fetchAgentRuns(50);
+              if (resp.runs?.length) {
+                const cid = resp.runs[0].orchestrator_run_id;
+                const scoped = cid
+                  ? resp.runs.filter((r) => r.orchestrator_run_id === cid)
+                  : resp.runs;
+                setLiveRuns(scoped);
+                if (cid && !scoped.some((r) => r.status === "running")) {
+                  stopPolling();
+                  await finalizeCycle(cid);
+                }
+              }
+            } catch {}
+          }, 1500);
+        }
       }
       return next;
     });
@@ -1118,12 +1399,15 @@ export function AgentsPage() {
     const run = runByAgent.get(name);
     const out = agentOutputMap.get(name);
     const vis = AVATAR_BASE[name] ?? { zone: "SPECIALISTS" };
-    const derived = deriveLiveStatus(name, run, out, isWorking, Boolean(insufficient && !isWorking && executedAgentNames.length === 0));
-    const progress = deriveAgentProgress(run, out, isWorking, idx, run?.started_at ? new Date(run.started_at).getTime() : workingSinceRef.current);
+    // NEW Marketing Agent slot: real status from /api/marketing-agi (same position)
+    const magi = name === "MarketingAgent" ? marketingAgentSlot(magiRun, magiCampaigns) : null;
+    const derived = magi ?? deriveLiveStatus(name, run, out, isWorking, Boolean(insufficient && !isWorking && executedAgentNames.length === 0));
+    const progress = magi?.progress ?? deriveAgentProgress(run, out, isWorking, idx, run?.started_at ? new Date(run.started_at).getTime() : workingSinceRef.current);
     const toolDetail = toolDetailForAgent(name, metrics, run);
     const commTarget = derived.live === "COMMUNICATING" ? commTargetFor(name) : null;
     const monitorLine =
-      derived.live === "WORKING"
+      magi?.monitor ??
+      (derived.live === "WORKING"
         ? EXECUTION_PHASES[name] ?? `Analyzing ${LIVE_TASKS[name] ?? "business data"}…`
         : derived.live === "TOOL_CALL"
           ? `USING TOOL — ${toolDetail?.tool ?? "tool call"}`
@@ -1147,9 +1431,10 @@ export function AgentsPage() {
                         ? "Needs attention — last run did not complete"
                         : derived.live === "IDLE"
                           ? `Ready — ${prof.specialty}`
-                          : `Queued — ${LIVE_TASKS[name] ?? prof.looksAt}`;
+                          : `Queued — ${LIVE_TASKS[name] ?? prof.looksAt}`);
     const subLine =
-      derived.live === "TOOL_CALL"
+      magi?.sub ??
+      (derived.live === "TOOL_CALL"
         ? `${toolDetail?.input ?? "input"} → ${toolDetail?.result ?? "running"}`
         : derived.live === "WORKING"
           ? `Examining ${prof.looksAt.toLowerCase()}…`
@@ -1159,7 +1444,7 @@ export function AgentsPage() {
               ? out.output.recommendations[0].slice(0, 88)
               : derived.live === "IDLE"
                 ? prof.focus.slice(0, 74)
-                : `Focus: ${prof.specialty}`;
+                : `Focus: ${prof.specialty}`);
     const pos = OFFICE_POS[name] ?? { x: 50, y: 50 };
     return {
       key: name,
@@ -1174,7 +1459,7 @@ export function AgentsPage() {
       monitorLine,
       subLine,
       latencyMs: run?.total_latency_ms ?? out?.latency_ms?.total ?? null,
-      tools: Array.isArray(run?.tools_used) ? (run.tools_used as string[]) : [],
+      tools: magi && magi.tools.length > 0 ? magi.tools : (Array.isArray(run?.tools_used) ? (run.tools_used as string[]) : []),
       toolDetail,
       commTarget,
       pos,
@@ -1253,6 +1538,22 @@ export function AgentsPage() {
   // findings
   const findings = rosterOrder
     .map((name) => {
+      // NEW Marketing Agent slot: real finding from /api/marketing-agi, same position.
+      // The legacy Marketing Analyst output is never used for this slot.
+      if (name === "MarketingAgent") {
+        const mag = marketingAgentFinding(magiRun, magiCampaigns);
+        const magProfile = agentProfile(name);
+        return {
+          name,
+          label: magProfile.label,
+          specialty: magProfile.specialty,
+          finding: mag.finding,
+          why: mag.why,
+          evidence: mag.evidence,
+          action: mag.action,
+          confidence: mag.confidence,
+        };
+      }
       const output = agentOutputMap.get(name);
       if (!output || output.status !== "completed") return null;
       const recs = output.output?.recommendations ?? [];
@@ -2002,8 +2303,12 @@ export function AgentsPage() {
                 <p className="finding__text">{agentProfile(f.name).looksAt}</p>
               </div>
               <div className="finding__foot">
-                <button type="button" className="finding__link" onClick={() => setSelectedAgent(f.name)}>
-                  Open workstation →
+                <button
+                  type="button"
+                  className="finding__link"
+                  onClick={() => (f.name === "MarketingAgent" ? navigate("/marketing-agent") : setSelectedAgent(f.name))}
+                >
+                  {f.name === "MarketingAgent" ? "Open Marketing Agent →" : "Open workstation →"}
                 </button>
                 <span className="finding__meta">Confidence: {f.confidence ?? "—"} · Related: Priority Ranking · Technical Feasibility · Growth Manager</span>
               </div>
@@ -2115,7 +2420,7 @@ export function AgentsPage() {
           </div>
           <div className="roster__scroll" role="list">
             {liveInfos.map((a) => (
-              <button key={a.key} type="button" role="listitem" className={`roster__tile${selectedAgent === a.key ? " roster__tile--sel" : ""} roster__tile--${a.liveStatus.toLowerCase()}`} onClick={() => setSelectedAgent(a.key)} aria-pressed={selectedAgent === a.key}>
+              <button key={a.key} type="button" role="listitem" className={`roster__tile${selectedAgent === a.key ? " roster__tile--sel" : ""} roster__tile--${a.liveStatus.toLowerCase()}`} onClick={() => (a.key === "MarketingAgent" ? navigate("/marketing-agent") : setSelectedAgent(a.key))} aria-pressed={selectedAgent === a.key}>
                 <AgentAvatar agentKey={a.key} status={a.liveStatus} size={42} />
                 <span className="roster__name">{a.label.toUpperCase()}</span>
                 <span className={`roster__badge roster__badge--${a.chipTone}`}>● {a.chipLabel}</span>
@@ -2133,8 +2438,9 @@ export function AgentsPage() {
         </div>
       </WindowPanel>
 
-      {/* ── DETAIL OVERLAY ──────────────────────────────────────────────── */}
-      {selectedAgent && selectedLive && (
+      {/* ── DETAIL OVERLAY (legacy workstations; the new Marketing Agent
+          opens at /marketing-agent instead and never lands here) ───────── */}
+      {selectedAgent && selectedAgent !== "MarketingAgent" && selectedLive && (
         <AgentDetailPanel
           agentKey={selectedAgent}
           onClose={() => setSelectedAgent(null)}

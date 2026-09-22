@@ -174,12 +174,16 @@ class AgenticRAG:
         registry,
         llm: BaseLLMProvider | None = None,
         limits: LoopLimits | None = None,
+        prompt_catalog: list[dict[str, Any]] | None = None,
     ) -> None:
         self._ctx = ctx
         self._registry = registry
         self._llm = llm
         self._limits = limits or LoopLimits()
         self._tools = {spec["name"] for spec in registry.catalog()}
+        # Stage-filtered catalog for prompts only (smaller/faster); the
+        # execution allowlist (self._tools) always stays complete.
+        self._prompt_catalog = prompt_catalog
 
     # ── public entry ─────────────────────────────────────────────────────
 
@@ -195,7 +199,7 @@ class AgenticRAG:
     # ── LLM-driven loop ─────────────────────────────────────────────────
 
     def _research_llm(self, question: str, result: AgenticRAGResult) -> None:
-        catalog = self._registry.catalog()
+        catalog = self._prompt_catalog or self._registry.catalog()
         system = (
             "You are the retrieval strategist of an autonomous marketing agent. "
             "Classify the information need, choose the single best registered tool, "

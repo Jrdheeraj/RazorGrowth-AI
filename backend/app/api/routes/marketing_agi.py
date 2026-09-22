@@ -64,30 +64,110 @@ router = APIRouter(prefix="/marketing-agi", tags=["marketing-agi"])
 
 
 # ---------------------------------------------------------------------------
+# Marketing stack — the six fixed workstation categories, derived from the
+# REAL tool registry (never hardcoded connected=true).
+# ---------------------------------------------------------------------------
+
+# category key → (label, description, registry match rule)
+_STACK_DEFS: tuple[tuple[str, str, str, str], ...] = (
+    (
+        "email",
+        "Email",
+        "Platform campaign store + drafts. No external ESP is connected, "
+        "so sending is impossible; drafts await human approval.",
+        "capability:email",
+    ),
+    (
+        "google_ads",
+        "Google Ads",
+        "No Google Ads account is connected. The agent may prepare strategy "
+        "and copy, but it cannot inspect or modify ad accounts.",
+        "capability:google_ads",
+    ),
+    (
+        "meta_ads",
+        "Meta Ads",
+        "No Meta Ads account is connected. The agent may prepare strategy "
+        "and copy, but it cannot inspect or modify ad accounts.",
+        "capability:meta_ads",
+    ),
+    (
+        "crm",
+        "CRM",
+        "Internal customer data (this merchant's own customers, orders and "
+        "payments). Fully usable and tenant-scoped; no external CRM exists.",
+        "category:customers",
+    ),
+    (
+        "analytics",
+        "Analytics",
+        "Internal commerce analytics computed from this merchant's own "
+        "orders, payments and customers. Fully usable and tenant-scoped.",
+        "category:analytics",
+    ),
+    (
+        "social",
+        "Social Platforms",
+        "No social API is connected. The agent may prepare post concepts "
+        "and captions as drafts only; it cannot publish.",
+        "capability:social",
+    ),
+)
+
+_STACK_FALLBACK_STATUS = {
+    "email": "draft_only",
+    "google_ads": "requires_integration",
+    "meta_ads": "requires_integration",
+    "crm": "connected",
+    "analytics": "connected",
+    "social": "requires_integration",
+}
+
+
+def _build_marketing_stack(catalog: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Build the six-category stack from the real registry catalog."""
+    stack: list[dict[str, Any]] = []
+    for key, label, description, rule in _STACK_DEFS:
+        kind, _, value = rule.partition(":")
+        matched = [
+            t
+            for t in catalog
+            if (value in (t.get("capabilities") or []) if kind == "capability" else t.get("category") == value)
+        ]
+        statuses = {t.get("integration_status") for t in matched}
+        if "connected" in statuses:
+            status = "connected"
+        elif "draft_only" in statuses:
+            status = "draft_only"
+        elif "requires_integration" in statuses:
+            status = "requires_integration"
+        else:
+            status = _STACK_FALLBACK_STATUS[key]
+        capabilities = sorted({c for t in matched for c in (t.get("capabilities") or [])})
+        stack.append(
+            {
+                "key": key,
+                "label": label,
+                "status": status,
+                "description": description,
+                "tools": [t.get("name") for t in matched],
+                "capabilities": capabilities,
+            }
+        )
+    return stack
+
+
+# ---------------------------------------------------------------------------
 # Provider builders (mirror existing route patterns; 503 when unconfigured)
 # ---------------------------------------------------------------------------
 
 
 def _build_llm() -> BaseLLMProvider | None:
-    """Build the LLM from settings; None when not configured (agent still
-    runs deterministically — honest, not fake)."""
-    settings = get_settings()
-    if settings.LLM_PROVIDER.lower() == "groq":
-        api_key, model = settings.GROQ_API_KEY, settings.GROQ_MODEL
-    else:
-        api_key, model = settings.LLM_API_KEY, settings.LLM_MODEL
-    if not api_key:
-        return None
-    from backend.app.ai.llm.provider import build_llm_provider
+    """Build the agent LLM (Groq-first); None when not configured (agent
+    still runs deterministically — honest, not fake)."""
+    from backend.app.agents.marketing_agi.llm import build_marketing_llm
 
-    return build_llm_provider(
-        provider=settings.LLM_PROVIDER,
-        api_key=api_key,
-        model=model,
-        timeout=settings.LLM_REQUEST_TIMEOUT,
-        max_retries=settings.LLM_MAX_RETRIES,
-        max_tokens=settings.LLM_MAX_TOKENS,
-    )
+    return build_marketing_llm()
 
 
 def _build_embedder():
@@ -104,14 +184,9 @@ def _build_embedder():
 
 
 def _llm_identity() -> tuple[bool, str | None, str | None]:
-    settings = get_settings()
-    if settings.LLM_PROVIDER.lower() == "groq":
-        configured = bool(settings.GROQ_API_KEY)
-        model = settings.GROQ_MODEL
-    else:
-        configured = bool(settings.LLM_API_KEY)
-        model = settings.LLM_MODEL
-    return configured, settings.LLM_PROVIDER if configured else None, model if configured else None
+    from backend.app.agents.marketing_agi.llm import llm_identity
+
+    return llm_identity()
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +204,7 @@ def _serialize_run(run: MarketingAGIRun) -> dict[str, Any]:
         "phase": run.phase,
         "iterations": run.iterations,
         "tool_call_count": run.tool_call_count,
+        "analysis_cycle_id": getattr(run, "analysis_cycle_id", None),
         "started_at": str(run.started_at) if run.started_at else None,
         "completed_at": str(run.completed_at) if run.completed_at else None,
         "llm_provider": run.llm_provider,
@@ -150,6 +226,13 @@ def _serialize_run(run: MarketingAGIRun) -> dict[str, Any]:
             "tool_call_count": state.get("tool_call_count", run.tool_call_count),
             "duplicate_tool_calls": state.get("duplicate_tool_calls", 0),
             "errors": state.get("errors", []),
+            "llm_calls": state.get("llm_calls", 0),
+            "llm_decisions": state.get("llm_decisions", []),
+            "reasoning_status": state.get("reasoning_status", "idle"),
+            "current_decision": state.get("current_decision"),
+            "reasoning_summary": state.get("reasoning_summary"),
+            "llm_degraded": state.get("llm_degraded", False),
+            "timing": state.get("timing", {}),
         },
         "result": run.result,
         "errors": run.errors or [],
@@ -224,27 +307,78 @@ def agi_status(
     db: Session = Depends(get_db),
     ctx: MerchantContext = Depends(merchant_ctx),
 ) -> Any:
-    """Agent capability + integration transparency."""
+    """Agent capability + integration transparency.
+
+    Stack statuses are REAL: 'connected' appears only with a verified
+    per-workspace connection row; internal CRM/analytics are labelled
+    internal; everything else is draft_only / requires_integration.
+    """
     register_all_tools()
     registry = get_registry()
     llm_configured, provider, model = _llm_identity()
+    catalog = registry.catalog()
     integration_map: dict[str, str] = {}
-    for tool in registry.catalog():
+    for tool in catalog:
         cat = tool["category"]
         if cat == "integrations":
             integration_map[tool["name"]] = tool["integration_status"]
+    stack = _build_marketing_stack(catalog)
+    # Overlay LIVE per-workspace connection state (never hardcoded).
+    from backend.app.services import integration_service as svc
+
+    live = svc.live_stack_snapshot(db, ctx.merchant_id)
+    for entry in stack:
+        snap = live.get(entry["key"], {})
+        conn = snap.get("connection")
+        if snap.get("status") == "connected" and conn:
+            entry["status"] = "connected"
+            entry["provider"] = conn["provider"]
+            entry["account_id"] = conn["account_id"]
+            entry["account_name"] = conn["account_name"]
+            entry["last_verified_at"] = conn["last_verified_at"]
+            entry["connection"] = conn
+            if entry["key"] == "email":
+                entry["description"] = (
+                    f"Resend connected ({conn['account_id']}). "
+                    "Sending requires human approval via the actions pipeline."
+                )
+            elif entry["key"] == "social":
+                entry["label"] = "Instagram"
+                entry["description"] = (
+                    f"Instagram connected ({conn['account_name']}). "
+                    "Publishing requires human approval."
+                )
+            else:
+                entry["description"] = (
+                    f"{entry['label']} connected ({conn['account_name']}). "
+                    "Reads are live; writes require human approval."
+                )
+        else:
+            entry["provider"] = {
+                "email": "resend", "google_ads": "google_ads",
+                "meta_ads": "meta_ads", "crm": "internal",
+                "analytics": "internal", "social": "instagram",
+            }[entry["key"]]
+            entry["account_id"] = None
+            entry["account_name"] = None
+            entry["last_verified_at"] = None
+            entry["connection"] = None
+    live_email = (live.get("email") or {}).get("status") == "connected"
     return {
         "llm_configured": llm_configured,
         "llm_provider": provider,
         "llm_model": model,
         "integration_status": {
-            "email_marketing": "draft_only",
-            "google_ads": "requires_integration",
-            "meta_ads": "requires_integration",
-            "social_platforms": "requires_integration",
+            "email_marketing": "connected" if live_email else "draft_only",
+            "google_ads": "connected" if (live.get("google_ads") or {}).get("status") == "connected" else "requires_integration",
+            "meta_ads": "connected" if (live.get("meta_ads") or {}).get("status") == "connected" else "requires_integration",
+            "crm": "connected",
+            "analytics": "connected",
+            "social_platforms": "connected" if (live.get("social") or {}).get("status") == "connected" else "requires_integration",
             **integration_map,
         },
-        "tools_available": len(registry.catalog()),
+        "marketing_stack": stack,
+        "tools_available": len(catalog),
         "workflows_available": len(workflow_catalog()),
     }
 
@@ -255,7 +389,19 @@ def tool_catalog(
     ctx: MerchantContext = Depends(merchant_ctx),
 ) -> Any:
     register_all_tools()
-    return {"tools": get_registry().catalog()}
+    tools = get_registry().catalog()
+    # Overlay live per-merchant connection state so the catalog never
+    # claims a connection that does not exist for THIS workspace.
+    from backend.app.services import integration_service as svc
+
+    live_providers = {
+        p for p in ("resend", "google_ads", "meta_ads", "instagram")
+        if svc.connected_row(db, ctx.merchant_id, p) is not None
+    }
+    for tool in tools:
+        if tool.get("provider") in live_providers:
+            tool["integration_status"] = "connected"
+    return {"tools": tools}
 
 
 @router.get("/workflows", response_model=AGIWorkflowCatalogResponse)
@@ -301,15 +447,22 @@ def start_run(
 @router.get("/runs", response_model=AGIRunListResponse)
 def list_runs(
     limit: int = Query(default=20, ge=1, le=100),
+    analysis_cycle_id: str | None = Query(default=None, max_length=64),
     db: Session = Depends(get_db),
     ctx: MerchantContext = Depends(merchant_ctx),
 ) -> Any:
+    """Run history, tenant-scoped. Optionally filtered to one shared AI
+    Team analysis cycle — read-only: listing never creates a run."""
     stmt = (
         select(MarketingAGIRun)
         .where(MarketingAGIRun.merchant_id == ctx.merchant_id)
         .order_by(MarketingAGIRun.created_at.desc())
         .limit(limit)
     )
+    if analysis_cycle_id:
+        stmt = stmt.where(
+            MarketingAGIRun.analysis_cycle_id == analysis_cycle_id
+        )
     runs = list(db.scalars(stmt).all())
     return {"runs": [_serialize_run(r) for r in runs]}
 

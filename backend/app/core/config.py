@@ -100,6 +100,40 @@ class Settings(BaseSettings):
     DISCOUNT_MAX_PERCENTAGE: Decimal = Decimal("100.0")  # hard ceiling
     DISCOUNT_MAX_AMOUNT_INR: Decimal = Decimal("50000.0")  # guardrail ceiling
 
+    # ------------------------------------------------------------------ #
+    # Marketing Agent integrations — application-level provider config.
+    # Per-workspace credentials (API keys, OAuth tokens) are NEVER stored
+    # here: merchants connect via the API and secrets are Fernet-encrypted
+    # in the integration_connections table (see core/credential_vault.py).
+    # ------------------------------------------------------------------ #
+    # Dedicated Fernet key (urlsafe-base64, 32 bytes) for credential
+    # encryption at rest. Empty = derived from AUTH_SECRET_KEY (dev only;
+    # production should set an explicit key — startup logs a warning).
+    INTEGRATION_CREDENTIAL_KEY: str = ""
+
+    # Email (Resend). Optional platform default; merchants may also connect
+    # their own Resend key per workspace via the integrations API.
+    RESEND_API_KEY: str = ""
+    RESEND_FROM_EMAIL: str = ""
+    RESEND_FROM_NAME: str = "RazorGrowth"
+
+    # Google Ads OAuth application (Google Cloud Console). Since the
+    # September 2026 developer-token sunset, API access is governed by the
+    # Cloud project's access level — no developer token is required. The
+    # setting below is an optional legacy passthrough (sent only when set);
+    # a merchant may still supply a per-connection override via the API.
+    GOOGLE_OAUTH_CLIENT_ID: str = ""
+    GOOGLE_OAUTH_CLIENT_SECRET: str = ""
+    GOOGLE_OAUTH_REDIRECT_URI: str = ""
+    GOOGLE_ADS_DEVELOPER_TOKEN: str = ""
+    GOOGLE_ADS_API_VERSION: str = "v25"
+
+    # Meta (Ads + Instagram) application (Meta Developers dashboard).
+    META_APP_ID: str = ""
+    META_APP_SECRET: str = ""
+    META_OAUTH_REDIRECT_URI: str = ""
+    META_GRAPH_VERSION: str = "v24.0"
+
     # Measurement
     MEASUREMENT_REQUIRE_REAL_DATA: bool = True  # never fabricate revenue
 

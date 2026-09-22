@@ -49,6 +49,14 @@ class AGIStateSummary(BaseModel):
     tool_call_count: int = 0
     duplicate_tool_calls: int = 0
     errors: list[str] = Field(default_factory=list)
+    # Groq reasoning-engine observability (safe metadata only).
+    llm_calls: int = 0
+    llm_decisions: list[dict[str, Any]] = Field(default_factory=list)
+    reasoning_status: str = "idle"
+    current_decision: str | None = None
+    reasoning_summary: str | None = None
+    llm_degraded: bool = False
+    timing: dict[str, Any] = Field(default_factory=dict)
 
 
 class AGIRunResponse(BaseModel):
@@ -59,6 +67,7 @@ class AGIRunResponse(BaseModel):
     phase: str
     iterations: int
     tool_call_count: int
+    analysis_cycle_id: str | None = None
     started_at: str | None = None
     completed_at: str | None = None
     llm_provider: str | None = None
@@ -148,5 +157,6 @@ class AGIStatusResponse(BaseModel):
     llm_provider: str | None = None
     llm_model: str | None = None
     integration_status: dict[str, str]
+    marketing_stack: list[dict[str, Any]] = Field(default_factory=list)
     tools_available: int
     workflows_available: int

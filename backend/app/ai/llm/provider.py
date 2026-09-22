@@ -38,6 +38,12 @@ class LLMValidationError(Exception):
     """Raised when LLM output fails Pydantic schema validation."""
 
 
+# Upper bound for a single retry wait, even when the provider asks for
+# more via Retry-After. Keeps 429 backoff bounded: we degrade honestly
+# instead of stalling the agent for a minute on free-tier limits.
+MAX_RETRY_DELAY_SECONDS = 20.0
+
+
 def _is_retryable(exc: Exception) -> bool:
     """Return True for transient OpenAI errors (rate-limit, 5xx)."""
     try:
@@ -55,6 +61,36 @@ def _is_retryable(exc: Exception) -> bool:
         return False
 
 
+def _is_rate_limited(exc: Exception) -> bool:
+    """True only for HTTP 429 rate-limit responses."""
+    try:
+        import openai
+        return isinstance(exc, openai.RateLimitError)
+    except ImportError:
+        return False
+
+
+def _retry_after_seconds(exc: Exception, default: float) -> float:
+    """Honor the provider's Retry-After hint on 429, strictly capped.
+
+    Returns ``default`` when no usable hint is present. Never returns
+    more than MAX_RETRY_DELAY_SECONDS so a single retry can never stall
+    the agent loop.
+    """
+    if _is_rate_limited(exc):
+        try:
+            response = getattr(exc, "response", None)
+            headers = getattr(response, "headers", None) or {}
+            raw = headers.get("retry-after") or headers.get("Retry-After")
+            if raw is not None:
+                hinted = float(str(raw).strip().rstrip("s"))
+                if hinted >= 0:
+                    return min(hinted, MAX_RETRY_DELAY_SECONDS)
+        except (TypeError, ValueError, AttributeError):
+            pass
+    return default
+
+
 class OpenAIProvider(BaseLLMProvider):
     """
     OpenAI chat completions provider with production safeguards.
@@ -64,6 +100,9 @@ class OpenAIProvider(BaseLLMProvider):
       exponential back-off (1s, 2s).
     - JSON mode for generate_structured() — always valid JSON output.
     - API key is never logged.
+    - Per-call stats on `last_call_stats` (attempts, retries,
+      rate_limited, retry_delay_ms) — safe metadata only, no prompts,
+      keys, or response content.
     """
 
     def __init__(
@@ -84,6 +123,10 @@ class OpenAIProvider(BaseLLMProvider):
         self._timeout = timeout
         self._max_retries = max_retries
         self._max_tokens = max_tokens
+        self.last_call_stats: dict = {
+            "attempts": 0, "retries": 0, "rate_limited": False,
+            "retry_delay_ms": 0,
+        }
         client_kwargs: dict = {"api_key": api_key, "timeout": float(timeout)}
         if base_url:
             client_kwargs["base_url"] = base_url
@@ -176,21 +219,42 @@ class OpenAIProvider(BaseLLMProvider):
         return content
 
     def _call_with_retry(self, fn, **kwargs) -> str:
+        attempts = 0
+        retries = 0
+        rate_limited = False
+        retry_delay_ms = 0
         last_exc: Exception | None = None
         for attempt in range(self._max_retries + 1):
+            attempts = attempt + 1
             try:
-                return fn(**kwargs)
+                out = fn(**kwargs)
+                self.last_call_stats = {
+                    "attempts": attempts, "retries": retries,
+                    "rate_limited": rate_limited,
+                    "retry_delay_ms": retry_delay_ms,
+                }
+                return out
             except Exception as exc:
                 last_exc = exc
+                if _is_rate_limited(exc):
+                    rate_limited = True
                 if _is_retryable(exc) and attempt < self._max_retries:
-                    wait = 2 ** attempt  # 1s, 2s
+                    # Respect the provider's Retry-After on 429 (capped);
+                    # other transient errors keep exponential back-off.
+                    wait = _retry_after_seconds(exc, default=float(2 ** attempt))
+                    retry_delay_ms += int(wait * 1000)
+                    retries += 1
                     log.warning(
-                        "LLM transient error (attempt %d/%d), retrying in %ds: %s",
+                        "LLM transient error (attempt %d/%d), retrying in %.1fs: %s",
                         attempt + 1, self._max_retries + 1, wait, type(exc).__name__,
                     )
                     time.sleep(wait)
                 else:
                     break
+        self.last_call_stats = {
+            "attempts": attempts, "retries": retries,
+            "rate_limited": rate_limited, "retry_delay_ms": retry_delay_ms,
+        }
         log.error("LLM call failed after %d attempts: %s", self._max_retries + 1, type(last_exc).__name__)
         raise LLMError(f"LLM call failed: {type(last_exc).__name__}") from last_exc
 

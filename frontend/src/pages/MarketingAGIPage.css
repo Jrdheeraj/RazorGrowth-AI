@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Marketing AGI workstation — the autonomous marketing employee console.
+   Marketing Agent workstation — the autonomous marketing employee console.
    Rendered entirely in RazorGrowth tokens (paper / ink / coral / green,
    square corners, offset print shadows, mono metadata). Every element is
    driven by real backend execution state.
@@ -844,5 +844,588 @@
   }
   .magi-banner__row {
     flex-direction: column;
+  }
+}
+
+/* ==========================================================================
+   Marketing Agent workstation additions — header, workflow, stack,
+   tool table, lifecycle, approval, modal. Same RazorGrowth tokens.
+   ========================================================================== */
+
+.magi-eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--coral);
+  margin: 0 0 10px;
+}
+
+.window--dark .magi-eyebrow {
+  color: #e8a28f;
+}
+
+.magi-title--light {
+  color: var(--paper-bright);
+}
+
+.magi-lead--light {
+  color: rgba(247, 235, 215, 0.78);
+}
+
+.magi-meta__item--light {
+  color: rgba(247, 235, 215, 0.72);
+}
+
+.magi-statusrow {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.magi-objectivebox {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 14px;
+  border: 1px solid rgba(247, 235, 215, 0.25);
+  border-radius: var(--radius-window);
+  background: rgba(247, 235, 215, 0.06);
+  max-width: 100%;
+}
+
+.magi-objectivebox__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(247, 235, 215, 0.6);
+  flex-shrink: 0;
+}
+
+.magi-objectivebox__value {
+  font-size: var(--text-small);
+  color: var(--paper-bright);
+  overflow-wrap: anywhere;
+}
+
+/* ── workflow position strip (real state, not animation) ──────────────── */
+
+.magi-flow {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.magi-flow__stage {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: var(--radius-window);
+  border: 1px solid rgba(247, 235, 215, 0.18);
+  color: rgba(247, 235, 215, 0.45);
+  white-space: nowrap;
+}
+
+.magi-flow__stage--done {
+  color: rgba(247, 235, 215, 0.85);
+  border-color: rgba(247, 235, 215, 0.35);
+  background: rgba(247, 235, 215, 0.05);
+}
+
+.magi-flow__stage--now {
+  color: #1a1320;
+  background: var(--coral);
+  border-color: var(--coral);
+  font-weight: 700;
+}
+
+/* ── grid spans ───────────────────────────────────────────────────────── */
+
+.magi-s4 { grid-column: span 4; }
+.magi-s5 { grid-column: span 5; }
+.magi-s6 { grid-column: span 6; }
+.magi-s7 { grid-column: span 7; }
+.magi-s12 { grid-column: span 12; }
+
+/* ── reasoning ────────────────────────────────────────────────────────── */
+
+.magi-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  font-size: var(--text-small);
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(247, 235, 215, 0.15);
+}
+
+.magi-kv span {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(247, 235, 215, 0.6);
+}
+
+.magi-kv strong {
+  color: var(--paper-bright);
+  font-weight: 600;
+  text-align: right;
+}
+
+.magi-plan {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--text-small);
+}
+
+.magi-plan__step {
+  color: rgba(247, 235, 215, 0.8);
+  line-height: 1.45;
+}
+
+.magi-plan__tool {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--paper-bright);
+  margin-right: 8px;
+}
+
+.magi-plan__step--done { color: rgba(247, 235, 215, 0.55); }
+.magi-plan__step--active { color: var(--paper-bright); font-weight: 600; }
+
+/* ── tool activity table ──────────────────────────────────────────────── */
+
+.magi-tablewrap {
+  overflow-x: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+}
+
+.magi-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  min-width: 760px;
+}
+
+.magi-table th {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper-deep);
+  white-space: nowrap;
+}
+
+.magi-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: top;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.magi-table tr:last-child td {
+  border-bottom: none;
+}
+
+.magi-table__tool {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.magi-table__dim {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.magi-pill {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: var(--radius-window);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.magi-pill--ok {
+  color: var(--green-deep, #3f7a58);
+  border-color: rgba(112, 184, 138, 0.5);
+  background: rgba(112, 184, 138, 0.1);
+}
+
+.magi-pill--bad {
+  color: var(--coral-deep);
+  border-color: rgba(169, 79, 56, 0.5);
+  background: var(--coral-wash);
+}
+
+/* ── marketing stack cards ────────────────────────────────────────────── */
+
+.magi-stack {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.magi-stackcard {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  box-shadow: var(--shadow-float-card);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.magi-stackcard__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.magi-stackcard__name {
+  font-family: var(--font-display);
+  font-size: 17px;
+  margin: 0;
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
+.magi-stackcard__desc {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+}
+
+.magi-stackcard__caps {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.magi-stackcard__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.magi-stackcard__btn {
+  margin-top: auto;
+  align-self: flex-start;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--coral-deep);
+  background: none;
+  border: none;
+  padding: 4px 0;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.magi-stackcard__btn:hover {
+  text-decoration: underline;
+}
+
+/* ── campaign lifecycle stepper ───────────────────────────────────────── */
+
+.magi-lifecycle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.magi-lifecycle__step {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: var(--radius-window);
+  border: 1px solid var(--line);
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.magi-lifecycle__step--done {
+  color: var(--ink-soft);
+  border-color: var(--line);
+  background: var(--paper-deep);
+}
+
+.magi-lifecycle__step--now {
+  color: var(--paper-bright);
+  background: var(--ink);
+  border-color: var(--ink);
+  font-weight: 700;
+}
+
+/* ── approval ─────────────────────────────────────────────────────────── */
+
+.magi-approval__state {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: rgba(247, 235, 215, 0.55);
+  margin: 0;
+}
+
+.magi-approval__state--ready {
+  color: #e8a28f;
+}
+
+.magi-linkbtn {
+  font: inherit;
+  color: var(--coral-deep);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.magi-linkbtn:hover {
+  text-decoration: underline;
+}
+
+/* ── event phase tag ──────────────────────────────────────────────────── */
+
+.magi-evt__phase {
+  flex-shrink: 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  padding: 1px 6px;
+}
+
+/* ── stack modal ──────────────────────────────────────────────────────── */
+
+.magi-modalback {
+  position: fixed;
+  inset: 0;
+  background: rgba(26, 19, 32, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 16px;
+  z-index: 60;
+  overflow-y: auto;
+}
+
+.magi-modal {
+  width: min(720px, 100%);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  box-shadow: var(--shadow-window);
+  padding: 24px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.magi-modal__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.magi-modal__title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  margin: 4px 0 0;
+  color: var(--ink);
+  text-transform: uppercase;
+}
+
+.magi-modal__desc {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+}
+
+.magi-modal__warn {
+  border: 1px solid rgba(169, 79, 56, 0.5);
+  background: var(--coral-wash);
+  border-radius: var(--radius-window);
+  padding: 12px 14px;
+  font-size: var(--text-small);
+  color: var(--ink);
+  line-height: var(--leading-body);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.magi-modal__warn ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+.magi-modal__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+/* ── integration hub: live connection state ───────────────────────────── */
+
+.magi-stackcard__actions {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.magi-stackcard__btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.magi-stackcard__btn--danger {
+  color: var(--ink-faint);
+}
+
+.magi-connmsg {
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  border-radius: var(--radius-window);
+  font-size: var(--text-small);
+  border: 1px solid var(--line);
+}
+
+.magi-connmsg--ok {
+  background: rgba(112, 184, 138, 0.12);
+  border-color: rgba(112, 184, 138, 0.5);
+  color: var(--green-deep, #3f7a58);
+}
+
+.magi-connmsg--bad {
+  background: var(--coral-wash);
+  border-color: rgba(169, 79, 56, 0.5);
+  color: var(--coral-deep);
+}
+
+.magi-conn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  padding: 14px 16px;
+  background: var(--paper-bright);
+}
+
+.magi-conn__row {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  font-size: var(--text-small);
+  color: var(--ink);
+}
+
+.magi-conn__label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
+}
+
+.magi-conn__err {
+  color: var(--coral-deep);
+}
+
+.magi-connform {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.magi-connform label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+}
+
+.magi-connform input {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.magi-modal__note {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  padding: 10px 14px;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  background: var(--paper-deep);
+  line-height: var(--leading-body);
+}
+
+/* ── responsive ───────────────────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .magi-s4,
+  .magi-s5,
+  .magi-s6,
+  .magi-s7 {
+    grid-column: span 12;
+  }
+  .magi-stack {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .magi-stack {
+    grid-template-columns: 1fr;
   }
 }

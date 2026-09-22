@@ -155,6 +155,7 @@ class GrowthAgentOrchestrator:
         *,
         mode: str = "deep",
         params: dict[str, Any] | None = None,
+        run_id: str | None = None,
     ) -> OrchestrationSummary:
         if mode not in ("fast", "deep", "growth_team", "team"):
             raise ValueError("mode must be 'fast', 'deep', 'growth_team', or 'team'")
@@ -162,7 +163,11 @@ class GrowthAgentOrchestrator:
         if merchant is None:
             raise MerchantNotFoundError(f"Merchant {merchant_id} not found")
 
-        orchestrator_run_id = uuid.uuid4().hex
+        # Shared analysis cycle: when the caller supplies run_id (the AI
+        # Team route does for mode="team"), every agent_runs row — and the
+        # Marketing Agent's linked execution — is stamped with the SAME
+        # cycle id. Otherwise a fresh id preserves legacy behaviour.
+        orchestrator_run_id = run_id or uuid.uuid4().hex
         ctx = AgentContext(
             db=self.db,
             merchant_id=merchant_id,
@@ -283,6 +288,19 @@ class GrowthAgentOrchestrator:
 
             if mode == "growth_team":
                 self.db.commit()
+            elif mode == "team":
+                # Durable intermediate persistence: each agent's audit row
+                # is committed as the plan advances, so polling sessions
+                # observe live progress and a worker crash keeps partial
+                # results instead of losing the whole cycle.
+                try:
+                    self.db.commit()
+                except Exception:
+                    log.exception("Per-step commit failed for %s", agent_name)
+                    try:
+                        self.db.rollback()
+                    except Exception:
+                        pass
 
         summary.debate_id = str(ctx.shared.get("manager_debate_id")) if ctx.shared.get("manager_debate_id") else None
         summary.ranked_opportunities = list(ctx.shared.get("ranked_opportunities", []))

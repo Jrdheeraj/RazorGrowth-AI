@@ -70,3 +70,8 @@ from backend.app.models.marketing_agi import (  # noqa: F401
     MarketingAGIHandoff,
     MarketingAGILearning,
 )
+
+# Marketing Agent integration hub (per-workspace provider connections)
+from backend.app.models.integration_connection import (  # noqa: F401
+    IntegrationConnection,
+)

@@ -243,6 +243,7 @@ export interface AgentRunRow {
   agent_name: string;
   status: string;
   mode: string;
+  orchestrator_run_id: string | null;
   started_at: string;
   completed_at: string | null;
   total_latency_ms: number;
@@ -765,7 +766,58 @@ export interface AgentDashboardResponse {
 }
 
 
-/* -- Marketing AGI — autonomous marketing employee ---------------------- */
+/* -- Marketing Agent â€” autonomous marketing employee ---------------------- */
+
+export interface MarketingStackEntry {
+  key: string;
+  label: string;
+  status: string;
+  description: string;
+  tools: string[];
+  capabilities: string[];
+  provider?: string | null;
+  account_id?: string | null;
+  account_name?: string | null;
+  last_verified_at?: string | null;
+  connection?: MarketingIntegrationConnection | null;
+}
+
+export interface MarketingIntegrationConnection {
+  provider: string;
+  integration_type: string;
+  label: string;
+  status: string;
+  account_id: string | null;
+  account_name: string | null;
+  metadata: Record<string, unknown>;
+  capabilities: string[];
+  read_actions: string[];
+  write_actions: string[];
+  writes_require_approval: boolean;
+  last_verified_at: string | null;
+  last_error: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface MarketingIntegrationTestResult {
+  ok: boolean;
+  provider: string;
+  error_code: string | null;
+  message: string | null;
+  account: Record<string, unknown>;
+  verified_at: string | null;
+}
+
+export interface MarketingIntegrationAuditEvent {
+  id: string;
+  event_type: string;
+  actor_type: string;
+  actor_id: string | null;
+  entity_id: string | null;
+  payload: Record<string, unknown> | null;
+  created_at: string;
+}
 
 export interface MarketingAGIStatus {
   agent: string;
@@ -773,6 +825,7 @@ export interface MarketingAGIStatus {
   llm_provider: string | null;
   llm_model: string | null;
   integration_status: Record<string, string>;
+  marketing_stack?: MarketingStackEntry[];
   tools_available: number;
   workflows_available: number;
 }
@@ -809,7 +862,7 @@ export interface MarketingAGIStateSummary {
     gaps: string[];
     retrievals: Array<{ query: string; tool: string; item_count: number; statements: string[] }>;
   }>;
-  tool_calls: Array<{ tool: string; params: Record<string, unknown>; ok: boolean; latency_ms?: number }>;
+  tool_calls: Array<{ tool: string; params: Record<string, unknown>; ok: boolean; latency_ms?: number; ts?: string; summary?: string }>;
   workflow: string | null;
   plan: Array<{ step: string; tool: string; status: string }>;
   campaign_draft: Record<string, unknown> | null;
@@ -823,6 +876,20 @@ export interface MarketingAGIStateSummary {
   tool_call_count: number;
   duplicate_tool_calls: number;
   errors: string[];
+  llm_calls: number;
+  llm_decisions: Array<{
+    decision_type: string;
+    provider: string | null;
+    model: string | null;
+    latency_ms?: number;
+    success: boolean;
+    tool?: string;
+    error?: string;
+  }>;
+  reasoning_status: string;
+  current_decision: string | null;
+  reasoning_summary: string | null;
+  llm_degraded: boolean;
 }
 
 export interface MarketingAGIRun {
@@ -833,6 +900,7 @@ export interface MarketingAGIRun {
   phase: string;
   iterations: number;
   tool_call_count: number;
+  analysis_cycle_id: string | null;
   started_at: string | null;
   completed_at: string | null;
   llm_provider: string | null;

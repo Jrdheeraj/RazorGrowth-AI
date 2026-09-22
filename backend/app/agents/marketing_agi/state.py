@@ -196,6 +196,34 @@ class MarketingAGIState:
     cancelled: bool = False
     errors: list[str] = field(default_factory=list)
 
+    # LLM reasoning observability (safe metadata only — never prompts,
+    # chain-of-thought, keys, or raw customer data). Surfaced on the
+    # dashboard as the reasoning-engine status.
+    llm_calls: int = 0
+    llm_decisions: list[dict[str, Any]] = field(default_factory=list)
+    reasoning_status: str = "idle"  # idle|reasoning|selecting_tools|
+    # investigating|planning|waiting_for_approval|degraded|done
+    current_decision: str | None = None  # user-safe one-line decision summary
+    reasoning_summary: str | None = None  # user-safe current reasoning summary
+    llm_degraded: bool = False  # True when Groq failed and the run fell
+    # back to the bounded deterministic workflow
+
+    # Safe per-run timing observability (durations + counts only — never
+    # prompts, keys, or customer data). Persisted with every checkpoint so
+    # the dashboard can show live progress without a final commit.
+    timing: dict[str, Any] = field(default_factory=lambda: {
+        "total_ms": 0,
+        "llm_total_ms": 0,
+        "tool_total_ms": 0,
+        "rag_total_ms": 0,
+        "db_total_ms": 0,
+        "llm_calls": 0,
+        "rate_limit_count": 0,
+        "retry_count": 0,
+        "tool_calls": 0,
+        "rag_rounds": 0,
+    })
+
     # ── helpers ──────────────────────────────────────────────────────────
 
     def add_evidence(self, source: str, kind: str, statement: str, **data: Any) -> None:
@@ -209,10 +237,17 @@ class MarketingAGIState:
         return h
 
     def seen_tool_calls(self) -> set[tuple[str, str]]:
-        """Fingerprint set for duplicate tool-call prevention."""
+        """Fingerprint set for duplicate tool-call prevention.
+
+        Observation-baseline reads (recorded with dedupe=False) are
+        excluded: the analytics baseline is gathered before reasoning
+        starts, so a later evidence-driven call for the same tool is a
+        legitimate investigation step, not a loop repeat.
+        """
         return {
             (c.get("tool", ""), _stable_kw(c.get("params", {})))
             for c in self.tool_calls
+            if c.get("dedupe", True)
         }
 
     def to_dict(self) -> dict[str, Any]:
@@ -245,6 +280,13 @@ class MarketingAGIState:
             "duplicate_tool_calls": self.duplicate_tool_calls,
             "cancelled": self.cancelled,
             "errors": self.errors,
+            "llm_calls": self.llm_calls,
+            "llm_decisions": self.llm_decisions,
+            "reasoning_status": self.reasoning_status,
+            "current_decision": self.current_decision,
+            "reasoning_summary": self.reasoning_summary,
+            "llm_degraded": self.llm_degraded,
+            "timing": self.timing,
         }
 
 

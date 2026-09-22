@@ -93,6 +93,10 @@ class AgentActionType(str, enum.Enum):
     create_discount = "create_discount"
     retry_payment = "retry_payment"
     generate_opportunity = "generate_opportunity"
+    # Marketing Agent external writes (all approval-gated, executed only
+    # after human approval + EXECUTION_ENABLED; see action_executor.py).
+    publish_social_post = "publish_social_post"
+    create_ad_campaign = "create_ad_campaign"
 
 
 class AgentActionStatus(str, enum.Enum):
@@ -135,6 +139,13 @@ class AuditEventType(str, enum.Enum):
     analysis_completed = "analysis_completed"
     analysis_failed = "analysis_failed"
     retrieval_performed = "retrieval_performed"
+    # Marketing Agent integration hub (entity_type="integration_connection")
+    integration_connected = "integration_connected"
+    integration_connection_verified = "integration_connection_verified"
+    integration_connection_failed = "integration_connection_failed"
+    integration_disconnected = "integration_disconnected"
+    integration_action_executed = "integration_action_executed"
+    integration_action_failed = "integration_action_failed"
 
 
 class ApprovalStatus(str, enum.Enum):

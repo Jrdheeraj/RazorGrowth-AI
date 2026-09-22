@@ -32,6 +32,7 @@ from decimal import Decimal
 from typing import Any
 
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.ai.llm.base import BaseLLMProvider
@@ -71,6 +72,85 @@ log = logging.getLogger(__name__)
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _rupees_short(v: Any) -> str | None:
+    """Format a numeric INR value compactly; None when not numeric."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f"₹{f:,.0f}"
+
+
+def summarize_tool_result(name: str, result: Any) -> str:
+    """One-line honest summary of a tool result for the workstation UI.
+
+    Never fabricates: counts/amounts come straight from the result payload;
+    unknown shapes fall back to a neutral acknowledgement.
+    """
+    try:
+        if not isinstance(result, dict):
+            return "done"
+        if name == "find_customers":
+            customers = result.get("customers", [])
+            n = len(customers) if isinstance(customers, list) else 0
+            spend = _rupees_short(result.get("total_spend_inr"))
+            return f"{n} customers" + (f" · {spend} spend" if spend else "")
+        if name == "get_customer_segments":
+            segs = result.get("segments", [])
+            return f"{len(segs)} segments" if isinstance(segs, list) else "done"
+        if name == "get_customer_profile":
+            c = result.get("customer", {})
+            label = c.get("email") or c.get("name") or c.get("customer_id") or "profile"
+            return f"{label}"
+        if name == "get_failed_payment_analytics":
+            rec = _rupees_short(result.get("recoverable_revenue_inr"))
+            failed = result.get("failed_count", result.get("failed_payments"))
+            parts = []
+            if failed is not None:
+                parts.append(f"{failed} failed")
+            if rec:
+                parts.append(f"{rec} recoverable")
+            return " · ".join(parts) if parts else "done"
+        if name in ("get_business_overview", "get_revenue_trend"):
+            rev = _rupees_short(
+                result.get("total_revenue_inr", result.get("revenue_inr"))
+            )
+            return f"{rev} revenue" if rev else "done"
+        if name == "create_email_campaign_draft":
+            if result.get("created"):
+                return "Draft created"
+            return str(result.get("status", "draft_only")).replace("_", " ")
+        if name == "get_email_campaigns":
+            camps = result.get("campaigns", [])
+            n = len(camps) if isinstance(camps, list) else 0
+            esp = "Resend connected" if result.get("connected_esp") else "no ESP"
+            return f"{n} campaigns (platform store, {esp})"
+        if name == "get_email_campaign_performance":
+            n = result.get("campaigns_with_measured_results", 0)
+            return f"{n} with measured results · opens/clicks unavailable"
+        if name in ("get_google_ads_campaigns", "get_meta_campaigns", "get_social_performance"):
+            return "Requires integration — nothing fabricated"
+        if name == "get_campaign_history":
+            items = result.get("campaigns", result.get("history", []))
+            n = len(items) if isinstance(items, list) else 0
+            return f"{n} past campaigns"
+        if name == "get_action_history":
+            items = result.get("actions", result.get("history", []))
+            n = len(items) if isinstance(items, list) else 0
+            return f"{n} past actions"
+        if name == "recall_memory":
+            items = result.get("memories", result.get("items", []))
+            n = len(items) if isinstance(items, list) else 0
+            return f"{n} relevant memories"
+        if name == "search_knowledge_store":
+            items = result.get("results", result.get("items", []))
+            n = len(items) if isinstance(items, list) else 0
+            return f"{n} knowledge hits"
+        return "done"
+    except Exception:
+        return "done"
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +208,75 @@ class HypothesisVerdict(BaseModel):
     )
 
 
+class AgentDecision(BaseModel):
+    """Validated agentic-loop decision — the LLM's next step.
+
+    Every autonomous decision the model makes is parsed into this schema
+    so raw model output can never drive execution directly. Only
+    ``call_tool`` carries executable content, and even then the tool name
+    must be allowlisted in the registry and the arguments sanitized
+    (tenant keys stripped, JSON-scalar values only) before dispatch.
+    """
+
+    decision: str = Field(
+        description="call_tool | continue_research | formulate_hypothesis | "
+        "create_plan | create_campaign_draft | verify | request_approval | finish"
+    )
+    tool: str | None = Field(default=None, description="Allowlisted tool name")
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    reason: str = Field(
+        default="",
+        description="User-safe one-sentence justification (no chain-of-thought)",
+    )
+
+
+ALLOWED_DECISIONS = frozenset(
+    {
+        "call_tool",
+        "continue_research",
+        "formulate_hypothesis",
+        "create_plan",
+        "create_campaign_draft",
+        "verify",
+        "request_approval",
+        "finish",
+    }
+)
+
+# Argument keys the model may never supply: the merchant is always taken
+# from the backend authenticated context (ToolContext), never from model
+# output. Anything tenant-shaped here is stripped before dispatch.
+FORBIDDEN_TOOL_ARG_KEYS = frozenset(
+    {"merchant_id", "merchant", "tenant_id", "tenant", "merchantId", "tenantId"}
+)
+
+
+def sanitize_tool_args(params: Any) -> tuple[dict[str, Any], list[str]]:
+    """Validate + sanitize model-supplied tool arguments.
+
+    Returns (clean_args, dropped_keys). Rejects non-dict params, strips
+    tenant-override keys, and drops values that are not JSON scalars
+    (nested executable-looking payloads are never passed through).
+    """
+    if not isinstance(params, dict):
+        return {}, ["<non-dict params rejected>"]
+    clean: dict[str, Any] = {}
+    dropped: list[str] = []
+    for key, value in params.items():
+        if key in FORBIDDEN_TOOL_ARG_KEYS:
+            dropped.append(key)
+            continue
+        if value is None or isinstance(value, (str, int, float, bool)):
+            clean[key] = value
+        elif isinstance(value, list) and all(
+            isinstance(v, (str, int, float, bool)) for v in value
+        ):
+            clean[key] = value
+        else:
+            dropped.append(key)
+    return clean, dropped
+
+
 # ---------------------------------------------------------------------------
 # The agent
 # ---------------------------------------------------------------------------
@@ -161,19 +310,277 @@ class MarketingAGI:
             llm=llm,
             embedding_provider=embedding_provider,
         )
-        self._rag = AgenticRAG(self._tool_ctx, self._registry, llm, self._limits)
+        # Per-run read-only tool cache (Phase 10): identical read-only
+        # calls reuse results within this run only. Cleared at run start.
+        self._tool_cache: dict[str, Any] = {}
+        # Disconnected external providers (Phase 8): their live tools are
+        # omitted from LLM prompts but stay executable via the allowlist.
+        self._unavailable_providers: frozenset[str] = self._detect_unavailable_providers()
+        self._rag = AgenticRAG(
+            self._tool_ctx, self._registry, llm, self._limits,
+            prompt_catalog=self._prompt_catalog(include_write=False),
+        )
         self._memory = MarketingAGIMemory(db, embedding_provider)
         self._handoffs = HandoffInterface(db)
+        # Observability identity for every LLM decision record. The key
+        # itself is never stored — only provider/model names.
+        self._llm_provider_name: str | None = None
+        self._llm_model_name: str | None = None
+        if llm is not None:
+            try:
+                from backend.app.agents.marketing_agi.llm import llm_identity
+
+                _, self._llm_provider_name, self._llm_model_name = llm_identity()
+            except Exception:
+                self._llm_provider_name = type(llm).__name__
+
+    # ── LLM decision wrapper (observability + graceful degradation) ────
+
+    def _llm_call(
+        self,
+        state: MarketingAGIState,
+        recorder: EventRecorder,
+        *,
+        phase: str,
+        decision_type: str,
+        system: str,
+        user: str,
+        schema: Any,
+        safe_summary: str,
+        temperature: float = 0.0,
+        max_tokens: int = 300,
+    ) -> Any:
+        """Invoke the Groq reasoning layer with full observability.
+
+        On success records safe metadata (provider, model, latency,
+        decision type, tool selected) into ``state.llm_decisions`` and
+        emits a user-safe ``llm_decision`` event — never chain-of-thought,
+        prompts, keys, or raw customer data. On failure marks the run
+        degraded, emits an honest ``llm_unavailable`` event, and re-raises
+        so the caller falls back to the bounded deterministic workflow
+        instead of fabricating reasoning.
+        """
+        assert self._llm is not None
+        t0 = time.perf_counter()
+        try:
+            parsed = self._llm.generate_structured(
+                system, user, schema,
+                temperature=temperature, max_tokens=max_tokens,
+            )
+        except Exception as exc:
+            latency_ms = int((time.perf_counter() - t0) * 1000)
+            stats = self._accumulate_llm_timing(state, latency_ms)
+            state.llm_degraded = True
+            state.reasoning_status = "degraded"
+            state.llm_decisions.append(
+                {
+                    "decision_type": decision_type,
+                    "provider": self._llm_provider_name,
+                    "model": self._llm_model_name,
+                    "latency_ms": latency_ms,
+                    "success": False,
+                    "error": type(exc).__name__,
+                    "attempts": stats["attempts"],
+                    "retries": stats["retries"],
+                    "rate_limited": stats["rate_limited"],
+                    "retry_delay_ms": stats["retry_delay_ms"],
+                }
+            )
+            recorder.emit(
+                phase=phase,
+                event_type="llm_unavailable",
+                message=(
+                    "Groq reasoning unavailable "
+                    f"({type(exc).__name__}) — continuing with the bounded "
+                    "deterministic workflow; no reasoning fabricated"
+                ),
+            )
+            raise
+        latency_ms = int((time.perf_counter() - t0) * 1000)
+        stats = self._accumulate_llm_timing(state, latency_ms)
+        state.llm_calls += 1
+        state.timing["llm_calls"] = state.llm_calls
+        tool_selected = getattr(parsed, "tool", None)
+        record: dict[str, Any] = {
+            "decision_type": decision_type,
+            "provider": self._llm_provider_name,
+            "model": self._llm_model_name,
+            "latency_ms": latency_ms,
+            "success": True,
+            "attempts": stats["attempts"],
+            "retries": stats["retries"],
+            "rate_limited": stats["rate_limited"],
+            "retry_delay_ms": stats["retry_delay_ms"],
+        }
+        if tool_selected:
+            record["tool"] = tool_selected
+        state.llm_decisions.append(record)
+        recorder.emit(
+            phase=phase,
+            event_type="llm_decision",
+            message=safe_summary,
+            data={"decision_type": decision_type, "tool": tool_selected},
+        )
+        return parsed
+
+    def _detect_unavailable_providers(self) -> frozenset[str]:
+        """External providers with no verified connection for this tenant.
+
+        Disconnected integrations are omitted from LLM prompt catalogs so
+        the model never wastes calls reasoning over unavailable live data.
+        Capabilities are NOT removed: ``registry.call`` still allowlists
+        every registered tool.
+        """
+        try:
+            from backend.app.services import integration_service as svc
+
+            connected = {
+                p
+                for p in ("resend", "google_ads", "meta_ads", "instagram")
+                if svc.connected_row(self._db, self._merchant_id, p) is not None
+            }
+            return frozenset(
+                {"resend", "google_ads", "meta_ads", "instagram"} - connected
+            )
+        except Exception:
+            log.warning("Provider availability check failed; assuming all "
+                        "external providers disconnected")
+            return frozenset({"resend", "google_ads", "meta_ads", "instagram"})
+
+    def _prompt_catalog(self, *, include_write: bool = False) -> list[dict[str, Any]]:
+        """Stage-appropriate tool catalog for LLM prompts.
+
+        Defaults to read-only + connected-only: investigation stages never
+        need draft-write tools or disconnected live integrations in the
+        prompt. Execution allowlist is unaffected (full registry).
+        """
+        try:
+            return self._registry.catalog(
+                include_write=include_write,
+                exclude_providers=self._unavailable_providers,
+            )
+        except Exception:
+            return self._registry.catalog()
+
+    def _provider_stats(self) -> dict[str, Any]:
+        """Safe per-call stats from the provider (attempts/retries/429).
+
+        Never includes prompts, keys, or response content.
+        """
+        try:
+            stats = getattr(self._llm, "last_call_stats", None) or {}
+            return {
+                "attempts": int(stats.get("attempts", 1)),
+                "retries": int(stats.get("retries", 0)),
+                "rate_limited": bool(stats.get("rate_limited", False)),
+                "retry_delay_ms": int(stats.get("retry_delay_ms", 0)),
+            }
+        except Exception:
+            return {"attempts": 1, "retries": 0, "rate_limited": False,
+                    "retry_delay_ms": 0}
+
+    def _accumulate_llm_timing(self, state: MarketingAGIState,
+                               latency_ms: int) -> dict[str, Any]:
+        """Fold one LLM call's cost into the run timing. Returns stats."""
+        stats = self._provider_stats()
+        timing = state.timing
+        timing["llm_total_ms"] += latency_ms + stats["retry_delay_ms"]
+        timing["llm_calls"] = state.llm_calls
+        timing["retry_count"] += stats["retries"]
+        if stats["rate_limited"]:
+            timing["rate_limit_count"] += 1
+        return stats
+
+    def _checkpoint(self, run_row: MarketingAGIRun,
+                    state: MarketingAGIState) -> None:
+        """Persist intermediate progress so other sessions can observe it.
+
+        Syncs run columns + brain state and commits — never one giant
+        uncommitted transaction. Commit failures are contained (rollback +
+        continue) so a transient DB hiccup never kills the run. Also
+        refreshes the cooperative-cancel flag from the database, since the
+        in-memory state cannot see external cancellation otherwise.
+        """
+        t0 = time.perf_counter()
+        try:
+            self._sync_row(run_row, state)
+            self._db.commit()
+        except Exception:
+            log.warning("MarketingAGI checkpoint commit failed; continuing",
+                        exc_info=True)
+            try:
+                self._db.rollback()
+            except Exception:
+                pass
+        finally:
+            try:
+                state.timing["db_total_ms"] += int(
+                    (time.perf_counter() - t0) * 1000)
+            except Exception:
+                pass
+        # Cooperative cancel: re-read the flag persisted by the cancel
+        # endpoint (the worker's in-memory state never sees it otherwise).
+        try:
+            fresh_state = self._db.scalar(
+                select(MarketingAGIRun.state).where(
+                    MarketingAGIRun.id == run_row.id)
+            )
+            if isinstance(fresh_state, dict) and fresh_state.get("cancelled"):
+                state.cancelled = True
+        except Exception:
+            pass
+
+    def _set_reasoning(
+        self,
+        state: MarketingAGIState,
+        *,
+        status: str,
+        decision: str | None = None,
+        summary: str | None = None,
+    ) -> None:
+        """Update the user-safe reasoning status shown on the dashboard."""
+        state.reasoning_status = status
+        if decision is not None:
+            state.current_decision = decision
+        if summary is not None:
+            state.reasoning_summary = summary
 
     # ── public entry point ──────────────────────────────────────────────
 
-    def run(self, run_row: MarketingAGIRun, objective: str) -> MarketingAGIRun:
-        """Execute the bounded loop against an existing queued run row."""
+    def run(
+        self,
+        run_row: MarketingAGIRun,
+        objective: str,
+        *,
+        analysis_cycle_id: str | None = None,
+    ) -> MarketingAGIRun:
+        """Execute the bounded loop against an existing queued run row.
+
+        ``analysis_cycle_id`` links this execution to its parent AI Team
+        analysis cycle (the orchestrator_run_id shared with sibling
+        agents). It is informational only: tenant isolation still comes
+        from the backend-authenticated merchant id.
+        """
         state = MarketingAGIState(
             run_id=str(run_row.id),
             merchant_id=str(self._merchant_id),
             objective=objective,
         )
+        if analysis_cycle_id:
+            run_row.analysis_cycle_id = analysis_cycle_id
+        # Fresh per-run cache: never leaks results across runs/merchants.
+        self._tool_cache = {}
+        if self._llm is not None:
+            state.reasoning_status = "reasoning"
+            state.reasoning_summary = (
+                "Groq reasoning engine engaged — investigating live business data"
+            )
+        else:
+            state.reasoning_status = "reasoning"
+            state.reasoning_summary = (
+                "Running the bounded deterministic workflow (no LLM key configured)"
+            )
+            state.llm_degraded = True
         recorder = EventRecorder(self._db, run_row)
         deadline = time.monotonic() + self._limits.run_timeout_seconds
         t0 = time.perf_counter()
@@ -186,18 +593,23 @@ class MarketingAGI:
         try:
             # Phase 1: LOAD CONTEXT
             self._phase_load_context(state, recorder, run_row)
+            self._checkpoint(run_row, state)
 
             # Phase 2: OBSERVE
             self._phase_observe(state, recorder, run_row)
+            self._checkpoint(run_row, state)
 
             # Phase 3: INVESTIGATE (bounded)
             self._phase_investigate(state, recorder, run_row, deadline)
+            self._checkpoint(run_row, state)
 
             # Phase 4: PLAN
             self._phase_plan(state, recorder, run_row)
+            self._checkpoint(run_row, state)
 
             # Phase 5: CREATE + VERIFY (with one re-investigation on failure)
             ok = self._phase_create_and_verify(state, recorder, run_row, deadline)
+            self._checkpoint(run_row, state)
             if not ok:
                 # verification failed twice → blocked, never silent
                 self._finish(
@@ -211,6 +623,7 @@ class MarketingAGI:
 
             # Phase 6: PREPARE
             self._phase_prepare(state, recorder, run_row)
+            self._checkpoint(run_row, state)
 
             # Phase 7: AWAIT APPROVAL
             self._phase_await(state, recorder, run_row)
@@ -312,30 +725,56 @@ class MarketingAGI:
             message="02 — Observing current business state",
         )
 
-        # gather the analytics baseline through real tools
+        # gather the analytics baseline through real tools.
+        # The four read-only analytics reads are independent: run them
+        # concurrently on fresh per-thread sessions (sessions are never
+        # shared across threads). Any thread failure falls back to a safe
+        # error payload for that tool only — one failed tool never kills
+        # observation. Sequential fallback if threading itself fails.
+        observe_tools = [
+            "get_customer_activity_trend",
+            "get_customer_segments",
+            "get_failed_payment_analytics",
+            "get_product_affinities",
+        ]
+        observed = self._observe_parallel(state, observe_tools)
         analytics: dict[str, Any] = {
             "get_business_overview": state.business_context,
-            "get_customer_activity_trend": self._safe_tool("get_customer_activity_trend"),
-            "get_customer_segments": self._safe_tool("get_customer_segments"),
-            "get_failed_payment_analytics": self._safe_tool("get_failed_payment_analytics"),
-            "get_product_affinities": self._safe_tool("get_product_affinities"),
+            **observed,
         }
         self._tool_ctx and None  # keep ctx referenced
         state.tool_call_count += 5
+        state.timing["tool_calls"] = state.tool_call_count
         run_row.tool_call_count = state.tool_call_count
 
         # LLM observation or deterministic fallback
         if self._llm is not None:
+            self._set_reasoning(
+                state, status="reasoning",
+                decision="Analyzing business baseline to detect the primary signal",
+            )
             try:
-                obs = self._llm.generate_structured(
-                    self._observe_system_prompt(),
-                    self._analytics_json(analytics),
-                    SignalDetection,
+                obs = self._llm_call(
+                    state, recorder,
+                    phase=Phase.observe.value,
+                    decision_type="observe_signals",
+                    system=self._observe_system_prompt(),
+                    user=self._analytics_json(analytics),
+                    schema=SignalDetection,
+                    safe_summary="LLM analyzed business signal from live analytics",
                     temperature=0.1,
                     max_tokens=600,
                 )
                 state.observations = obs.signals
                 state.knowledge_gaps.extend(obs.knowledge_gaps)
+                self._set_reasoning(
+                    state, status="investigating",
+                    decision=f"Investigating: {obs.primary_signal}",
+                    summary=(
+                        "Investigating the detected signal because the live "
+                        "business data indicates recoverable impact."
+                    ),
+                )
                 recorder.emit(
                     phase=Phase.observe.value,
                     event_type="signals_detected",
@@ -394,7 +833,11 @@ class MarketingAGI:
                 event_type="rag_started",
                 message=f"05 — Researching: {q}",
             )
+            rag_t0 = time.perf_counter()
             rag_result = self._rag.research(q)
+            state.timing["rag_total_ms"] += int(
+                (time.perf_counter() - rag_t0) * 1000)
+            state.timing["rag_rounds"] += rag_result.rounds
             state.retrieval_log.append(rag_result.to_dict())
 
             for stmt in rag_result.evidence_statements[:10]:
@@ -415,6 +858,9 @@ class MarketingAGI:
                     message=f"Evidence insufficient for: {q} — gap recorded honestly",
                     data={"gaps": rag_result.gaps},
                 )
+            # Per-question checkpoint: RETRIEVING progress is queryable
+            # even if a later LLM call hangs or the worker dies.
+            self._checkpoint(run_row, state)
 
         # tool-driven deep investigation: LLM picks tools dynamically
         if self._llm is not None:
@@ -465,16 +911,24 @@ class MarketingAGI:
                 class _Pick(BaseModel):
                     workflow: str
 
-                pick = self._llm.generate_structured(
-                    "Pick the single highest-impact workflow from the candidates. "
+                self._set_reasoning(
+                    state, status="planning",
+                    decision="Planning the highest-impact marketing intervention",
+                )
+                pick = self._llm_call(
+                    state, recorder,
+                    phase=Phase.plan.value,
+                    decision_type="select_workflow",
+                    system="Pick the single highest-impact workflow from the candidates. "
                     "Return JSON {workflow}.",
-                    str(
+                    user=str(
                         [
                             {"key": w.key, "name": w.name, "description": w.description}
                             for w in candidates
                         ]
                     ),
-                    _Pick,
+                    schema=_Pick,
+                    safe_summary="LLM selected the campaign workflow from evidence",
                     temperature=0.0,
                     max_tokens=60,
                 )
@@ -524,8 +978,8 @@ class MarketingAGI:
             if workflow.key == "failed_payment_recovery":
                 criteria = {"min_orders": 0}
             audience_res = self._tool("find_customers", criteria)
-            state.tool_calls.append(
-                {"tool": "find_customers", "params": criteria, "ok": True}
+            self._record_tool_call(
+                state, "find_customers", criteria, audience_res, ok=True
             )
             state.tool_call_count += 1
             run_row.tool_call_count = state.tool_call_count
@@ -559,7 +1013,10 @@ class MarketingAGI:
                 continue  # retry once with looser criteria
 
             # design the campaign (LLM when available; structured fallback)
+            campaign_t0 = time.perf_counter()
             strategy = self._design_campaign(state, workflow, audience_res)
+            state.timing["campaign_ms"] = state.timing.get("campaign_ms", 0) + int(
+                (time.perf_counter() - campaign_t0) * 1000)
 
             # persist the draft campaign (real, in OUR db)
             campaign_key = f"{workflow.key}-{state.run_id[:8]}"
@@ -591,8 +1048,12 @@ class MarketingAGI:
                     "evidence_refs": [e.source for e in state.evidence[:10]],
                 },
             )
-            state.tool_calls.append(
-                {"tool": "create_email_campaign_draft", "params": {"campaign_key": campaign_key}, "ok": True}
+            self._record_tool_call(
+                state,
+                "create_email_campaign_draft",
+                {"campaign_key": campaign_key},
+                draft_res,
+                ok=True,
             )
             state.tool_call_count += 1
             run_row.tool_call_count = state.tool_call_count
@@ -638,6 +1099,10 @@ class MarketingAGI:
 
             # VERIFY
             run_row.phase = Phase.verify.value
+            self._set_reasoning(
+                state, status="reasoning",
+                decision="Verifying audience, evidence, and safety",
+            )
             recorder.emit(
                 phase=Phase.verify.value,
                 event_type="phase_started",
@@ -646,6 +1111,7 @@ class MarketingAGI:
             campaign_row = self._db.get(
                 MarketingAGICampaign, uuid.UUID(draft_res["campaign_id"])
             )
+            verify_t0 = time.perf_counter()
             report = verify_campaign(
                 self._db,
                 self._merchant_id,
@@ -654,7 +1120,11 @@ class MarketingAGI:
                 evidence_count=len(state.evidence),
                 limits=self._limits,
             )
+            state.timing["verify_ms"] = state.timing.get("verify_ms", 0) + int(
+                (time.perf_counter() - verify_t0) * 1000)
             state.verification = report.to_dict()
+            # CAMPAIGN_DRAFT + VERIFYING checkpoint before branching.
+            self._checkpoint(run_row, state)
 
             if report.passed:
                 recorder.emit(
@@ -788,6 +1258,11 @@ class MarketingAGI:
         self, state: MarketingAGIState, recorder: EventRecorder, run_row: MarketingAGIRun
     ) -> None:
         run_row.phase = Phase.awaiting_approval.value
+        self._set_reasoning(
+            state, status="waiting_for_approval",
+            decision="Campaign draft prepared — waiting for human approval",
+            summary="Campaign draft prepared and sent to the human approval gate.",
+        )
         recorder.emit(
             phase=Phase.awaiting_approval.value,
             event_type="awaiting_approval",
@@ -810,7 +1285,10 @@ class MarketingAGI:
         run_row: MarketingAGIRun,
         deadline: float,
     ) -> None:
-        catalog = self._registry.catalog()
+        # Prompt carries the stage-filtered catalog (read-only, connected
+        # only); validation below still uses the FULL allowlist.
+        prompt_catalog = self._prompt_catalog(include_write=False)
+        allowed_tools = {c["name"] for c in self._registry.catalog()}
         system = (
             "You are the tool-selection engine of an autonomous marketing agent. "
             "Given the objective, the evidence so far, and the tool catalog, choose "
@@ -819,32 +1297,89 @@ class MarketingAGI:
         )
         for _ in range(4):  # bounded
             self._check_budget(state, deadline)
+            self._set_reasoning(
+                state, status="selecting_tools",
+                decision="Selecting the next evidence-gathering tool",
+            )
             user = (
                 f"Objective: {state.objective}\n"
                 f"Observations: {state.observations}\n"
                 f"Evidence so far: {[e.statement for e in state.evidence][:12]}\n"
                 f"Knowledge gaps: {state.knowledge_gaps}\n"
-                f"Tool catalog: {catalog}"
+                f"Tool catalog: {prompt_catalog}"
             )
             try:
-                choice = self._llm.generate_structured(
-                    system, user, ToolChoice, temperature=0.0, max_tokens=300
+                choice = self._llm_call(
+                    state, recorder,
+                    phase=Phase.investigate.value,
+                    decision_type="select_tool",
+                    system=system,
+                    user=user,
+                    schema=ToolChoice,
+                    safe_summary="LLM selected the next investigation tool",
+                    temperature=0.0,
+                    max_tokens=300,
                 )
             except Exception as exc:
                 log.warning("LLM tool choice failed: %s", exc)
                 break
-            if choice.done or choice.tool not in {
-                c["name"] for c in catalog
-            }:
-                if choice.done:
-                    recorder.emit(
-                        phase=Phase.investigate.value,
-                        event_type="tool_loop_done",
-                        message="Tool selection complete — evidence judged sufficient by model",
-                    )
+            if choice.done:
+                self._set_reasoning(
+                    state, status="investigating",
+                    decision="Evidence judged sufficient — ending tool selection",
+                    summary="Tool results were reviewed and evidence is sufficient.",
+                )
+                recorder.emit(
+                    phase=Phase.investigate.value,
+                    event_type="tool_loop_done",
+                    message="Tool selection complete — evidence judged sufficient by model",
+                )
+                break
+            if choice.tool not in allowed_tools:
+                # Hallucinated / unauthorized tool: reject, record, never execute.
+                state.llm_decisions.append(
+                    {
+                        "decision_type": "select_tool",
+                        "provider": self._llm_provider_name,
+                        "model": self._llm_model_name,
+                        "success": False,
+                        "error": "unknown_tool_rejected",
+                        "tool": choice.tool,
+                    }
+                )
+                recorder.emit(
+                    phase=Phase.investigate.value,
+                    event_type="tool_rejected",
+                    message=f"Rejected unknown tool: {choice.tool} — not in the allowlist",
+                    data={"tool": choice.tool},
+                )
                 break
 
-            call = self._dispatch_tool(state, choice.tool, choice.params)
+            args, dropped = sanitize_tool_args(choice.params)
+            if dropped:
+                recorder.emit(
+                    phase=Phase.investigate.value,
+                    event_type="tool_args_sanitized",
+                    message=f"Stripped unsafe arguments from {choice.tool}: {dropped}",
+                    data={"tool": choice.tool, "dropped": dropped},
+                )
+            self._set_reasoning(
+                state, status="investigating",
+                decision=f"Investigating with {choice.tool}",
+                summary=(choice.reasoning or f"Gathering evidence with {choice.tool}.")[:280],
+            )
+            try:
+                call = self._dispatch_tool(state, choice.tool, args)
+            except Exception as exc:
+                log.warning("Tool %s dispatch failed: %s", choice.tool, exc)
+                recorder.emit(
+                    phase=Phase.investigate.value,
+                    event_type="tool_failed",
+                    message=f"Tool {choice.tool} failed ({type(exc).__name__}) — evidence gap recorded",
+                    data={"tool": choice.tool},
+                )
+                state.knowledge_gaps.append(f"{choice.tool} unavailable: {type(exc).__name__}")
+                break
             recorder.emit(
                 phase=Phase.investigate.value,
                 event_type="tool_used",
@@ -853,6 +1388,9 @@ class MarketingAGI:
             )
             for stmt in _flatten_statements(call.get("result", {}))[:6]:
                 state.add_evidence(choice.tool, "sql", stmt)
+            # TOOL_CALL/TOOL_RESULT checkpoint: each tool result is durable
+            # before the next LLM call.
+            self._checkpoint(run_row, state)
 
     # ── deterministic tool loop (no LLM) ─────────────────────────────────
 
@@ -881,6 +1419,98 @@ class MarketingAGI:
                     state.add_evidence(tool, "sql", stmt)
 
     # ── helpers ──────────────────────────────────────────────────────────
+
+    def _observe_parallel(
+        self, state: MarketingAGIState, names: list[str]
+    ) -> dict[str, Any]:
+        """Run independent read-only observation tools concurrently.
+
+        Each tool gets a FRESH session on the same engine (sessions are
+        never shared across threads) bound to the same tenant. Failures
+        are isolated per tool; a threading failure falls back to the
+        original sequential path. Individual timings are recorded.
+
+        SQLite (tests/local) uses a single shared-cache connection that is
+        not thread-safe, so threading is only used on server databases
+        (PostgreSQL); SQLite always takes the sequential path.
+        """
+        try:
+            bind = self._db.get_bind()
+        except Exception:
+            return self._observe_sequential(state, names)
+        if getattr(getattr(bind, "dialect", None), "name", "") == "sqlite":
+            return self._observe_sequential(state, names)
+        try:
+            from concurrent.futures import ThreadPoolExecutor
+        except ImportError:
+            return self._observe_sequential(state, names)
+
+        def _one(name: str) -> tuple[str, dict[str, Any], int]:
+            from sqlalchemy.orm import Session as _Session
+
+            t0 = time.perf_counter()
+            sess = _Session(bind=bind, autoflush=False, expire_on_commit=False)
+            try:
+                ctx = ToolContext(
+                    db=sess, merchant_id=self._merchant_id,
+                    llm=None, embedding_provider=None,
+                )
+                call = self._registry.call(ctx, name, {})
+                return name, call.get("result", {}), int(
+                    (time.perf_counter() - t0) * 1000)
+            except Exception as exc:
+                log.warning("parallel observe tool %s failed: %s", name, exc)
+                return name, {"error": str(exc), "tool": name}, int(
+                    (time.perf_counter() - t0) * 1000)
+            finally:
+                try:
+                    sess.close()
+                except Exception:
+                    pass
+
+        try:
+            with ThreadPoolExecutor(
+                max_workers=min(len(names), 5),
+                thread_name_prefix="magi-observe",
+            ) as pool:
+                futures = {pool.submit(_one, n): n for n in names}
+                results: dict[str, Any] = {}
+                for fut, n in futures.items():
+                    try:
+                        _, payload, latency_ms = fut.result(timeout=30)
+                    except Exception as exc:
+                        log.warning("parallel observe tool %s timed out: %s", n, exc)
+                        payload, latency_ms = (
+                            {"error": f"{type(exc).__name__}", "tool": n}, 0)
+                    results[n] = payload
+                    self._record_tool_call(
+                        state, n, {}, payload,
+                        ok="error" not in payload, latency_ms=latency_ms,
+                        dedupe=False,
+                    )
+                    state.timing["tool_total_ms"] += latency_ms
+                return results
+        except Exception as exc:
+            log.warning("parallel observe failed, sequential fallback: %s", exc)
+            return self._observe_sequential(state, names)
+
+    def _observe_sequential(
+        self, state: MarketingAGIState, names: list[str]
+    ) -> dict[str, Any]:
+        """Original sequential read-only observation path (SQLite/tests)."""
+        results: dict[str, Any] = {}
+        for n in names:
+            t0 = time.perf_counter()
+            payload = self._safe_tool(n)
+            latency_ms = int((time.perf_counter() - t0) * 1000)
+            results[n] = payload
+            self._record_tool_call(
+                state, n, {}, payload,
+                ok="error" not in payload, latency_ms=latency_ms,
+                dedupe=False,
+            )
+            state.timing["tool_total_ms"] += latency_ms
+        return results
 
     def _observe_deterministic(
         self, state: MarketingAGIState, analytics: dict, recorder: EventRecorder
@@ -936,11 +1566,43 @@ class MarketingAGI:
                     f"Observations: {state.observations}\n"
                     f"Evidence: {[e.statement for e in state.evidence][:10]}"
                 )
-                return self._llm.generate_structured(
+                self._set_reasoning(
+                    state, status="planning",
+                    decision="Drafting the campaign from gathered evidence",
+                )
+                # NOTE: campaign design has no recorder in scope; the
+                # decision is still tracked in state.llm_decisions via a
+                # lightweight inline record (no event emission here).
+                t0 = time.perf_counter()
+                strategy = self._llm.generate_structured(
                     system, user, CampaignStrategy, temperature=0.2, max_tokens=900
                 )
+                latency_ms = int((time.perf_counter() - t0) * 1000)
+                stats = self._accumulate_llm_timing(state, latency_ms)
+                state.llm_calls += 1
+                state.timing["llm_calls"] = state.llm_calls
+                state.llm_decisions.append(
+                    {
+                        "decision_type": "design_campaign",
+                        "provider": self._llm_provider_name,
+                        "model": self._llm_model_name,
+                        "latency_ms": latency_ms,
+                        "success": True,
+                        "attempts": stats["attempts"],
+                        "retries": stats["retries"],
+                        "rate_limited": stats["rate_limited"],
+                        "retry_delay_ms": stats["retry_delay_ms"],
+                    }
+                )
+                self._set_reasoning(
+                    state, status="planning",
+                    decision="Campaign draft prepared from evidence",
+                    summary="Campaign draft prepared and will be sent to verification.",
+                )
+                return strategy
             except Exception as exc:
                 log.warning("LLM campaign design failed, deterministic fallback: %s", exc)
+                state.llm_degraded = True
 
         # deterministic, evidence-grounded fallback content
         n = audience_res.get("audience_count", 0)
@@ -983,6 +1645,7 @@ class MarketingAGI:
     ) -> None:
         if self._llm is not None:
             try:
+                t0 = time.perf_counter()
                 verdict = self._llm.generate_structured(
                     "Judge each hypothesis strictly against ONLY the supplied evidence. "
                     "Status: confirmed | rejected | insufficient_evidence. Return JSON per schema.",
@@ -996,6 +1659,35 @@ class MarketingAGI:
                     temperature=0.0,
                     max_tokens=400,
                 )
+                latency_ms = int((time.perf_counter() - t0) * 1000)
+                stats = self._accumulate_llm_timing(state, latency_ms)
+                state.llm_calls += 1
+                state.timing["llm_calls"] = state.llm_calls
+                state.llm_decisions.append(
+                    {
+                        "decision_type": "resolve_hypotheses",
+                        "provider": self._llm_provider_name,
+                        "model": self._llm_model_name,
+                        "latency_ms": latency_ms,
+                        "success": True,
+                        "attempts": stats["attempts"],
+                        "retries": stats["retries"],
+                        "rate_limited": stats["rate_limited"],
+                        "retry_delay_ms": stats["retry_delay_ms"],
+                    }
+                )
+                recorder.emit(
+                    phase=Phase.investigate.value,
+                    event_type="llm_decision",
+                    message="LLM formulated hypothesis verdicts from the evidence",
+                    data={"decision_type": "resolve_hypotheses"},
+                )
+                self._set_reasoning(
+                    state, status="investigating",
+                    decision="Hypotheses judged against the evidence",
+                    summary="Customer data was evaluated, so the agent is judging "
+                    "which hypothesis the evidence supports.",
+                )
                 for i, h in enumerate(state.hypotheses):
                     if i < len(verdict.statuses):
                         v = verdict.statuses[i]
@@ -1006,6 +1698,7 @@ class MarketingAGI:
                             pass
             except Exception as exc:
                 log.warning("Hypothesis resolution failed: %s", exc)
+                state.llm_degraded = True
         recorder.emit(
             phase=Phase.investigate.value,
             event_type="hypotheses_resolved",
@@ -1037,17 +1730,67 @@ class MarketingAGI:
 
         call = self._registry.call(self._tool_ctx, name, params)
         state.tool_call_count += 1
+        state.timing["tool_total_ms"] += int(call.get("latency_ms", 0))
+        state.timing["tool_calls"] = state.tool_call_count
+        self._record_tool_call(
+            state,
+            name,
+            params,
+            call.get("result", {}),
+            ok=True,
+            latency_ms=call.get("latency_ms", 0),
+        )
+        return call
+
+    @staticmethod
+    def _record_tool_call(
+        state: MarketingAGIState,
+        name: str,
+        params: dict[str, Any],
+        result: Any,
+        *,
+        ok: bool,
+        latency_ms: int = 0,
+        dedupe: bool = True,
+    ) -> None:
+        """Append a workstation-ready tool activity entry.
+
+        Entries carry a UTC timestamp and an honest one-line result
+        summary so the UI can render Tool / Status / Input / Result /
+        Timestamp / Duration without guessing. Observation-baseline reads
+        pass dedupe=False so they stay visible without poisoning the
+        reasoning-loop duplicate detector.
+        """
         state.tool_calls.append(
             {
                 "tool": name,
                 "params": _jsonable(params),
-                "ok": True,
-                "latency_ms": call.get("latency_ms", 0),
+                "ok": ok,
+                "latency_ms": latency_ms,
+                "ts": utcnow().isoformat(),
+                "summary": summarize_tool_result(name, result) if ok else "failed",
+                "dedupe": dedupe,
             }
         )
-        return call
 
     def _tool(self, name: str, params: dict[str, Any]) -> dict[str, Any]:
+        # Per-run cache for identical READ-ONLY calls (same tenant/run by
+        # construction: cache is cleared at run() start). Writes, live
+        # integrations requiring connections, and unknown tools bypass.
+        try:
+            if self._registry.spec(name).read_only:
+                key = f"{name}|{_stable(params or {})}"
+                cached = self._tool_cache.get(key)
+                if isinstance(cached, dict):
+                    return cached
+                call = self._registry.call(self._tool_ctx, name, params)
+                result = call.get("result", {})
+                # Cache only successful plain-dict payloads.
+                if isinstance(result, dict):
+                    self._tool_cache[key] = result
+                return result
+        except Exception:
+            pass
         call = self._registry.call(self._tool_ctx, name, params)
         return call.get("result", {})
 
@@ -1085,6 +1828,12 @@ class MarketingAGI:
     def _sync_row(self, run_row: MarketingAGIRun, state: MarketingAGIState) -> None:
         run_row.iterations = state.iterations
         run_row.tool_call_count = state.tool_call_count
+        # Keep timing mirrors consistent at every persist point.
+        try:
+            state.timing["tool_calls"] = state.tool_call_count
+            state.timing["llm_calls"] = state.llm_calls
+        except Exception:
+            pass
         run_row.state = state.to_dict()
         run_row.errors = state.errors
 
@@ -1100,6 +1849,15 @@ class MarketingAGI:
         state.errors.append(f"finish: {reason}") if status in {
             RunStatus.blocked, RunStatus.failed,
         } else None
+        try:
+            if run_row.started_at is not None:
+                started = run_row.started_at
+                if started.tzinfo is None:
+                    started = started.replace(tzinfo=timezone.utc)
+                state.timing["total_ms"] = int(
+                    (utcnow() - started).total_seconds() * 1000)
+        except Exception:
+            pass
         assert_run_transition(run_row.status, status)
         run_row.status = status.value
         run_row.completed_at = utcnow()
@@ -1107,6 +1865,10 @@ class MarketingAGI:
             run_row.phase = Phase.awaiting_approval.value
         elif status is RunStatus.completed:
             run_row.phase = Phase.complete.value
+            if state.reasoning_status not in {"degraded"}:
+                state.reasoning_status = "done"
+        elif status in {RunStatus.blocked, RunStatus.failed}:
+            state.reasoning_status = "degraded" if state.llm_degraded else state.reasoning_status
         run_row.result = {
             "status": status.value,
             "reason": reason,
@@ -1119,6 +1881,12 @@ class MarketingAGI:
             "evidence_count": len(state.evidence),
             "knowledge_gaps": state.knowledge_gaps,
             "learned_insights": state.learned_insights,
+            "analysis_cycle_id": run_row.analysis_cycle_id,
+            "llm_calls": state.llm_calls,
+            "llm_decisions": len(state.llm_decisions),
+            "llm_degraded": state.llm_degraded,
+            "reasoning_summary": state.reasoning_summary,
+            "timing": state.timing,
         }
         self._sync_row(run_row, state)
         recorder.emit(

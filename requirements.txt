@@ -22,6 +22,7 @@ pydantic-settings==2.15.0         # .env-backed application settings (core/confi
 
 # ── Authentication ──────────────────────────────────────────────────────────
 PyJWT==2.7.0                      # JWT access-token signing/verification (core/security.py)
+cryptography==44.0.2              # Fernet encryption for stored integration credentials (core/credential_vault.py)
 
 # ── HTTP / networking ───────────────────────────────────────────────────────
 httpx==0.28.1                     # HTTP client (tooling, tests, integration paths)

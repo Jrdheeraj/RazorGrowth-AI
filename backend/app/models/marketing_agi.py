@@ -45,6 +45,16 @@ class MarketingAGIRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=False,
         index=True,
     )
+    # Shared AI Team analysis cycle. When the run is started by the AI Team
+    # orchestrator (POST /api/agents/run, mode="team") this equals the
+    # orchestrator_run_id stamped on every agent_runs row of that cycle, so
+    # the Marketing Agent execution can be correlated with its sibling
+    # agents. Standalone runs (POST /api/marketing-agi/runs) leave it NULL.
+    # Tenant scoping is unchanged: every query additionally filters by
+    # merchant_id, so a cycle id can never leak across merchants.
+    analysis_cycle_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True,
+    )
     objective: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="queued", index=True
