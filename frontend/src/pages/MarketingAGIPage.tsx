@@ -1,13 +1,20 @@
 /**
  * /marketing-agent — Marketing Agent workstation.
  *
- * The console for the autonomous marketing employee. Every pixel is
+ * The console for the autonomous marketing employee. Every value is
  * driven by REAL agent execution state polled from the backend:
  * status, objective, live workstream (real events), current reasoning,
  * research evidence, tool activity, the six-category marketing stack
  * (real integration status), campaign workspace, verification, prepared
  * action, and learning history. No decorative fake animations, no
  * simulated progress, no invented integration status.
+ *
+ * Visual system: the page lives inside the same illustrated RazorGrowth
+ * world as the homepage (GlobalEnvironment — warm peach sky, clouds,
+ * city, merchant street). Dashboard sections are browser-window panels
+ * (WindowPanel) sitting on top of that world with the world visible
+ * between them. Copy is merchant-friendly; technical detail stays
+ * inside a collapsed "Technical details" section.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -26,6 +33,8 @@ import {
   disconnectMarketingIntegration,
   startMarketingOAuth,
   fetchMarketingIntegrationAudit,
+  fetchGrowthRadar,
+  fetchAnalyticsOverview,
 } from "../lib/api";
 import type {
   MarketingAGIStatus,
@@ -35,10 +44,13 @@ import type {
   MarketingAGILearning,
   MarketingAGIHandoff,
   MarketingStackEntry,
+  GrowthRadarResponse,
+  AnalyticsOverviewResponse,
 } from "../types/api";
 import { WindowPanel } from "../components/WindowPanel";
 import { Button } from "../components/Button";
 import { StatusChip } from "../components/StatusIndicator";
+import { GlobalEnvironment } from "../features/public/Environment/GlobalEnvironment";
 import "./MarketingAGIPage.css";
 
 /* ── Status helpers ─────────────────────────────────────────────────── */
@@ -51,16 +63,6 @@ const TERMINAL_STATUSES = new Set([
   "failed",
   "cancelled",
 ]);
-
-const RUN_STATUS_LABELS: Record<string, string> = {
-  queued: "IDLE",
-  running: "WORKING",
-  waiting_approval: "READY FOR APPROVAL",
-  completed: "COMPLETED",
-  blocked: "BLOCKED",
-  failed: "BLOCKED",
-  cancelled: "IDLE",
-};
 
 /* Real agent status derived from backend run state (+ campaign execution).
  * Every value traces to run.status / run.phase / campaign.lifecycle. */
@@ -112,7 +114,7 @@ function statusChipTone(key: string): "neutral" | "ok" | "accent" {
   return "neutral";
 }
 
-/* User-safe reasoning status for the Groq reasoning engine display. */
+/* User-safe reasoning status for the technical-details disclosure. */
 function reasoningStatusLabel(status: string | null | undefined): string {
   switch (status) {
     case "reasoning":
@@ -134,55 +136,57 @@ function reasoningStatusLabel(status: string | null | undefined): string {
   }
 }
 
-/* The agent's real workflow, mapped from backend phase — never animated. */
-const WORKFLOW_STAGES = [
-  "UNDERSTAND",
-  "RESEARCH",
-  "INVESTIGATE",
-  "RETRIEVE",
-  "ANALYZE",
-  "FORM HYPOTHESIS",
-  "SELECT TOOLS",
-  "PLAN",
-  "CREATE WORK",
-  "VERIFY",
-  "REQUEST APPROVAL",
-  "EXECUTE",
-  "MEASURE",
-  "LEARN",
+/* The agent's real 8-step workflow, mapped from backend phase / status /
+ * campaign lifecycle — never animated, never faked. */
+const EIGHT_STEPS = [
+  { top: "Understand", bottom: "business" },
+  { top: "Find", bottom: "opportunities" },
+  { top: "Research", bottom: "& analyze" },
+  { top: "Prepare", bottom: "campaign" },
+  { top: "Safety", bottom: "check" },
+  { top: "Waiting for", bottom: "approval" },
+  { top: "Execute", bottom: "" },
+  { top: "Measure", bottom: "& learn" },
 ] as const;
 
-function workflowIndex(
+function eightStepIndex(
   run: MarketingAGIRun | null,
+  campaigns: MarketingAGICampaign[],
   learnings: MarketingAGILearning[],
 ): number {
   if (!run) return -1;
-  const state = run.state;
-  if (run.status === "completed" || run.status === "waiting_approval") {
-    if (learnings.length > 0) return 13;
-    if (state?.prepared_action) return 10;
-    return 9;
-  }
+  if (learnings.length > 0) return 7;
+  const lifecycle =
+    (run
+      ? campaigns.find((c) => c.run_id === run.id) ?? campaigns[0]
+      : campaigns[0]
+    )?.lifecycle ?? null;
+  if (lifecycle === "approved" || lifecycle === "executing") return 6;
+  if (lifecycle === "completed" || lifecycle === "measuring" || lifecycle === "learned")
+    return 7;
+  if (run.status === "waiting_approval") return 5;
+  if (run.status === "completed")
+    return run.state?.prepared_action ? 5 : 4;
   switch (run.phase) {
     case "load_context":
       return 0;
     case "observe":
-      return 4;
+      return 1;
     case "investigate":
-      return (state?.retrieval_log?.length ?? 0) > 0 ? 3 : 2;
+      return (run.state?.retrieval_log?.length ?? 0) > 0 ? 2 : 1;
     case "plan":
-      return (state?.hypotheses?.length ?? 0) > 0 ? 7 : 5;
+      return (run.state?.hypotheses?.length ?? 0) > 0 ? 3 : 2;
     case "create":
-      return 8;
+      return 3;
     case "verify":
-      return 9;
+      return 4;
     case "prepare":
     case "awaiting_approval":
-      return 10;
+      return 5;
     case "complete":
-      return 12;
+      return 6;
     default:
-      return (state?.tool_calls?.length ?? 0) > 0 ? 6 : 1;
+      return (run.state?.tool_calls?.length ?? 0) > 0 ? 2 : 0;
   }
 }
 
@@ -316,9 +320,37 @@ const STACK_DESTINATIONS: Record<string, { route: string | null; label: string; 
   social: { route: null, label: "View content prep →", anchor: "campaign" },
 };
 
+/* Marketing-channels presentation order + merchant copy. Status itself
+ * always comes from the backend stack entry. */
+const CHANNEL_ORDER = ["email", "google_ads", "meta_ads", "social", "crm", "analytics"];
+const CHANNEL_SHORT: Record<string, string> = {
+  email: "EMAIL",
+  google_ads: "GOOGLE ADS",
+  meta_ads: "META ADS",
+  social: "INSTAGRAM",
+  crm: "CRM",
+  analytics: "ANALYTICS",
+};
+const CHANNEL_BLURB: Record<string, { on: string; off: string }> = {
+  email: { on: "Ready to send campaigns", off: "Connect to send campaigns" },
+  google_ads: { on: "Ready to run ads", off: "Connect to unlock ads" },
+  meta_ads: { on: "Ready for paid social", off: "Connect for paid social" },
+  social: { on: "Ready to publish", off: "Connect to publish content" },
+  crm: { on: "Customer data available", off: "Customer data unavailable" },
+  analytics: { on: "Business data available", off: "Business data unavailable" },
+};
+
 function rupees(v: number | null | undefined): string {
   if (v === null || v === undefined || Number.isNaN(v)) return "—";
   return `₹${v.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+}
+
+function fmtDelta(v: number | null | undefined): string {
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  const r = Math.round(v);
+  if (r > 0) return `↑ ${r}%`;
+  if (r < 0) return `↓ ${Math.abs(r)}%`;
+  return "→ 0%";
 }
 
 function paramsSummary(params: Record<string, unknown>): string {
@@ -334,12 +366,247 @@ function paramsSummary(params: Record<string, unknown>): string {
   return bits.join(" · ");
 }
 
-function timeOf(ts: string | undefined): string {
-  if (!ts) return "—";
-  try {
-    return new Date(ts).toLocaleTimeString("en-IN", { hour12: false });
-  } catch {
-    return "—";
+/* Merchant-readable relative time for activity + refresh metadata. */
+function relTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "—";
+  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (s < 60) return "Just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} h ago`;
+  return `${Math.floor(h / 24)} d ago`;
+}
+
+function prettifyTechnical(text: string | null | undefined): string {
+  if (!text) return "Worked on your business";
+  const clean = text.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!clean) return "Worked on your business";
+  return clean.charAt(0).toUpperCase() + clean.slice(1);
+}
+
+/* Convert internal execution events into merchant-readable language.
+ * Only the wording changes — ordering, timing and source events are
+ * untouched backend truth. */
+function friendlyEvent(e: MarketingAGIRunEvent): string {
+  const raw = `${e.event_type} ${e.phase} ${e.message}`.toLowerCase();
+  const has = (...keys: string[]) => keys.some((k) => raw.includes(k));
+  if (has("waiting") && has("approv")) return "Waiting for your approval";
+  if (has("approv") && has("request")) return "Prepared an approval request";
+  if (has("verification_passed") || (has("verif") && has("pass")))
+    return "Completed campaign safety review";
+  if (has("verification_failed") || (has("verif") && has("fail")))
+    return "Campaign safety review needs attention";
+  if (has("failed_payment")) return "Checked failed payments";
+  if (has("revenue_trend") || (has("revenue") && has("trend")))
+    return "Reviewed revenue trends";
+  if (has("business_overview")) return "Reviewed business performance";
+  if (has("customer_activity")) return "Reviewed customer activity";
+  if (has("segment") || has("find_customers") || has("customer_profile"))
+    return "Reviewed customer segments";
+  if (has("rag") || has("retriev")) return "Reviewed business data";
+  if (has("campaign_draft") || has("create_email") || (has("draft") && has("campaign")))
+    return "Prepared campaign draft";
+  if (has("select_campaign") || has("strategy")) return "Prepared campaign strategy";
+  if (has("hypothesis")) return "Formed a growth hypothesis";
+  if (has("execut")) return "Ran the approved work";
+  if (has("measur") || (has("learn") && !has("learning"))) return "Measured results and learned";
+  if (has("plan")) return "Planned the next steps";
+  if (has("tool")) return "Used a business tool";
+  if (has("reasoning") || has("decision") || has("llm")) return "Reasoned about the best approach";
+  if (has("run_started") || has("analysis_started")) return "Started working on your business";
+  if (has("run_finished") || has("complete")) return "Finished the current work";
+  return prettifyTechnical(e.message);
+}
+
+/* Merchant-readable run title: first real observation, else hypothesis,
+ * else the run objective. Never invented. */
+function merchantRunTitle(r: MarketingAGIRun): string {
+  const obs = r.state?.observations?.[0];
+  if (obs) return obs.length > 90 ? `${obs.slice(0, 90)}…` : obs;
+  const hyp = r.state?.hypotheses?.[0]?.statement;
+  if (hyp) return hyp.length > 90 ? `${hyp.slice(0, 90)}…` : hyp;
+  return r.objective;
+}
+
+function merchantRunStateLabel(status: string): string {
+  switch (status) {
+    case "queued":
+      return "Queued";
+    case "running":
+      return "Working";
+    case "waiting_approval":
+      return "Ready for approval";
+    case "completed":
+      return "Completed";
+    case "blocked":
+    case "failed":
+      return "Needs attention";
+    case "cancelled":
+      return "Cancelled";
+    default:
+      return prettifyTechnical(status);
+  }
+}
+
+/* Honest "Based on" sources derived from the tools the agent really called. */
+function evidenceSources(
+  toolCalls: Array<{ tool: string }>,
+  hasEvidence: boolean,
+): string[] {
+  const src = new Set<string>();
+  for (const c of toolCalls) {
+    const t = c.tool.toLowerCase();
+    if (t.includes("payment") || t.includes("revenue") || t.includes("order"))
+      src.add("Payment activity");
+    else if (t.includes("customer") || t.includes("segment"))
+      src.add("Customer history");
+    else if (t.includes("business") || t.includes("trend") || t.includes("overview") || t.includes("analytic"))
+      src.add("Business data");
+    else src.add("Business research");
+  }
+  if (src.size === 0 && hasEvidence) src.add("Business data");
+  return [...src].slice(0, 4);
+}
+
+/* ── Marketing Agent office illustration ────────────────────────────────
+ * Flat RazorGrowth illustration language: warm cream paper, thin dark
+ * outlines, terracotta accents, square edges. A small storefront office
+ * with the agent at work — NOT photorealistic, NOT neon, NOT 3D. */
+function AgentOfficeArt() {
+  return (
+    <svg
+      className="magi-art"
+      viewBox="0 0 520 360"
+      role="img"
+      aria-label="Illustrated Marketing Agent office at work"
+    >
+      {/* ground */}
+      <rect x="24" y="300" width="472" height="26" fill="#EBD9AE" stroke="#2a1810" strokeWidth="3" />
+      {/* main shop block */}
+      <rect x="70" y="96" width="330" height="208" fill="#FFF3DF" stroke="#2a1810" strokeWidth="3" />
+      {/* sign band */}
+      <rect x="70" y="96" width="330" height="40" fill="#21130e" stroke="#2a1810" strokeWidth="3" />
+      <text x="235" y="122" textAnchor="middle" fontFamily="'IBM Plex Mono',monospace" fontSize="17" letterSpacing="3" fill="#F7EBD7">
+        MARKETING AGENT
+      </text>
+      {/* awning */}
+      <g stroke="#2a1810" strokeWidth="3">
+        <rect x="70" y="136" width="47" height="26" fill="#D97757" />
+        <rect x="117" y="136" width="47" height="26" fill="#FFF3DF" />
+        <rect x="164" y="136" width="47" height="26" fill="#D97757" />
+        <rect x="211" y="136" width="47" height="26" fill="#FFF3DF" />
+        <rect x="258" y="136" width="47" height="26" fill="#D97757" />
+        <rect x="305" y="136" width="47" height="26" fill="#FFF3DF" />
+        <rect x="352" y="136" width="48" height="26" fill="#D97757" />
+      </g>
+      {/* window with agent + laptop */}
+      <rect x="96" y="182" width="150" height="102" fill="#F5E6CF" stroke="#2a1810" strokeWidth="3" />
+      {/* robot head */}
+      <rect x="128" y="202" width="52" height="44" rx="6" fill="#EBD9AE" stroke="#2a1810" strokeWidth="3" />
+      <line x1="154" y1="202" x2="154" y2="192" stroke="#2a1810" strokeWidth="3" />
+      <circle cx="154" cy="188" r="5" fill="#D97757" stroke="#2a1810" strokeWidth="2.5" />
+      <circle cx="143" cy="221" r="5" fill="#2a1810" />
+      <circle cx="165" cy="221" r="5" fill="#2a1810" />
+      <rect x="146" y="233" width="16" height="4" fill="#2a1810" />
+      {/* laptop */}
+      <rect x="192" y="230" width="40" height="28" fill="#301B12" stroke="#2a1810" strokeWidth="3" />
+      <rect x="196" y="234" width="32" height="16" fill="#70B88A" />
+      <rect x="186" y="258" width="52" height="6" fill="#301B12" stroke="#2a1810" strokeWidth="2.5" />
+      {/* desk */}
+      <line x1="96" y1="266" x2="246" y2="266" stroke="#2a1810" strokeWidth="3" />
+      {/* door */}
+      <rect x="266" y="182" width="108" height="122" fill="#F0BC92" stroke="#2a1810" strokeWidth="3" />
+      <rect x="278" y="196" width="84" height="56" fill="#FFF3DF" stroke="#2a1810" strokeWidth="2.5" />
+      <circle cx="356" cy="250" r="4" fill="#2a1810" />
+      {/* side tree */}
+      <rect x="428" y="230" width="16" height="74" fill="#8C7A66" stroke="#2a1810" strokeWidth="3" />
+      <circle cx="436" cy="200" r="34" fill="#7BA57F" stroke="#2a1810" strokeWidth="3" />
+      <circle cx="414" cy="216" r="18" fill="#7BA57F" stroke="#2a1810" strokeWidth="3" />
+      {/* wall tags */}
+      <g fontFamily="'IBM Plex Mono',monospace" fontSize="12" letterSpacing="2">
+        <rect x="34" y="150" width="86" height="26" fill="#FFF3DF" stroke="#2a1810" strokeWidth="2.5" />
+        <text x="77" y="167" textAnchor="middle" fill="#2a1810">IDEAS</text>
+        <rect x="404" y="120" width="102" height="26" fill="#FFF3DF" stroke="#2a1810" strokeWidth="2.5" />
+        <text x="455" y="137" textAnchor="middle" fill="#2a1810">CAMPAIGNS</text>
+        <rect x="404" y="262" width="86" height="26" fill="#D97757" stroke="#2a1810" strokeWidth="2.5" />
+        <text x="447" y="279" textAnchor="middle" fill="#21130e">GROWTH</text>
+        <rect x="34" y="230" width="88" height="26" fill="#FFF3DF" stroke="#2a1810" strokeWidth="2.5" />
+        <text x="78" y="247" textAnchor="middle" fill="#2a1810">RESULTS</text>
+      </g>
+      {/* sun */}
+      <circle cx="466" cy="52" r="24" fill="#E8936B" stroke="#2a1810" strokeWidth="3" />
+    </svg>
+  );
+}
+
+/* ── Provider icons for marketing.channels ────────────────────────────
+ * Hand-drawn flat inline SVGs (no new dependency, no raster images).
+ * External brands use their recognizable marks (Google Ads overlapping
+ * circles, Meta loop, Instagram camera, envelope for email); internal
+ * CRM/Analytics use neutral RazorGrowth glyphs so they are never
+ * misrepresented as third-party services. */
+function ChannelIcon({ channelKey }: { channelKey: string }) {
+  const ink = "#2a1810";
+  switch (channelKey) {
+    case "google_ads":
+      return (
+        <svg className="magi-channel__logo" viewBox="0 0 40 40" role="img" aria-label="Google Ads logo">
+          <circle cx="15" cy="20" r="11" fill="#4285F4" />
+          <circle cx="25" cy="20" r="11" fill="#FBBC04" fillOpacity="0.9" />
+        </svg>
+      );
+    case "meta_ads":
+      return (
+        <svg className="magi-channel__logo" viewBox="0 0 40 40" role="img" aria-label="Meta logo">
+          <path
+            d="M20 20 C14 11 6 11 6 20 C6 29 14 29 20 20 C26 11 34 11 34 20 C34 29 26 29 20 20 Z"
+            fill="none"
+            stroke="#0082FB"
+            strokeWidth="3.6"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case "social":
+      return (
+        <svg className="magi-channel__logo" viewBox="0 0 40 40" role="img" aria-label="Instagram logo">
+          <rect x="7" y="7" width="26" height="26" rx="7" fill="none" stroke={ink} strokeWidth="2.8" />
+          <circle cx="20" cy="20" r="6.5" fill="none" stroke={ink} strokeWidth="2.8" />
+          <circle cx="27.5" cy="12.5" r="2.4" fill="#D97757" />
+        </svg>
+      );
+    case "crm":
+      return (
+        <svg className="magi-channel__logo" viewBox="0 0 40 40" role="img" aria-label="CRM icon">
+          <rect x="6" y="8" width="28" height="24" rx="2" fill="#FFF3DF" stroke={ink} strokeWidth="2.8" />
+          <circle cx="15" cy="18" r="4" fill="none" stroke={ink} strokeWidth="2.4" />
+          <path d="M9 27c1-3.4 3.4-5 6-5s5 1.6 6 5" fill="none" stroke={ink} strokeWidth="2.4" strokeLinecap="round" />
+          <line x1="25" y1="16" x2="30" y2="16" stroke="#3E7D58" strokeWidth="2.4" strokeLinecap="round" />
+          <line x1="25" y1="21" x2="30" y2="21" stroke="#3E7D58" strokeWidth="2.4" strokeLinecap="round" />
+          <line x1="25" y1="26" x2="28" y2="26" stroke="#3E7D58" strokeWidth="2.4" strokeLinecap="round" />
+        </svg>
+      );
+    case "analytics":
+      return (
+        <svg className="magi-channel__logo" viewBox="0 0 40 40" role="img" aria-label="Analytics icon">
+          <line x1="7" y1="6" x2="7" y2="33" stroke={ink} strokeWidth="2.8" strokeLinecap="round" />
+          <line x1="7" y1="33" x2="34" y2="33" stroke={ink} strokeWidth="2.8" strokeLinecap="round" />
+          <rect x="12" y="22" width="5" height="9" fill="#3E7D58" />
+          <rect x="19.5" y="16" width="5" height="15" fill="#3E7D58" />
+          <rect x="27" y="10" width="5" height="21" fill="#D97757" />
+        </svg>
+      );
+    case "email":
+    default:
+      return (
+        <svg className="magi-channel__logo" viewBox="0 0 40 40" role="img" aria-label="Email icon">
+          <rect x="6" y="10" width="28" height="20" rx="2" fill="#FFF3DF" stroke={ink} strokeWidth="2.8" />
+          <path d="M7 12l13 9 13-9" fill="none" stroke="#C85F43" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
   }
 }
 
@@ -354,15 +621,20 @@ export function MarketingAGIPage() {
   const [campaigns, setCampaigns] = useState<MarketingAGICampaign[]>([]);
   const [learnings, setLearnings] = useState<MarketingAGILearning[]>([]);
   const [handoffs, setHandoffs] = useState<MarketingAGIHandoff[]>([]);
+  const [radar, setRadar] = useState<GrowthRadarResponse | null>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsOverviewResponse | null>(null);
   const [toolCatalog, setToolCatalog] = useState<
     Array<{ name: string; category: string; description: string; capabilities: string[]; integration_status: string }>
   >([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "login_required" | "no_workspace" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [selectedStack, setSelectedStack] = useState<string | null>(null);
   const [connBusy, setConnBusy] = useState<string | null>(null);
   const [connMsg, setConnMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [auditTrail, setAuditTrail] = useState<import("../types/api").MarketingIntegrationAuditEvent[]>([]);
+  const [previewTab, setPreviewTab] = useState<"email" | "details">("email");
+  const [showAllRuns, setShowAllRuns] = useState(false);
   // Resend connect form (values stay local; the key is verified live, never displayed back)
   const [resendKey, setResendKey] = useState("");
   const [resendFrom, setResendFrom] = useState("");
@@ -373,6 +645,7 @@ export function MarketingAGIPage() {
   const lastSeqRef = useRef(0);
   const pollRef = useRef<number | null>(null);
   const campaignRef = useRef<HTMLDivElement | null>(null);
+  const researchRef = useRef<HTMLDivElement | null>(null);
   const toolActivityRef = useRef<HTMLDivElement | null>(null);
 
   const stopPolling = useCallback(() => {
@@ -386,13 +659,15 @@ export function MarketingAGIPage() {
   const loadAll = useCallback(
     async (withActiveRun = true) => {
       try {
-        const [st, rs, cs, ls, hs, tc] = await Promise.all([
+        const [st, rs, cs, ls, hs, tc, rd, an] = await Promise.all([
           fetchMarketingAGIStatus(),
           fetchMarketingAGIRuns(),
           fetchMarketingAGICampaigns(),
           fetchMarketingAGILearnings(),
           fetchMarketingAGIHandoffs(),
           fetchMarketingAGITools().catch(() => ({ tools: [] })),
+          fetchGrowthRadar().catch(() => null),
+          fetchAnalyticsOverview(30).catch(() => null),
         ]);
         setStatus(st);
         setRuns(rs.runs);
@@ -400,6 +675,8 @@ export function MarketingAGIPage() {
         setLearnings(ls.learnings);
         setHandoffs(hs.handoffs);
         setToolCatalog(tc.tools ?? []);
+        setRadar(rd);
+        setAnalytics(an);
         if (withActiveRun) {
           const running = rs.runs.find((r) => ACTIVE_STATUSES.has(r.status));
           const focus = running ?? rs.runs[0] ?? null;
@@ -425,6 +702,7 @@ export function MarketingAGIPage() {
         }
         setLoadState("ready");
         setErrorMsg(null);
+        setLastUpdated(new Date().toISOString());
       } catch (e) {
         const err = e as { status?: number; message?: string };
         if (err.status === 401) setLoadState("login_required");
@@ -442,6 +720,14 @@ export function MarketingAGIPage() {
     loadAll();
     return stopPolling;
   }, [loadAll, stopPolling]);
+
+  /* Compact page footer: hide the shared tall SiteFooter while this page
+   * is mounted. The class is removed on unmount, so the homepage and all
+   * other routes keep their existing footer untouched. */
+  useEffect(() => {
+    document.body.classList.add("magi-hide-site-footer");
+    return () => document.body.classList.remove("magi-hide-site-footer");
+  }, []);
 
   /* live polling while a run is active — real events only */
   const pollActiveRun = useCallback(
@@ -632,7 +918,13 @@ export function MarketingAGIPage() {
 
   const scrollTo = (anchor: string) => {
     if (anchor === "campaign") campaignRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (anchor === "research") researchRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     else toolActivityRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const scrollToCampaign = (tab?: "email" | "details") => {
+    if (tab) setPreviewTab(tab);
+    campaignRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   /* ── derived real state ────────────────────────────────────────────── */
@@ -640,21 +932,27 @@ export function MarketingAGIPage() {
   const run = activeRun;
   const live = run !== null && ACTIVE_STATUSES.has(run.status);
   const agent = useMemo(() => agentStatus(run, campaigns), [run, campaigns]);
-  const wfIndex = useMemo(() => workflowIndex(run, learnings), [run, learnings]);
+  const stepIndex = useMemo(
+    () => eightStepIndex(run, campaigns, learnings),
+    [run, campaigns, learnings],
+  );
   const state = run?.state;
   const toolCalls = state?.tool_calls ?? [];
-
-  const catalogByName = useMemo(() => {
-    const m = new Map<string, { category: string; description: string; capabilities: string[]; integration_status: string }>();
-    for (const t of toolCatalog) m.set(t.name, t);
-    return m;
-  }, [toolCatalog]);
 
   const stack: MarketingStackEntry[] = useMemo(() => {
     const remote = status?.marketing_stack;
     if (remote && remote.length > 0) return remote;
     return STACK_FALLBACK;
   }, [status]);
+
+  const orderedStack = useMemo(() => {
+    const byKey = new Map(stack.map((s) => [s.key, s]));
+    const ordered = CHANNEL_ORDER.map((k) => byKey.get(k)).filter(
+      (s): s is MarketingStackEntry => Boolean(s),
+    );
+    for (const s of stack) if (!CHANNEL_ORDER.includes(s.key)) ordered.push(s);
+    return ordered;
+  }, [stack]);
 
   const stackActivity = useMemo(() => {
     const byKey: Record<string, { count: number; last: string | null }> = {};
@@ -695,7 +993,6 @@ export function MarketingAGIPage() {
     | { action_id: string; status: string; approval_state: string }
     | null
     | undefined;
-  const plan = (state?.plan ?? []) as Array<{ step: string; tool: string; status: string }>;
 
   const runCampaign: MarketingAGICampaign | null = useMemo(() => {
     if (!run) return campaigns[0] ?? null;
@@ -707,6 +1004,93 @@ export function MarketingAGIPage() {
     customer_ids?: string[];
   } | null;
 
+  /* Business snapshot — real backend values only. Revenue/customers from
+   * analytics (falling back to growth radar); recovery figures from the
+   * real campaign draft / campaign row. */
+  const totalRevenue = analytics?.revenue.current_period ?? radar?.metrics.captured_revenue ?? null;
+  const revenueDelta = analytics?.revenue.change_percentage ?? null;
+  const totalCustomers = analytics?.customers.total_customers ?? radar?.metrics.total_customers ?? null;
+  const audienceCount = draft?.audience_count ?? runCampaign?.audience_count ?? null;
+  const recoveryValue =
+    draft?.expected_impact?.estimated_revenue_inr ?? runCampaign?.estimated_revenue_inr ?? null;
+  const hasOpportunity =
+    audienceCount !== null && audienceCount !== undefined && audienceCount > 0 &&
+    recoveryValue !== null && recoveryValue !== undefined;
+
+  const needsApproval = Boolean(preparedAction) || run?.status === "waiting_approval";
+  const campaignName = draft?.name ?? runCampaign?.name ?? null;
+  const campaignChannel = draft?.channel ?? runCampaign?.channel ?? "email";
+  const mailContent = (draft?.content ?? runCampaign?.content ?? null) as {
+    message?: string;
+    subject_variants?: string[];
+    cta?: string;
+    timing?: string;
+  } | null;
+  const mailSubject = mailContent?.subject_variants?.[0] ?? "Your order is waiting";
+  const mailBody = mailContent?.message ?? null;
+  const mailCta = mailContent?.cta ?? "Complete your payment";
+  const mailTiming =
+    mailContent?.timing ??
+    (runCampaign?.content as { timing?: string } | null)?.timing ??
+    "Immediately + 3 days";
+
+  const topHypothesis = state?.hypotheses?.[0] ?? null;
+  const impactBadge = topHypothesis
+    ? topHypothesis.confidence >= 0.75
+      ? "High Impact"
+      : topHypothesis.confidence >= 0.45
+        ? "Medium Impact"
+        : "Low Impact"
+    : hasOpportunity
+      ? "High Impact"
+      : null;
+
+  const sources = useMemo(
+    () => evidenceSources(toolCalls, (state?.evidence.length ?? 0) > 0),
+    [toolCalls, state],
+  );
+
+  const activityFeed = useMemo(
+    () => [...events].reverse().slice(0, 8),
+    [events],
+  );
+
+  const visibleRuns = showAllRuns ? runs : runs.slice(0, 4);
+
+  const checklist = {
+    audience: (audienceCount ?? 0) > 0,
+    content: Boolean(mailBody),
+    safety: verification?.passed === true,
+  };
+
+  const statusHeadline = hasOpportunity
+    ? `Found an opportunity to recover ${rupees(recoveryValue)} from ${audienceCount} customers.`
+    : run && live
+      ? run.phase === "load_context"
+        ? "Getting to know your business…"
+        : run.phase === "observe"
+          ? "Looking for opportunities in your data…"
+          : run.phase === "investigate"
+            ? "Researching with real data…"
+            : run.phase === "plan"
+              ? "Planning the best next move…"
+              : run.phase === "create"
+                ? "Preparing a campaign…"
+                : run.phase === "verify"
+                  ? "Running safety checks…"
+                  : "Working on your business…"
+      : run && run.status === "waiting_approval"
+        ? "A campaign is ready for your review."
+        : run && run.status === "completed"
+          ? "Work complete — here's what I found."
+          : "Your marketing employee is ready.";
+  const statusSupport =
+    state?.observations?.[0] ??
+    topHypothesis?.statement ??
+    (run
+      ? "I've analyzed your business data and prepared what's below. Nothing moves without your approval."
+      : "Start an AI Team analysis and I'll investigate your business data here.");
+
   const modalEntry = selectedStack ? stack.find((s) => s.key === selectedStack) ?? null : null;
   const modalCalls = modalEntry
     ? toolCalls.filter((c) => modalEntry.tools.includes(c.tool))
@@ -716,587 +1100,511 @@ export function MarketingAGIPage() {
 
   if (loadState === "loading") {
     return (
-      <div className="magi-page">
-        <p className="magi-loading">Loading Marketing Agent workstation…</p>
+      <div className="magi-world">
+        <GlobalEnvironment />
+        <div className="magi-shell">
+          <p className="magi-loading">Loading Marketing Agent workstation…</p>
+        </div>
       </div>
     );
   }
 
   if (loadState === "login_required") {
     return (
-      <div className="magi-page">
-        <WindowPanel title="marketing-agent.app" className="magi-banner">
-          <h1 className="magi-title">Marketing Agent</h1>
-          <p className="magi-lead">
-            Log in to monitor the autonomous marketing employee working on your business.
-          </p>
-          <div style={{ marginTop: 16 }}>
-            <Button variant="primary" mono onClick={() => navigate("/login")}>Sign in</Button>
-          </div>
-        </WindowPanel>
+      <div className="magi-world">
+        <GlobalEnvironment />
+        <div className="magi-shell">
+          <WindowPanel title="marketing-agent.app" className="magi-gate">
+            <p className="magi-eyebrow">MARKETING AGENT</p>
+            <h1 className="magi-gate__title">Your autonomous marketing employee.</h1>
+            <p className="magi-gate__lead">
+              Log in to monitor the autonomous marketing employee working on your business.
+            </p>
+            <div style={{ marginTop: 16 }}>
+              <Button variant="primary" mono onClick={() => navigate("/login")}>Sign in</Button>
+            </div>
+          </WindowPanel>
+        </div>
       </div>
     );
   }
 
   if (loadState === "no_workspace") {
     return (
-      <div className="magi-page">
-        <WindowPanel title="marketing-agent.app" className="magi-banner">
-          <h1 className="magi-title">Marketing Agent</h1>
-          <p className="magi-lead">
-            Your account has no merchant workspace yet. Sign up creates one automatically.
-          </p>
-        </WindowPanel>
+      <div className="magi-world">
+        <GlobalEnvironment />
+        <div className="magi-shell">
+          <WindowPanel title="marketing-agent.app" className="magi-gate">
+            <p className="magi-eyebrow">MARKETING AGENT</p>
+            <h1 className="magi-gate__title">Your autonomous marketing employee.</h1>
+            <p className="magi-gate__lead">
+              Your account has no merchant workspace yet. Sign up creates one automatically.
+            </p>
+          </WindowPanel>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="magi-page">
-      {/* ── Agent header ─────────────────────────────────────────────── */}
-      <WindowPanel title="marketing-agent.app" className="magi-banner" tone="navy" dark>
-        <p className="magi-eyebrow">AI TEAM · AUTONOMOUS MARKETING EMPLOYEE</p>
-        <div className="magi-banner__row">
-          <div>
-            <h1 className="magi-title magi-title--light">Marketing Agent</h1>
-            <p className="magi-lead magi-lead--light">
-              An autonomous marketing employee working on your business. It
-              investigates real data, gathers evidence, prepares campaigns, and
-              waits for your approval — never acting on customers without you.
-            </p>
+    <div className="magi-world">
+      <GlobalEnvironment />
+
+      <div className="magi-shell">
+        {/* ── HERO — a large WindowPanel, same system as the dashboard ── */}
+        <WindowPanel title="marketing.agent" className="magi-hero">
+          <div className="magi-hero__inner">
+            <div className="magi-hero__copy">
+              <p className="magi-eyebrow">MARKETING AGENT</p>
+              <h1 className="magi-hero__title">
+                Your autonomous
+                <br />
+                <span className="magi-hero__accent">marketing employee.</span>
+              </h1>
+              <p className="magi-hero__sub">
+                Finds opportunities, researches with real data, prepares campaigns,
+                and waits for your approval.
+              </p>
+            </div>
+            <div className="magi-hero__art">
+              <AgentOfficeArt />
+              <p className="magi-hero__caption">
+                <span className="magi-hero__tick" aria-hidden="true" />
+                Working to grow
+                <br />
+                your business 24/7
+              </p>
+            </div>
           </div>
-          <div className="magi-banner__actions">
-            {live && (
-              <Button variant="secondary" mono onClick={handleCancel}>
-                Cancel
-              </Button>
-            )}
-            <Button variant="ghost-dark" mono onClick={() => navigate("/agents")}>
-              ← AI Team
-            </Button>
-          </div>
-        </div>
+        </WindowPanel>
 
-        <div className="magi-statusrow">
-          <StatusChip tone={statusChipTone(agent.key)} pulse={agent.live}>
-            {agent.label}
-          </StatusChip>
-          <div className="magi-objectivebox">
-            <span className="magi-objectivebox__label">Current objective</span>
-            <span className="magi-objectivebox__value">
-              {run?.objective ?? "No active objective — start an AI Team analysis to assign one."}
-            </span>
-          </div>
-          {status && (
-            <span className="magi-meta__item magi-meta__item--light">
-              {status.llm_configured
-                ? `Reasoning: ${status.llm_model ?? status.llm_provider}`
-                : "Reasoning: deterministic (no LLM key)"}
-            </span>
-          )}
-          {run && (
-            <span className="magi-meta__item magi-meta__item--light">
-              {run.tool_call_count} tool calls · {run.iterations} iterations
-            </span>
-          )}
-        </div>
+        {loadState === "error" && (
+          <WindowPanel title="marketing-agent.app" className="magi-gate">
+            <p className="magi-error">{errorMsg ?? "Failed to load workstation"}</p>
+            <div style={{ marginTop: 12 }}>
+              <Button variant="primary" mono onClick={() => loadAll()}>Retry</Button>
+            </div>
+          </WindowPanel>
+        )}
 
-        {/* AI Team cycle membership — this page never starts a run */}
-        <div className="magi-statusrow">
-          <span className="magi-meta__item magi-meta__item--light">
-            {!run && "Waiting for the next AI Team analysis."}
-            {run && live && `Running as part of AI Team analysis${run.analysis_cycle_id ? ` · cycle ${run.analysis_cycle_id.slice(0, 8)}…` : ""}.`}
-            {run && !live && (run.status === "waiting_approval" || run.status === "completed") &&
-              "Marketing Agent completed this analysis cycle."}
-            {run && !live && (run.status === "blocked" || run.status === "failed") &&
-              "Marketing Agent run degraded — sibling agents were unaffected."}
-          </span>
-          {run?.analysis_cycle_id && (
-            <span className="magi-meta__item magi-meta__item--light">
-              Analysis cycle {run.analysis_cycle_id.slice(0, 8)}…
-            </span>
-          )}
-        </div>
+        {/* ── ROW 1: AGENT STATUS + BUSINESS SNAPSHOT ──────────────── */}
+        <div className="magi-grid">
+          <WindowPanel title="agent.status" className="magi-span-status">
+            <div className="magi-status__top">
+              <span className="magi-live">
+                <span
+                  className={`magi-live__dot${agent.live ? " magi-live__dot--on" : ""}`}
+                  aria-hidden="true"
+                />
+                {agent.live ? "Working on your business" : merchantRunStateLabel(run?.status ?? "idle")}
+              </span>
+              <span className="magi-status__meta">
+                Last updated: {lastUpdated ? relTime(lastUpdated) : "—"}
+                <button type="button" className="magi-refresh" onClick={() => loadAll(false)}>
+                  Refresh
+                </button>
+                {live && (
+                  <button type="button" className="magi-refresh magi-refresh--danger" onClick={handleCancel}>
+                    Cancel run
+                  </button>
+                )}
+              </span>
+            </div>
 
-        {/* Reasoning engine — Groq + agentic tools */}
-        <div className="magi-statusrow">
-          <span className="magi-meta__item magi-meta__item--light">
-            AI ENGINE {run?.llm_provider ?? status?.llm_provider ?? "Groq"}
-          </span>
-          <span className="magi-meta__item magi-meta__item--light">
-            MODEL {run?.llm_model ?? status?.llm_model ?? "—"}
-          </span>
-          <span className="magi-meta__item magi-meta__item--light">
-            REASONING STATUS {reasoningStatusLabel(state?.reasoning_status)}
-          </span>
-          {state?.current_decision && (
-            <span className="magi-meta__item magi-meta__item--light">
-              CURRENT DECISION {state.current_decision}
-            </span>
-          )}
-          <span className="magi-meta__item magi-meta__item--light">
-            TOOLS THIS RUN {state?.tool_calls.length ?? 0}
-          </span>
-          <span className="magi-meta__item magi-meta__item--light">
-            LLM DECISIONS {state?.llm_decisions.length ?? 0}
-          </span>
-          {(state?.llm_degraded || run?.status === "failed" || run?.status === "blocked") && (
-            <span className="magi-meta__item magi-meta__item--light">
-              {run?.status === "failed" || run?.status === "blocked"
-                ? "DEGRADED / FAILED — LLM unavailable"
-                : "Degraded — deterministic fallback"}
-            </span>
-          )}
-        </div>
+            <div className="magi-status__main">
+              <div className="magi-status__left">
+                <h2 className="magi-status__headline">{statusHeadline}</h2>
+                <p className="magi-status__support">{statusSupport}</p>
+                {(draft || runCampaign) && (
+                  <div className="magi-status__actions">
+                    <Button variant="primary" mono onClick={() => scrollToCampaign("email")}>
+                      Review Campaign →
+                    </Button>
+                    <Button variant="secondary" mono onClick={() => scrollToCampaign("details")}>
+                      View Details
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <div className="magi-status__check">
+                <p className="magi-status__checktitle">
+                  CAMPAIGN
+                  <br />
+                  READY
+                </p>
+                <ul className="magi-checklist">
+                  <li className={checklist.audience ? "is-done" : ""}>
+                    <span aria-hidden="true">{checklist.audience ? "✓" : "○"}</span> Audience prepared
+                  </li>
+                  <li className={checklist.content ? "is-done" : ""}>
+                    <span aria-hidden="true">{checklist.content ? "✓" : "○"}</span> Content drafted
+                  </li>
+                  <li className={checklist.safety ? "is-done" : ""}>
+                    <span aria-hidden="true">{checklist.safety ? "✓" : "○"}</span> Safety checked
+                  </li>
+                  <li className={needsApproval ? "is-now" : ""}>
+                    <span aria-hidden="true">{needsApproval ? "●" : "○"}</span> Waiting for approval
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </WindowPanel>
 
-        {/* Real workflow position — highlights only reached stages */}
-        <div className="magi-flow" aria-label="Agent workflow position">
-          {WORKFLOW_STAGES.map((s, i) => (
-            <span
-              key={s}
-              className={`magi-flow__stage${i === wfIndex ? " magi-flow__stage--now" : ""}${i < wfIndex ? " magi-flow__stage--done" : ""}`}
-              title={i === wfIndex ? "Current stage (from backend execution state)" : s}
-            >
-              {s}
-            </span>
-          ))}
-        </div>
-
-        {errorMsg && <p className="magi-error">{errorMsg}</p>}
-      </WindowPanel>
-
-      <div className="magi-grid">
-        {/* ── 1. Live workstream ─────────────────────────────────────── */}
-        <WindowPanel title="live-workstream.log" className="magi-panel magi-s7">
-          <h2 className="magi-panel__title">Live Workstream</h2>
-          <p className="magi-panel__sub">Actual execution events — nothing simulated.</p>
-          <div className="magi-stream">
-            {events.length === 0 && !live && (
+          <WindowPanel title="business.snapshot" className="magi-span-snapshot">
+            <div className="magi-snap">
+              <div className="magi-snap__cell">
+                <span className="magi-snap__value">{totalRevenue !== null ? rupees(totalRevenue) : "—"}</span>
+                <span className="magi-snap__label">Total Revenue</span>
+                <span className="magi-snap__delta">{fmtDelta(revenueDelta)}</span>
+              </div>
+              <div className="magi-snap__cell">
+                <span className="magi-snap__value">{totalCustomers !== null ? totalCustomers.toLocaleString("en-IN") : "—"}</span>
+                <span className="magi-snap__label">Total Customers</span>
+                <span className="magi-snap__delta">→ live</span>
+              </div>
+              <div className="magi-snap__cell">
+                <span className="magi-snap__value">{recoveryValue !== null ? rupees(recoveryValue) : "—"}</span>
+                <span className="magi-snap__label">Recovery Opportunity</span>
+              </div>
+              <div className="magi-snap__cell">
+                <span className="magi-snap__value">{audienceCount !== null ? audienceCount.toLocaleString("en-IN") : "—"}</span>
+                <span className="magi-snap__label">Customers Affected</span>
+              </div>
+            </div>
+            {!run && (
               <p className="magi-stream__empty">
-                {run
-                  ? "Select a run to view its workstream."
-                  : "The agent hasn't worked on this business yet — start an AI Team analysis."}
+                Live business figures appear here once the agent has run.
               </p>
             )}
-            {events.map((e) => (
-              <div key={e.id} className={`magi-evt magi-evt--${e.event_type}`}>
-                <span className="magi-evt__seq">
-                  {String(e.seq).padStart(2, "0")}
-                </span>
-                <span className="magi-evt__phase">{e.phase.replace(/_/g, " ")}</span>
-                <span className="magi-evt__msg">{e.message}</span>
+          </WindowPanel>
+
+          {/* ── ROW 2: AGENT PROGRESS (full width) ─────────────────── */}
+          <WindowPanel title="agent.progress" className="magi-span-full">
+            <ol className="magi-steps" aria-label="Agent progress">
+              {EIGHT_STEPS.map((s, i) => (
+                <li
+                  key={s.top + s.bottom}
+                  className={`magi-steps__step${i < stepIndex ? " is-done" : ""}${i === stepIndex ? " is-now" : ""}`}
+                  aria-current={i === stepIndex ? "step" : undefined}
+                >
+                  <span className="magi-steps__node" aria-hidden="true">
+                    {i < stepIndex ? (
+                      <svg className="magi-steps__check" viewBox="0 0 16 16" width="17" height="17" aria-hidden="true">
+                        <path
+                          d="M3 8.5l3.5 3.5L13 4.5"
+                          fill="none"
+                          stroke="#FFF3DF"
+                          strokeWidth="2.4"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    ) : (
+                      i + 1
+                    )}
+                  </span>
+                  <span className="magi-steps__words">
+                    <span>{s.top}</span>
+                    {s.bottom && <span>{s.bottom}</span>}
+                  </span>
+                </li>
+              ))}
+            </ol>
+            <p className="magi-steps__caption">
+              {stepIndex < 0
+                ? "Not started yet — start an AI Team analysis to put the agent to work."
+                : `Current stage: ${EIGHT_STEPS[stepIndex].top} ${EIGHT_STEPS[stepIndex].bottom} (from live agent state)`}
+            </p>
+          </WindowPanel>
+
+          {/* ── ROW 3: APPROVAL REQUIRED (right-aligned) ───────────── */}
+          <div className="magi-span-approval">
+            <WindowPanel title="approval.required" className={needsApproval ? "magi-approval magi-approval--hot" : "magi-approval"}>
+              <div className="magi-approval__head">
+                <span className="magi-approval__icon" aria-hidden="true">!</span>
+                <h2 className="magi-approval__title">Your approval needed</h2>
               </div>
-            ))}
-            {live && (
-              <div className="magi-evt magi-evt--live">
-                <span className="magi-evt__seq">··</span>
-                <span className="magi-evt__msg">Working… next event arrives when the backend emits it.</span>
-              </div>
-            )}
+              {needsApproval ? (
+                <>
+                  <p className="magi-approval__campaign">{campaignName ?? "Campaign ready"}</p>
+                  <p className="magi-approval__meta">
+                    {audienceCount ?? "—"} customers · {recoveryValue !== null ? rupees(recoveryValue) : "—"} opportunity · {campaignChannel === "email" ? "Email" : prettifyTechnical(campaignChannel)}
+                  </p>
+                  <p className="magi-approval__note">
+                    Nothing will be sent until you approve this campaign.
+                  </p>
+                  <div className="magi-approval__actions">
+                    <Button variant="primary" mono onClick={() => scrollToCampaign("email")}>
+                      Review Campaign →
+                    </Button>
+                    <Button variant="secondary" mono onClick={() => navigate("/actions")}>
+                      Approve &amp; Continue
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="magi-approval__meta">No approvals pending.</p>
+                  <p className="magi-approval__note">
+                    Nothing will be sent without your approval — proposed campaigns will appear here.
+                  </p>
+                  <div className="magi-approval__actions">
+                    <Button variant="secondary" mono onClick={() => navigate("/actions")}>
+                      Open Approvals →
+                    </Button>
+                  </div>
+                </>
+              )}
+            </WindowPanel>
           </div>
-        </WindowPanel>
 
-        {/* ── 2. Current reasoning / objective ───────────────────────── */}
-        <WindowPanel title="current-reasoning.md" className="magi-panel magi-s5" tone="navy" dark>
-          <h2 className="magi-panel__title">Current Reasoning</h2>
-          {run ? (
-            <>
-              <p className="magi-objective">{run.objective}</p>
-              <div className="magi-kv">
-                <span>Status</span>
-                <strong>{agent.label}</strong>
-              </div>
-              <div className="magi-kv">
-                <span>Reasoning engine</span>
-                <strong>
-                  {run.llm_provider ?? status?.llm_provider ?? "Groq"}
-                  {` · ${run.llm_model ?? status?.llm_model ?? "—"}`}
-                </strong>
-              </div>
-              <div className="magi-kv">
-                <span>Reasoning status</span>
-                <strong>{reasoningStatusLabel(state?.reasoning_status)}</strong>
-              </div>
-              {state?.reasoning_summary && (
-                <p className="magi-objective">{state.reasoning_summary}</p>
-              )}
-              {state?.current_decision && (
-                <div className="magi-kv">
-                  <span>Current decision</span>
-                  <strong>{state.current_decision}</strong>
-                </div>
-              )}
-              <div className="magi-kv">
-                <span>Workflow</span>
-                <strong>{state?.workflow?.replace(/_/g, " ") ?? "not selected yet"}</strong>
-              </div>
-              <div className="magi-kv">
-                <span>Evidence</span>
-                <strong>{state?.evidence.length ?? 0} items · {state?.hypotheses.length ?? 0} hypotheses</strong>
-              </div>
-              <div className="magi-kv">
-                <span>LLM decisions</span>
-                <strong>
-                  {state?.llm_decisions.length ?? 0} decisions · {state?.llm_calls ?? 0} calls
-                  {(state?.llm_degraded ?? false) ? " · degraded" : ""}
-                </strong>
-              </div>
-              {plan.length > 0 && (
-                <div className="magi-block">
-                  <h3 className="magi-block__title">Plan</h3>
-                  <ol className="magi-plan">
-                    {plan.map((p, i) => (
-                      <li key={i} className={`magi-plan__step magi-plan__step--${p.status}`}>
-                        <span className="magi-plan__tool">{p.tool}</span>
-                        <span>{p.step}</span>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-              )}
-              {(state?.errors?.length ?? 0) > 0 && (
-                <div className="magi-block">
-                  <h3 className="magi-block__title">Run notes (honest)</h3>
-                  <ul className="magi-list magi-list--gaps">
-                    {state!.errors.map((e, i) => (
-                      <li key={i}>{e}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="magi-stream__empty">No reasoning yet — run an AI Team analysis to start the agent.</p>
-          )}
-        </WindowPanel>
-
-        {/* ── 5. Tool activity (marketing intelligence) ──────────────── */}
-        <div ref={toolActivityRef} style={{ display: "contents" }} />
-        <WindowPanel title="tool-activity.log" className="magi-panel magi-s12">
-          <h2 className="magi-panel__title">Tool Activity</h2>
-          <p className="magi-panel__sub">
-            Every tool the agent actually called this run — with real inputs, results and durations.
-            {state && state.duplicate_tool_calls > 0 && (
-              <> {state.duplicate_tool_calls} duplicate call(s) prevented.</>
-            )}
-          </p>
-          {toolCalls.length === 0 ? (
-            <p className="magi-stream__empty">
-              No tool calls yet. The agent uses only the tools the evidence justifies.
-            </p>
-          ) : (
-            <div className="magi-tablewrap">
-              <table className="magi-table">
-                <thead>
-                  <tr>
-                    <th>Tool</th>
-                    <th>Status</th>
-                    <th>Input / purpose</th>
-                    <th>Result</th>
-                    <th>Time · Duration</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {toolCalls.map((c, i) => {
-                    const spec = catalogByName.get(c.tool);
-                    return (
-                      <tr key={i}>
-                        <td className="magi-table__tool">{c.tool}</td>
-                        <td>
-                          <span className={`magi-pill magi-pill--${c.ok ? "ok" : "bad"}`}>
-                            {c.ok ? "✓ ok" : "✕ failed"}
-                          </span>
-                        </td>
-                        <td className="magi-table__dim" title={spec?.description ?? ""}>
-                          {paramsSummary(c.params)}
-                        </td>
-                        <td>{c.summary ?? (c.ok ? "done" : "failed")}</td>
-                        <td className="magi-table__dim">
-                          {timeOf(c.ts)}{c.latency_ms ? ` · ${c.latency_ms}ms` : ""}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          {/* ── ROW 4: WHAT I FOUND / RECOMMENDATION / PREVIEW ─────── */}
+          <WindowPanel title="what.i.found" className="magi-span-third">
+            <div className="magi-sec__head">
+              <span className="magi-sec__icon" aria-hidden="true">◆</span>
+              <h2 className="magi-sec__title">
+                {campaignName ?? (run ? merchantRunTitle(run) : "Payment recovery opportunity")}
+              </h2>
             </div>
-          )}
-        </WindowPanel>
-
-        {/* ── 3. Research & evidence (agentic RAG) ───────────────────── */}
-        <WindowPanel title="research-evidence.notebook" className="magi-panel magi-s6">
-          <h2 className="magi-panel__title">Research &amp; Evidence</h2>
-          <p className="magi-panel__sub">Multi-step retrieval with sufficiency checks — never a single lookup.</p>
-          {run ? (
-            <>
-              {state?.observations.length ? (
-                <div className="magi-block">
-                  <h3 className="magi-block__title">Observations</h3>
-                  <ul className="magi-list">
-                    {state.observations.map((o, i) => (
-                      <li key={i}>{o}</li>
-                    ))}
-                  </ul>
+            {run || draft || runCampaign ? (
+              <>
+                <p className="magi-sec__text">
+                  {state?.observations?.[0] ??
+                    topHypothesis?.statement ??
+                    runCampaign?.objective ??
+                    "The agent hasn't recorded findings for this run yet."}
+                </p>
+                <div className="magi-found__metrics">
+                  <div className="magi-found__metric">
+                    <span className="magi-found__value">{recoveryValue !== null ? rupees(recoveryValue) : "—"}</span>
+                    <span className="magi-found__label">Recoverable revenue</span>
+                  </div>
+                  <div className="magi-found__metric">
+                    <span className="magi-found__value">{audienceCount !== null ? audienceCount : "—"}</span>
+                    <span className="magi-found__label">Customers affected</span>
+                  </div>
                 </div>
-              ) : null}
-
-              {state?.retrieval_log.length ? (
-                <div className="magi-block">
-                  <h3 className="magi-block__title">
-                    Agentic RAG — {state.retrieval_log.length} question(s)
-                  </h3>
-                  {state.retrieval_log.map((r, i) => (
-                    <div key={i} className="magi-rag">
-                      <div className="magi-rag__q">
-                        Q{i + 1}: {r.question}
-                      </div>
-                      <div className="magi-rag__meta">
-                        {r.rounds} retrieval round(s) · {r.retrievals.length} retrievals ·{" "}
-                        {r.sufficient ? "evidence sufficient" : "evidence insufficient — reformulated"} ·{" "}
-                        {r.strategy}
-                      </div>
-                      <div className="magi-rag__tools">
-                        {r.retrievals.map((rr, j) => (
-                          <span key={j} className="magi-tag">
-                            {rr.tool} ({rr.item_count})
-                          </span>
-                        ))}
-                      </div>
-                      {(r.gaps?.length ?? 0) > 0 && (
-                        <div className="magi-rag__gaps">
-                          Gaps: {r.gaps.join(" · ")}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-
-              {state?.hypotheses.length ? (
-                <div className="magi-block">
-                  <h3 className="magi-block__title">Hypotheses</h3>
-                  {state.hypotheses.map((h, i) => (
-                    <div key={i} className="magi-hypo">
-                      <span className={`magi-hypo__status magi-hypo__status--${h.status}`}>
-                        {h.status}
-                      </span>
-                      <span className="magi-hypo__text">{h.statement}</span>
-                      <span className="magi-hypo__conf">
-                        {(h.confidence * 100).toFixed(0)}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-
-              {state?.knowledge_gaps.length ? (
-                <div className="magi-block">
-                  <h3 className="magi-block__title">Knowledge gaps (honest)</h3>
-                  <ul className="magi-list magi-list--gaps">
-                    {state.knowledge_gaps.map((g, i) => (
-                      <li key={i}>{g}</li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              {state?.evidence.length ? (
-                <div className="magi-block">
-                  <h3 className="magi-block__title">
-                    Evidence ({state.evidence.length})
-                  </h3>
-                  <ul className="magi-evidence">
-                    {state.evidence.slice(0, 12).map((e, i) => (
-                      <li key={i}>
-                        <span className="magi-tag magi-tag--src">{e.source}</span>
-                        <span className="magi-evidence__stmt">{e.statement}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              {!state?.observations.length &&
-                !state?.retrieval_log.length &&
-                !state?.evidence.length && (
-                  <p className="magi-stream__empty">No research recorded for this run yet.</p>
-                )}
-            </>
-          ) : (
-            <p className="magi-stream__empty">No research yet.</p>
-          )}
-        </WindowPanel>
-
-        {/* ── 6. Campaign workspace ──────────────────────────────────── */}
-        <div ref={campaignRef} style={{ display: "contents" }} />
-        <WindowPanel title="campaign-workspace.console" className="magi-panel magi-s6">
-          <h2 className="magi-panel__title">Campaign Workspace</h2>
-          {!draft && !runCampaign ? (
-            <p className="magi-stream__empty">
-              No campaign drafted yet. The agent creates one only when evidence justifies it.
-            </p>
-          ) : (
-            <div className="magi-campaign">
-              <div className="magi-lifecycle" aria-label="Campaign lifecycle">
-                {LIFECYCLE_STEPS.map((s, i) => {
-                  const idx = lifecycleIndex(lifecycle);
-                  return (
-                    <span
-                      key={s}
-                      className={`magi-lifecycle__step${i === idx ? " magi-lifecycle__step--now" : ""}${i < idx ? " magi-lifecycle__step--done" : ""}`}
-                    >
-                      {s.replace(/_/g, " ")}
-                    </span>
-                  );
-                })}
-              </div>
-              <div className="magi-campaign__head">
-                <h3 className="magi-campaign__name">
-                  {draft?.name ?? runCampaign?.name ?? "Untitled campaign"}
-                </h3>
-                <StatusChip tone="accent">
-                  {draft?.integration_status
-                    ? (INTEGRATION_LABELS[draft.integration_status] ?? draft.integration_status)
-                    : runCampaign
-                      ? (INTEGRATION_LABELS[runCampaign.integration_status] ?? runCampaign.integration_status)
-                      : "DRAFT ONLY"}
-                </StatusChip>
-              </div>
-              <dl className="magi-defs">
-                <div>
-                  <dt>Objective</dt>
-                  <dd>{draft?.objective ?? runCampaign?.objective ?? "—"}</dd>
-                </div>
-                <div>
-                  <dt>Audience</dt>
-                  <dd>
-                    {draft?.audience_count ?? runCampaign?.audience_count ?? 0} customers (real, verified)
-                    {audience?.criteria && (
-                      <> · criteria: {Object.entries(audience.criteria).map(([k, v]) => `${k}=${String(v)}`).join(", ")}</>
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Strategy</dt>
-                  <dd>{draft?.workflow ?? runCampaign?.workflow ?? "—"}</dd>
-                </div>
-                <div>
-                  <dt>Message</dt>
-                  <dd>{draft?.content?.message ?? (runCampaign?.content as { message?: string } | null)?.message ?? "—"}</dd>
-                </div>
-                {((draft?.content?.subject_variants?.length ?? 0) > 0 ||
-                  ((runCampaign?.content as { subject_variants?: string[] } | null)?.subject_variants?.length ?? 0) > 0) && (
-                  <div>
-                    <dt>Variants</dt>
-                    <dd>
-                      {(draft?.content?.subject_variants ??
-                        (runCampaign?.content as { subject_variants?: string[] })?.subject_variants ??
-                        []).join(" · ")}
-                    </dd>
+                {hasOpportunity && (
+                  <div className="magi-sec__block">
+                    <h3 className="magi-sec__h">Why this matters</h3>
+                    <p className="magi-sec__text">
+                      These customers have already shown purchase intent, so they may be
+                      more likely to complete the transaction.
+                    </p>
                   </div>
                 )}
-                <div>
-                  <dt>Channel</dt>
-                  <dd>{draft?.channel ?? runCampaign?.channel ?? "email"}</dd>
-                </div>
-                <div>
-                  <dt>Timing</dt>
-                  <dd>{draft?.content?.timing ?? (runCampaign?.content as { timing?: string } | null)?.timing ?? "—"}</dd>
-                </div>
-                <div>
-                  <dt>Expected impact</dt>
-                  <dd>
-                    {draft?.expected_impact?.rationale ?? (runCampaign?.expected_impact as { rationale?: string } | null)?.rationale ?? "—"} (
-                    {rupees(draft?.expected_impact?.estimated_revenue_inr ?? runCampaign?.estimated_revenue_inr)})
-                  </dd>
-                </div>
-                <div>
-                  <dt>Success metric</dt>
-                  <dd>{draft?.success_metric ?? runCampaign?.success_metric ?? "—"}</dd>
-                </div>
-                <div>
-                  <dt>Approval state</dt>
-                  <dd>{preparedAction ? preparedAction.approval_state : "not requested yet"}</dd>
-                </div>
-                <div>
-                  <dt>Execution state</dt>
-                  <dd>
-                    {runCampaign?.action_id
-                      ? `prepared as action ${runCampaign.action_id.slice(0, 8)}… · lifecycle ${runCampaign.lifecycle.replace(/_/g, " ")}`
-                      : "nothing sent — execution requires your approval"}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          )}
-        </WindowPanel>
-
-        {/* ── Marketing stack (six real integrations) ────────────────── */}
-        <WindowPanel title="marketing-stack.tools" className="magi-panel magi-s12">
-          <h2 className="magi-panel__title">Marketing Stack</h2>
-          <p className="magi-panel__sub">
-            Real capability status from the backend tool registry — never claimed from a UI card.
-          </p>
-          <div className="magi-stack">
-            {stack.map((entry) => {
-              const act = stackActivity[entry.key] ?? { count: 0, last: null };
-              const isInternal = entry.provider === "internal";
-              const isConnected = entry.status === "connected";
-              const busy = connBusy === entry.provider;
-              return (
-                <div key={entry.key} className="magi-stackcard">
-                  <div className="magi-stackcard__head">
-                    <h3 className="magi-stackcard__name">{entry.label}</h3>
-                    <span className={`magi-int__status magi-int__status--${entry.status}`}>
-                      {entry.status === "connected" && isInternal
-                        ? "CONNECTED — INTERNAL"
-                        : (INTEGRATION_LABELS[entry.status] ?? entry.status)}
-                    </span>
-                  </div>
-                  <p className="magi-stackcard__desc">{entry.description}</p>
-                  <div className="magi-stackcard__meta">
-                    <span>{providerDisplay(entry.provider)}</span>
-                    {isConnected && entry.account_name && (
-                      <span>{entry.account_name}</span>
-                    )}
-                  </div>
-                  {isConnected && (
-                    <div className="magi-stackcard__meta">
-                      <span>
-                        Last verified:{" "}
-                        {entry.last_verified_at
-                          ? new Date(entry.last_verified_at).toLocaleString("en-IN", { hour12: false })
-                          : "—"}
-                      </span>
-                    </div>
-                  )}
-                  {(entry.capabilities?.length ?? 0) > 0 && (
-                    <div className="magi-stackcard__caps">
-                      {entry.capabilities.slice(0, 5).map((c) => (
-                        <span key={c} className="magi-tag">{c.replace(/_/g, " ")}</span>
+                {sources.length > 0 && (
+                  <div className="magi-sec__block">
+                    <h3 className="magi-sec__h">Based on</h3>
+                    <div className="magi-chiprow">
+                      {sources.map((s) => (
+                        <span key={s} className="magi-tag">{s}</span>
                       ))}
                     </div>
-                  )}
-                  <div className="magi-stackcard__meta">
-                    <span>{act.count} tool call{act.count === 1 ? "" : "s"} this run</span>
-                    <span>Last: {act.last ? timeOf(act.last) : "—"}</span>
                   </div>
-                  {!isInternal && (
-                    <div className="magi-stackcard__actions">
-                      {!isConnected && (
+                )}
+              </>
+            ) : (
+              <p className="magi-stream__empty">
+                No findings yet — start an AI Team analysis and I'll investigate your
+                business data here.
+              </p>
+            )}
+          </WindowPanel>
+
+          <WindowPanel title="my.recommendation" className="magi-span-third">
+            <div className="magi-sec__head">
+              <span className="magi-sec__icon" aria-hidden="true">★</span>
+              <h2 className="magi-sec__title">{campaignName ?? "Failed payment recovery"}</h2>
+            </div>
+            {impactBadge && <span className="magi-badge">{impactBadge}</span>}
+            {(draft || runCampaign) ? (
+              <>
+                <p className="magi-sec__text">
+                  {draft?.objective ?? runCampaign?.objective ?? "Reach out to customers whose payments didn't complete and give them a simple way to finish their purchase."}
+                </p>
+                <dl className="magi-rec">
+                  <div><dt>Audience</dt><dd>{audienceCount !== null ? `${audienceCount} customers` : "—"}</dd></div>
+                  <div><dt>Potential recovery</dt><dd>{recoveryValue !== null ? rupees(recoveryValue) : "—"}</dd></div>
+                  <div><dt>Channel</dt><dd>{campaignChannel === "email" ? "Email" : prettifyTechnical(campaignChannel)}</dd></div>
+                  <div><dt>Timing</dt><dd>{mailTiming}</dd></div>
+                </dl>
+                <div className="magi-sec__actions">
+                  <Button variant="primary" mono onClick={() => scrollToCampaign("email")}>
+                    Review Campaign →
+                  </Button>
+                  <Button variant="secondary" mono onClick={() => scrollTo("research")}>
+                    View Strategy
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <p className="magi-stream__empty">
+                No recommendation yet. Once the agent finds something worth acting on,
+                the plan will appear here.
+              </p>
+            )}
+          </WindowPanel>
+
+          <div ref={campaignRef} className="magi-span-third magi-anchor" />
+          <WindowPanel title="campaign.preview" className="magi-span-third magi-span-preview">
+            <div className="magi-prev__tabs" role="tablist" aria-label="Campaign preview">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={previewTab === "email"}
+                className={`magi-prev__tab${previewTab === "email" ? " is-active" : ""}`}
+                onClick={() => setPreviewTab("email")}
+              >
+                Email Preview
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={previewTab === "details"}
+                className={`magi-prev__tab${previewTab === "details" ? " is-active" : ""}`}
+                onClick={() => setPreviewTab("details")}
+              >
+                Details
+              </button>
+              <span className="magi-prev__status">
+                <StatusChip tone={needsApproval ? "accent" : "neutral"}>
+                  {needsApproval ? "Ready for Approval" : merchantRunStateLabel(run?.status ?? "idle")}
+                </StatusChip>
+              </span>
+            </div>
+
+            {previewTab === "email" ? (
+              draft || runCampaign ? (
+                <div className="magi-mail">
+                  <p className="magi-mail__row">
+                    <span>From</span>
+                    <strong>Your Store &lt;noreply@yourstore.com&gt;</strong>
+                  </p>
+                  <p className="magi-mail__row">
+                    <span>Subject</span>
+                    <strong>{mailSubject}</strong>
+                  </p>
+                  <div className="magi-mail__body">
+                    <p className="magi-mail__brand">Your Store</p>
+                    <h3 className="magi-mail__subject">{mailSubject}</h3>
+                    {mailBody ? (
+                      <p className="magi-mail__text">{mailBody}</p>
+                    ) : (
+                      <p className="magi-mail__text magi-mail__text--muted">
+                        The agent hasn't drafted the message body yet — it will appear
+                        here once prepared.
+                      </p>
+                    )}
+                    <span className="magi-mail__cta">{mailCta}</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="magi-stream__empty">
+                  No campaign content yet. A realistic preview appears here once the
+                  agent drafts one.
+                </p>
+              )
+            ) : draft || runCampaign ? (
+              <div className="magi-details">
+                <div className="magi-lifecycle" aria-label="Campaign lifecycle">
+                  {LIFECYCLE_STEPS.map((s, i) => {
+                    const idx = lifecycleIndex(lifecycle);
+                    return (
+                      <span
+                        key={s}
+                        className={`magi-lifecycle__step${i === idx ? " magi-lifecycle__step--now" : ""}${i < idx ? " magi-lifecycle__step--done" : ""}`}
+                      >
+                        {s.replace(/_/g, " ")}
+                      </span>
+                    );
+                  })}
+                </div>
+                <dl className="magi-rec">
+                  <div><dt>Objective</dt><dd>{draft?.objective ?? runCampaign?.objective ?? "—"}</dd></div>
+                  <div>
+                    <dt>Audience</dt>
+                    <dd>
+                      {audienceCount !== null ? `${audienceCount} customers (real, verified)` : "—"}
+                      {audience?.criteria && (
+                        <> · criteria: {Object.entries(audience.criteria).map(([k, v]) => `${k}=${String(v)}`).join(", ")}</>
+                      )}
+                    </dd>
+                  </div>
+                  <div><dt>Strategy</dt><dd>{draft?.workflow ?? runCampaign?.workflow ?? "—"}</dd></div>
+                  <div><dt>Channel</dt><dd>{campaignChannel}</dd></div>
+                  <div><dt>Timing</dt><dd>{mailTiming}</dd></div>
+                  <div>
+                    <dt>Expected impact</dt>
+                    <dd>
+                      {draft?.expected_impact?.rationale ??
+                        (runCampaign?.expected_impact as { rationale?: string } | null)?.rationale ?? "—"}
+                      {recoveryValue !== null ? ` (${rupees(recoveryValue)})` : ""}
+                    </dd>
+                  </div>
+                  <div><dt>Success metric</dt><dd>{draft?.success_metric ?? runCampaign?.success_metric ?? "—"}</dd></div>
+                  <div><dt>Approval state</dt><dd>{preparedAction ? preparedAction.approval_state : "not requested yet"}</dd></div>
+                  <div>
+                    <dt>Execution state</dt>
+                    <dd>
+                      {runCampaign?.action_id
+                        ? `prepared as action ${runCampaign.action_id.slice(0, 8)}… · lifecycle ${runCampaign.lifecycle.replace(/_/g, " ")}`
+                        : "nothing sent — execution requires your approval"}
+                    </dd>
+                  </div>
+                </dl>
+                <details className="magi-tech">
+                  <summary>Technical details</summary>
+                  <dl className="magi-rec">
+                    <div><dt>Reasoning engine</dt><dd>{run?.llm_provider ?? status?.llm_provider ?? "Groq"}</dd></div>
+                    <div><dt>Model</dt><dd>{run?.llm_model ?? status?.llm_model ?? "—"}</dd></div>
+                    <div><dt>Reasoning status</dt><dd>{reasoningStatusLabel(state?.reasoning_status)}</dd></div>
+                    <div><dt>Tools this run</dt><dd>{state?.tool_calls.length ?? 0}</dd></div>
+                    <div><dt>Run</dt><dd>{run ? `${run.id.slice(0, 8)}… · ${run.iterations} iterations` : "—"}</dd></div>
+                    {run?.analysis_cycle_id && (
+                      <div><dt>Analysis cycle</dt><dd>{run.analysis_cycle_id.slice(0, 8)}…</dd></div>
+                    )}
+                  </dl>
+                </details>
+              </div>
+            ) : (
+              <p className="magi-stream__empty">No campaign details yet.</p>
+            )}
+          </WindowPanel>
+
+          {/* ── ROW 5: MARKETING CHANNELS (full width) ─────────────── */}
+          <WindowPanel title="marketing.channels" className="magi-span-full">
+            <p className="magi-panel__sub">Manage your integrations</p>
+            <div className="magi-channels">
+              {orderedStack.map((entry) => {
+                const connected = entry.status === "connected";
+                const busy = connBusy === entry.provider;
+                const blurb = CHANNEL_BLURB[entry.key];
+                return (
+                  <div key={entry.key} className="magi-channel">
+                    <div className="magi-channel__logozone">
+                      <ChannelIcon channelKey={entry.key} />
+                    </div>
+                    <h3 className="magi-channel__name">{CHANNEL_SHORT[entry.key] ?? entry.label.toUpperCase()}</h3>
+                    <span className={`magi-channel__pill${connected ? " is-on" : ""}`}>
+                      {connected ? "Connected" : entry.status === "draft_only" ? "Draft only" : "Not connected"}
+                    </span>
+                    <p className="magi-channel__blurb">
+                      {blurb ? (connected ? blurb.on : blurb.off) : entry.description}
+                    </p>
+                    <p className="magi-channel__provider">{providerDisplay(entry.provider)}</p>
+                    <div className="magi-channel__actions">
+                      {!connected && entry.provider !== "internal" && (
                         <button
                           type="button"
                           className="magi-stackcard__btn"
                           disabled={busy}
                           onClick={() => openStackModal(entry.key)}
                         >
-                          {entry.key === "email" && "Connect Email →"}
-                          {entry.key === "google_ads" && "Connect Google Ads →"}
-                          {entry.key === "meta_ads" && "Connect Meta Ads →"}
-                          {entry.key === "social" && "Connect Instagram →"}
+                          Connect →
                         </button>
                       )}
-                      {isConnected && (
+                      {connected && entry.provider !== "internal" && (
                         <>
                           <button
                             type="button"
@@ -1304,7 +1612,7 @@ export function MarketingAGIPage() {
                             disabled={busy}
                             onClick={() => handleTest(entry.key)}
                           >
-                            {busy ? "Testing…" : "Test Connection"}
+                            {busy ? "Testing…" : "Test"}
                           </button>
                           <button
                             type="button"
@@ -1316,209 +1624,157 @@ export function MarketingAGIPage() {
                           </button>
                         </>
                       )}
+                      <button
+                        type="button"
+                        className="magi-stackcard__btn"
+                        onClick={() => openStackModal(entry.key)}
+                      >
+                        Details →
+                      </button>
                     </div>
-                  )}
-                  <button
-                    type="button"
-                    className="magi-stackcard__btn"
-                    onClick={() => openStackModal(entry.key)}
-                  >
-                    {entry.key === "email" && "View Email Work →"}
-                    {entry.key === "google_ads" && "View Google Ads Work →"}
-                    {entry.key === "meta_ads" && "View Meta Work →"}
-                    {entry.key === "crm" && "View Customer Work →"}
-                    {entry.key === "analytics" && "View Analytics →"}
-                    {entry.key === "social" && "View Social Work →"}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          {connMsg && (
-            <p className={`magi-connmsg magi-connmsg--${connMsg.ok ? "ok" : "bad"}`}>
-              {connMsg.text}
-            </p>
-          )}
-        </WindowPanel>
+                  </div>
+                );
+              })}
+            </div>
+            {connMsg && (
+              <p className={`magi-connmsg magi-connmsg--${connMsg.ok ? "ok" : "bad"}`}>
+                {connMsg.text}
+              </p>
+            )}
+          </WindowPanel>
 
-        {/* ── 7. Verification ────────────────────────────────────────── */}
-        <WindowPanel title="verification.report" className="magi-panel magi-s4">
-          <h2 className="magi-panel__title">Verification</h2>
-          {!verification ? (
-            <p className="magi-stream__empty">Nothing verified yet.</p>
-          ) : (
-            <>
-              <div className={`magi-verify magi-verify--${verification.passed ? "pass" : "fail"}`}>
-                {verification.passed ? "VERIFICATION PASSED" : "VERIFICATION FAILED"}
-              </div>
-              <ul className="magi-checks">
-                {verification.checks.map((c) => (
-                  <li
-                    key={c.name}
-                    className={`magi-checks__item magi-checks__item--${c.passed ? "ok" : "bad"}`}
-                  >
-                    <span className="magi-checks__mark">
-                      {c.passed ? "✓" : "✕"}
-                    </span>
-                    <span className="magi-checks__name">{c.name.replace(/_/g, " ")}</span>
-                    <span className="magi-checks__detail">{c.detail}</span>
+          {/* ── ROW 6: RECENT WORK + AGENT ACTIVITY ────────────────── */}
+          <WindowPanel title="recent.work" className="magi-span-half">
+            <div className="magi-sec__head magi-sec__head--split">
+              <h2 className="magi-sec__title">Recent Work</h2>
+              {runs.length > 4 && (
+                <button
+                  type="button"
+                  className="magi-linkbtn"
+                  onClick={() => setShowAllRuns((v) => !v)}
+                >
+                  {showAllRuns ? "Show less" : "View all →"}
+                </button>
+              )}
+            </div>
+            {runs.length === 0 ? (
+              <p className="magi-stream__empty">
+                No work yet — runs started by the AI Team will appear here.
+              </p>
+            ) : (
+              <ul className="magi-work">
+                {visibleRuns.map((r) => (
+                  <li key={r.id}>
+                    <button
+                      type="button"
+                      className={`magi-work__item${run?.id === r.id ? " is-active" : ""}`}
+                      onClick={() => selectRun(r.id)}
+                    >
+                      <span className="magi-work__title">{merchantRunTitle(r)}</span>
+                      <span className={`magi-work__state magi-work__state--${r.status}`}>
+                        {merchantRunStateLabel(r.status)}
+                      </span>
+                      <span className="magi-work__meta">
+                        {r.iterations} iter · {r.tool_call_count} tools · {r.started_at ? relTime(r.started_at) : "—"}
+                      </span>
+                    </button>
                   </li>
                 ))}
               </ul>
-            </>
-          )}
-        </WindowPanel>
+            )}
+          </WindowPanel>
 
-        {/* ── 8. Approval / action ───────────────────────────────────── */}
-        <WindowPanel title="approval-action.gate" className="magi-panel magi-s4" tone="navy" dark>
-          <h2 className="magi-panel__title">Approval</h2>
-          {!preparedAction ? (
-            <>
-              <p className="magi-approval__state">NOTHING TO APPROVE</p>
+          <WindowPanel title="agent.activity" className="magi-span-half">
+            <div className="magi-sec__head">
+              <span className={`magi-live__dot${live ? " magi-live__dot--on" : ""}`} aria-hidden="true" />
+              <h2 className="magi-sec__title">Live activity</h2>
+            </div>
+            {activityFeed.length === 0 ? (
               <p className="magi-stream__empty">
-                No action prepared. The agent proposes; only you approve.
+                {run
+                  ? "No activity recorded for this run yet."
+                  : "Activity from the agent will stream in here while it works."}
               </p>
-            </>
-          ) : (
-            <div className="magi-action">
-              <p className="magi-approval__state magi-approval__state--ready">READY FOR APPROVAL</p>
-              <div className="magi-action__row">
-                <span className="magi-action__label">Campaign</span>
-                <span className="magi-action__value">
-                  prepared for {draft?.audience_count ?? runCampaign?.audience_count ?? "?"} customers
-                </span>
-              </div>
-              <div className="magi-action__row">
-                <span className="magi-action__label">Action</span>
-                <span className="magi-action__value">send_campaign</span>
-              </div>
-              <div className="magi-action__row">
-                <span className="magi-action__label">Action ID</span>
-                <span className="magi-action__value mono">{preparedAction.action_id}</span>
-              </div>
-              <div className="magi-action__row">
-                <span className="magi-action__label">Approval</span>
-                <span className="magi-action__value magi-action__value--warn">
-                  REQUIRED — the agent can never approve its own work
-                </span>
-              </div>
-              <Button variant="primary" mono onClick={() => navigate("/actions")}>
-                Review in Actions →
-              </Button>
-            </div>
-          )}
-        </WindowPanel>
+            ) : (
+              <ol className="magi-activity">
+                {activityFeed.map((e) => (
+                  <li key={e.id} className="magi-activity__row">
+                    <span className="magi-activity__dot" aria-hidden="true" />
+                    <div className="magi-activity__body">
+                      <p className="magi-activity__title">{friendlyEvent(e)}</p>
+                      <p className="magi-activity__time">{relTime(e.created_at)}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </WindowPanel>
 
-        {/* ── 9. Learning ────────────────────────────────────────────── */}
-        <WindowPanel title="learning.log" className="magi-panel magi-s4">
-          <h2 className="magi-panel__title">Learning</h2>
-          {learnings.length === 0 && (
-            <p className="magi-stream__empty">
-              No measured outcomes yet. Learnings appear after approved
-              campaigns run and real results come in.
-            </p>
-          )}
-          {learnings.map((l) => (
-            <div key={l.id} className="magi-learn">
-              <div className="magi-learn__head">
-                <span className={`magi-learn__verdict magi-learn__verdict--${l.verdict ?? l.status}`}>
-                  {l.verdict ?? l.status}
-                </span>
-                <span className="magi-learn__date">
-                  {new Date(l.created_at).toLocaleDateString()}
-                </span>
-              </div>
-              <p className="magi-learn__insight">{l.insights}</p>
-            </div>
-          ))}
-          {handoffs.length > 0 && (
-            <div className="magi-block">
-              <h3 className="magi-block__title">Specialist handoffs</h3>
-              {handoffs.map((h) => (
-                <div key={h.id} className="magi-learn">
-                  <div className="magi-learn__head">
-                    <span className="magi-tag">{h.specialist.replace(/_/g, " ")}</span>
-                    <span className="magi-tag magi-tag--src">{h.status}</span>
-                  </div>
-                  <p className="magi-learn__insight">
-                    {(h.request as { question?: string } | null)?.question ?? ""}
+          {/* ── Hidden anchors kept for modal deep-links ───────────── */}
+          <div ref={toolActivityRef} style={{ display: "contents" }} />
+          <div ref={researchRef} style={{ display: "contents" }} />
+
+          {/* ── ROW 7: WHAT I'M LEARNING (full width) ──────────────── */}
+          <WindowPanel title="what.im.learning" className="magi-span-full">
+            {learnings.length === 0 ? (
+              <div className="magi-learnempty">
+                <div className="magi-learnempty__copy">
+                  <h2 className="magi-sec__title">No campaign results yet.</h2>
+                  <p className="magi-sec__text">
+                    Once an approved campaign runs, I&apos;ll track the outcome
+                    and use what I learn to improve future recommendations.
                   </p>
                 </div>
-              ))}
-            </div>
-          )}
-        </WindowPanel>
-
-        {/* ── Run history ────────────────────────────────────────────── */}
-        <WindowPanel title="runs.history" className="magi-panel magi-s5">
-          <h2 className="magi-panel__title">Runs</h2>
-          {runs.length === 0 && (
-            <p className="magi-stream__empty">No autonomous runs yet.</p>
-          )}
-          <ul className="magi-runs">
-            {runs.map((r) => (
-              <li key={r.id}>
-                <button
-                  type="button"
-                  className={`magi-run ${run?.id === r.id ? "magi-run--active" : ""}`}
-                  onClick={() => selectRun(r.id)}
-                >
-                  <span className={`magi-run__status magi-run__status--${r.status}`}>
-                    {RUN_STATUS_LABELS[r.status] ?? r.status}
-                  </span>
-                  <span className="magi-run__objective">{r.objective}</span>
-                  <span className="magi-run__meta">
-                    {r.iterations} iter · {r.tool_call_count} tools
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </WindowPanel>
-
-        {/* ── Campaign drafts ────────────────────────────────────────── */}
-        <WindowPanel title="campaigns.drafts" className="magi-panel magi-s7">
-          <h2 className="magi-panel__title">Campaign Drafts ({campaigns.length})</h2>
-          {campaigns.length === 0 ? (
-            <p className="magi-stream__empty">
-              No drafts yet — drafts appear here with their real lifecycle and approval state.
-            </p>
-          ) : (
-            <div className="magi-cards">
-              {campaigns.map((c) => (
-                <div key={c.id} className="magi-card">
-                  <div className="magi-card__head">
-                    <h3 className="magi-card__name">{c.name}</h3>
-                    <span className={`magi-int__status magi-int__status--${c.integration_status}`}>
-                      {INTEGRATION_LABELS[c.integration_status] ?? c.integration_status}
-                    </span>
-                  </div>
-                  <p className="magi-card__obj">{c.objective}</p>
-                  <div className="magi-card__meta">
-                    <span>{c.audience_count} customers</span>
-                    <span>{rupees(c.estimated_revenue_inr)} expected</span>
-                    <span className={`magi-run__status magi-run__status--${c.lifecycle}`}>
-                      {c.lifecycle.replace(/_/g, " ")}
-                    </span>
-                  </div>
-                  {c.action_id && (
-                    <p className="magi-card__action">
-                      Action {c.action_id.slice(0, 8)}… awaiting your approval in
-                      Growth Actions.{" "}
-                      <button
-                        type="button"
-                        className="magi-linkbtn"
-                        onClick={() => navigate("/actions")}
-                      >
-                        Review →
-                      </button>
-                    </p>
-                  )}
+                <div className="magi-learnempty__visual" aria-hidden="true">
+                  <span className="magi-learnempty__ring" />
+                  <p>
+                    Continuous improvement
+                    <br />
+                    <span>Gets smarter over time</span>
+                  </p>
                 </div>
-              ))}
-            </div>
-          )}
-        </WindowPanel>
+              </div>
+            ) : (
+              <div className="magi-learnlist">
+                {learnings.map((l) => (
+                  <div key={l.id} className="magi-learn">
+                    <div className="magi-learn__head">
+                      <span className={`magi-learn__verdict magi-learn__verdict--${l.verdict ?? l.status}`}>
+                        {l.verdict ?? l.status}
+                      </span>
+                      <span className="magi-learn__date">
+                        {new Date(l.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <p className="magi-learn__insight">{l.insights}</p>
+                  </div>
+                ))}
+                {handoffs.length > 0 && (
+                  <div className="magi-block">
+                    <h3 className="magi-block__title">Specialist handoffs</h3>
+                    {handoffs.map((h) => (
+                      <div key={h.id} className="magi-learn">
+                        <div className="magi-learn__head">
+                          <span className="magi-tag">{h.specialist.replace(/_/g, " ")}</span>
+                          <span className="magi-tag magi-tag--src">{h.status}</span>
+                        </div>
+                        <p className="magi-learn__insight">
+                          {(h.request as { question?: string } | null)?.question ?? ""}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </WindowPanel>
+        </div>
+
+        {/* Custom workspace sign-off (the app footer stays as-is via layout) */}
+        <p className="magi-signoff">
+          <span>RazorGrowth AI — Growth / Agents / Approval</span>
+          <span>© {new Date().getFullYear()} · Guardrails on</span>
+        </p>
       </div>
 
       {/* ── Stack detail modal (real backend data, no dead buttons) ──── */}
@@ -1550,7 +1806,7 @@ export function MarketingAGIPage() {
             {/* ── Live connection (backend truth, never hardcoded) ─── */}
             {modalEntry.provider === "internal" ? (
               <div className="magi-modal__note">
-                <strong>Internal.</strong> This tool runs on your workspace's own
+                <strong>Internal.</strong> This tool runs on your workspace&apos;s own
                 database — no external connection is needed or claimed.
               </div>
             ) : (
