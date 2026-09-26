@@ -24,6 +24,9 @@ class AGIStartResponse(BaseModel):
 class AGIRunEvent(BaseModel):
     id: str
     run_id: str
+    # Logical action this lifecycle row belongs to (data.action_id);
+    # None for run-level execution details (research, tool calls, phases).
+    action_id: str | None = None
     seq: int
     phase: str
     event_type: str
@@ -70,6 +73,12 @@ class AGIRunResponse(BaseModel):
     analysis_cycle_id: str | None = None
     started_at: str | None = None
     completed_at: str | None = None
+    # Canonical action timestamps (persisted agent_actions instants).
+    # Recent Work MUST render these — never run.started_at — so the row
+    # and the Live Activity timeline agree on ONE backend instant.
+    action_created_at: str | None = None
+    action_updated_at: str | None = None
+    action_completed_at: str | None = None
     llm_provider: str | None = None
     llm_model: str | None = None
     state: AGIStateSummary
@@ -105,6 +114,7 @@ class AGICampaignResponse(BaseModel):
     evidence_refs: list[str] = Field(default_factory=list)
     verification: dict[str, Any] | None = None
     action_id: str | None = None
+    action_status: str | None = None
     created_at: str
 
 

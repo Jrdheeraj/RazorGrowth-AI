@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:activity": "tsc src/lib/activityStatus.ts src/lib/__tests__/activityStatus.test.ts --outDir .test-dist --rootDir src --module nodenext --moduleResolution nodenext --target es2021 --strict --skipLibCheck && node .test-dist/lib/__tests__/activityStatus.test.js",
+    "test:oauth": "tsc src/lib/integrationOauth.ts src/lib/__tests__/integrationOauth.test.ts --outDir .test-dist --rootDir src --module nodenext --moduleResolution nodenext --target es2021 --strict --skipLibCheck && node .test-dist/lib/__tests__/integrationOauth.test.js"
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.3.0",

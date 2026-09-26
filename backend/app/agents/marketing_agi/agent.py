@@ -24,6 +24,8 @@ capped and checked every iteration.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import time
 import uuid
@@ -1012,6 +1014,93 @@ class MarketingAGI:
                 )
                 continue  # retry once with looser criteria
 
+            # Idempotency (canonical): an OPEN proposal for this workflow owns
+            # the campaign identity — reuse its campaign row instead of
+            # minting a duplicate draft + duplicate approval gate. Verified
+            # here against the freshly built audience so the open proposal is
+            # re-checked with real data every run.
+            from backend.app.services.marketing_action_sync import (
+                find_open_marketing_action,
+            )
+
+            open_pair = find_open_marketing_action(
+                self._db, self._merchant_id, workflow.key
+            )
+            if open_pair is not None:
+                open_campaign, open_action = open_pair
+                open_content = dict(open_campaign.content or {})
+                open_impact = dict(open_campaign.expected_impact or {})
+                state.campaign_draft = {
+                    "campaign_id": str(open_campaign.id),
+                    "campaign_key": open_campaign.campaign_key,
+                    "workflow": open_campaign.workflow or workflow.key,
+                    "name": open_campaign.name,
+                    "objective": open_campaign.objective,
+                    "audience_count": open_campaign.audience_count,
+                    "integration_status": open_campaign.integration_status,
+                    "content": {
+                        "message": open_content.get("message"),
+                        "subject_variants": open_content.get("subject_variants")
+                        or open_content.get("variants"),
+                        "cta": open_content.get("cta"),
+                        "timing": open_content.get("timing"),
+                    },
+                    "expected_impact": {
+                        "rationale": open_impact.get("rationale"),
+                        "estimated_revenue_inr": open_impact.get(
+                            "estimated_revenue_inr"
+                        ),
+                    },
+                    "success_metric": open_campaign.success_metric,
+                }
+                recorder.emit(
+                    phase=Phase.create.value,
+                    event_type="campaign_reused",
+                    message=f"09 — Reusing open campaign proposal: {open_campaign.name}",
+                    data={
+                        "campaign_id": str(open_campaign.id),
+                        "action_id": str(open_action.id),
+                    },
+                )
+                run_row.phase = Phase.verify.value
+                recorder.emit(
+                    phase=Phase.verify.value,
+                    event_type="phase_started",
+                    message="10 — Verifying open campaign evidence and safety",
+                )
+                verify_t0 = time.perf_counter()
+                report = verify_campaign(
+                    self._db,
+                    self._merchant_id,
+                    open_campaign,
+                    audience_ids,
+                    evidence_count=len(state.evidence),
+                    limits=self._limits,
+                )
+                state.timing["verify_ms"] = state.timing.get("verify_ms", 0) + int(
+                    (time.perf_counter() - verify_t0) * 1000)
+                state.verification = report.to_dict()
+                self._checkpoint(run_row, state)
+                if report.passed:
+                    recorder.emit(
+                        phase=Phase.verify.value,
+                        event_type="verification_passed",
+                        message="11 — Verification PASSED — open campaign ready for approval",
+                        data=report.to_dict(),
+                    )
+                    return True
+                recorder.emit(
+                    phase=Phase.verify.value,
+                    event_type="verification_failed",
+                    message=f"Open campaign re-verification FAILED "
+                    f"({', '.join(report.failed_names)}) — retrying",
+                    data=report.to_dict(),
+                )
+                state.errors.append(
+                    f"open proposal re-verification attempt {attempt}: {report.failed_names}"
+                )
+                continue
+
             # design the campaign (LLM when available; structured fallback)
             campaign_t0 = time.perf_counter()
             strategy = self._design_campaign(state, workflow, audience_res)
@@ -1046,6 +1135,7 @@ class MarketingAGI:
                     },
                     "success_metric": strategy.success_metric,
                     "evidence_refs": [e.source for e in state.evidence[:10]],
+                    "run_id": uuid.UUID(state.run_id),
                 },
             )
             self._record_tool_call(
@@ -1157,6 +1247,56 @@ class MarketingAGI:
             message="12 — Preparing action for human approval",
         )
 
+        # Idempotency: check for existing open action for this workflow
+        # before creating a new one. Reuse open approval gate instead of
+        # minting duplicate pending actions.
+        from backend.app.services.marketing_action_sync import find_open_marketing_action
+        from backend.app.services.marketing_action_sync import approval_state_for
+
+        reused = find_open_marketing_action(
+            self._db, self._merchant_id, state.workflow
+        )
+        if reused is not None:
+            open_campaign, open_action = reused
+            open_status = getattr(open_action.status, "value", open_action.status)
+            open_status = str(open_status)
+            own_campaign_row = self._db.get(
+                MarketingAGICampaign, uuid.UUID(state.campaign_draft["campaign_id"])
+            )
+            if (
+                own_campaign_row is not None
+                and own_campaign_row.merchant_id == self._merchant_id
+            ):
+                own_campaign_row.action_id = open_action.id
+                # The mirror lifecycle must reflect the canonical open gate —
+                # never sit at "draft" while the action awaits/has approval.
+                if own_campaign_row.lifecycle in {"idea", "research", "draft", "verify"}:
+                    own_campaign_row.lifecycle = (
+                        "approved"
+                        if open_status in {"approved", "executing", "completed"}
+                        else "ready_for_approval"
+                    )
+                self._db.flush()
+            state.prepared_action = {
+                "action_id": str(open_action.id),
+                "status": open_status,
+                "approval_state": approval_state_for(open_status),
+            }
+            recorder.emit(
+                phase=Phase.prepare.value,
+                event_type="action_reused",
+                message="Linked to the open proposal — no duplicate approval needed",
+                data={"action_id": str(open_action.id), "status": open_status},
+            )
+            self._memory.record_investigation(
+                self._merchant_id,
+                statement=(
+                    f"Run {state.run_id}: linked {state.workflow} campaign to open action "
+                    f"{open_action.id} (no duplicate created)"
+                ),
+            )
+            return
+
         # propose a Phase-4 AgentAction (requested state) — the ONLY bridge
         # to execution; humans approve downstream. Never auto-approved.
         from backend.app.services.action_service import create_action
@@ -1199,9 +1339,10 @@ class MarketingAGI:
         campaign_row = self._db.get(
             MarketingAGICampaign, uuid.UUID(draft["campaign_id"])
         )
-        campaign_row.action_id = action.id
-        campaign_row.lifecycle = "ready_for_approval"
-        self._db.flush()
+        if campaign_row is not None:
+            campaign_row.action_id = action.id
+            campaign_row.lifecycle = "ready_for_approval"
+            self._db.flush()
 
         state.prepared_action = {
             "action_id": str(action.id),
@@ -1229,6 +1370,8 @@ class MarketingAGI:
         # optional: open a handoff for a future specialist review
         if self._llm is not None:
             try:
+                # request() is idempotent per (run, specialist) and returns
+                # the handoff row (not a tuple).
                 h = self._handoffs.request(
                     self._merchant_id,
                     specialist="creative_ux",

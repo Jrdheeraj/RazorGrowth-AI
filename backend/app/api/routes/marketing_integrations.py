@@ -21,20 +21,23 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import MerchantContext, merchant_ctx, operator_ctx
 from backend.app.core.config import get_settings
+from backend.app.integrations.marketing.base import ProviderResult
 from backend.app.integrations.marketing.google_ads import GoogleAdsProvider
 from backend.app.integrations.marketing.instagram import INSTAGRAM_SCOPES
 from backend.app.integrations.marketing.meta_ads import META_ADS_SCOPES, MetaAdsProvider
 from backend.app.integrations.marketing.oauth_state import (
     STATE_TTL_SECONDS,
     issue_state,
-    verify_state,
+    verify_state_context,
 )
 from backend.app.models.audit_event import AuditEvent
 from backend.app.schemas.marketing_integrations import (
@@ -51,9 +54,99 @@ from backend.app.db.session import get_db
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/marketing-agi/integrations", tags=["marketing-integrations"])
 
+# ── OAuth callback redirect safety ─────────────────────────────────────────
+# The callback runs in the merchant's browser with NO auth header, so it must
+# never echo provider payloads. Only these application-level codes may appear
+# in the redirect query string; anything else collapses to CONNECTION_FAILED.
+SAFE_CALLBACK_CODES = frozenset({
+    "GOOGLE_ADS_ACCOUNT_NOT_LINKED",
+    "GOOGLE_ADS_AUTHENTICATION_FAILED",
+    "AUTH_EXPIRED",
+    "AUTH_REVOKED",
+    "OAUTH_SCOPE_INSUFFICIENT",
+    "GOOGLE_2SV_REQUIRED",
+    "INSUFFICIENT_PERMISSIONS",
+    "ACCOUNT_NOT_FOUND",
+    "INVALID_CREDENTIALS",
+    "MISSING_CONFIGURATION",
+    "OAUTH_DENIED",
+    "OAUTH_STATE_INVALID",
+    "OAUTH_STATE_EXPIRED",
+    "MISSING_CALLBACK_PARAMS",
+    "RATE_LIMITED",
+    "NETWORK_ERROR",
+    "TIMEOUT",
+    "MALFORMED_RESPONSE",
+    "PROVIDER_ERROR",
+    "CONNECTION_FAILED",
+})
+
+_STATE_REJECTIONS = {
+    "INVALID_STATE": "OAUTH_STATE_INVALID",
+    "STATE_PROVIDER_MISMATCH": "OAUTH_STATE_INVALID",
+    "STATE_REUSED": "OAUTH_STATE_INVALID",
+    "STATE_EXPIRED": "OAUTH_STATE_EXPIRED",
+}
+
+# Merchant next-step per Google Ads failure code (Google Ads only — the
+# other providers keep their existing flat error contract).
+_GOOGLE_ADS_ACTIONS = {
+    "GOOGLE_ADS_ACCOUNT_NOT_LINKED": (
+        "Add this Google account to a Google Ads account (or create one), then reconnect."
+    ),
+    "GOOGLE_ADS_AUTHENTICATION_FAILED": "Reconnect your Google account.",
+    "AUTH_EXPIRED": "Reconnect your Google account.",
+    "AUTH_REVOKED": "Reconnect your Google account.",
+    "OAUTH_SCOPE_INSUFFICIENT": "Reconnect and approve the requested Google Ads access.",
+    "GOOGLE_2SV_REQUIRED": "Enable 2-Step Verification on the Google account, then reconnect.",
+    "MISSING_CONFIGURATION": "Ask an admin to finish the Google Ads API setup, then reconnect.",
+    "INSUFFICIENT_PERMISSIONS": (
+        "Review the Google Ads API access level in the Google Ads API Center, then reconnect."
+    ),
+    "ACCOUNT_NOT_FOUND": "Verify the selected customer ID, then reconnect.",
+    "OAUTH_DENIED": "Start the connection again and approve the Google sign-in.",
+    "OAUTH_STATE_INVALID": "Start the connection again — the sign-in link expired.",
+    "OAUTH_STATE_EXPIRED": "Start the connection again — the sign-in link expired.",
+    "MISSING_CALLBACK_PARAMS": "Start the connection again.",
+}
+
 
 def _not_found(provider: str) -> HTTPException:
     return HTTPException(status_code=404, detail=f"UNKNOWN_PROVIDER: {provider}")
+
+
+def _callback_redirect(provider: str, *, status: str, code: str | None = None) -> RedirectResponse:
+    """Send the browser back to the frontend with a SAFE result triple.
+
+    Carries only: integration (provider key), status (connected|error) and a
+    whitelisted application error code. Never tokens, secrets, provider JSON
+    or free-text messages.
+    """
+    settings = get_settings()
+    base = (settings.FRONTEND_BASE_URL or "").rstrip("/") or "http://localhost:5173"
+    params: dict[str, str] = {"integration": provider, "status": status}
+    if status != "connected":
+        safe = code if code in SAFE_CALLBACK_CODES else "CONNECTION_FAILED"
+        params["code"] = safe
+    return RedirectResponse(
+        url=f"{base}/marketing-agent?{urlencode(params)}", status_code=302
+    )
+
+
+def _google_ads_error_detail(result: ProviderResult) -> dict[str, str]:
+    """Structured application error for Google Ads connect failures.
+
+    Follows the {code, message, action} shape — the message is the clean
+    provider copy, never a raw Google response body.
+    """
+    code = result.error_code or "PROVIDER_ERROR"
+    if code not in SAFE_CALLBACK_CODES:
+        code = "CONNECTION_FAILED"
+    return {
+        "code": code,
+        "message": result.message or "Google Ads connection could not be completed.",
+        "action": _GOOGLE_ADS_ACTIONS.get(code, "Reconnect Google Ads and try again."),
+    }
 
 
 def _blank_entry(provider: str) -> dict[str, Any]:
@@ -181,6 +274,12 @@ def connect_integration(
                 detail="Provide an OAuth 'code' (or 'access_token' for meta_ads/instagram).",
             )
         if row is None:
+            # Google Ads gets the structured {code, message, action} contract;
+            # the other OAuth providers keep their existing flat detail.
+            if provider == "google_ads":
+                raise HTTPException(
+                    status_code=502, detail=_google_ads_error_detail(result)
+                )
             raise HTTPException(status_code=502, detail=f"{result.error_code}: {result.message}")
         return svc.serialize_connection(row)
     raise _not_found(provider)
@@ -227,15 +326,25 @@ def disconnect_integration(
 @router.get("/{provider}/oauth/start", response_model=OAuthStartResponse)
 def oauth_start(
     provider: str,
+    account_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     ctx: MerchantContext = Depends(operator_ctx),
 ) -> Any:
     if provider not in ("google_ads", "meta_ads", "instagram"):
         raise HTTPException(status_code=404, detail=f"OAUTH_NOT_SUPPORTED: {provider}")
     settings = get_settings()
-    state = issue_state(ctx.merchant_id, provider)
+    # Google Ads only: the customer the merchant picked in the connect form
+    # rides inside the SIGNED state (never in the OAuth redirect URL).
+    state = issue_state(
+        ctx.merchant_id, provider,
+        account_selector=account_id if provider == "google_ads" else None,
+    )
     if provider == "google_ads":
-        if not settings.GOOGLE_OAUTH_CLIENT_ID or not settings.GOOGLE_OAUTH_REDIRECT_URI:
+        if not (
+            settings.GOOGLE_OAUTH_CLIENT_ID
+            and settings.GOOGLE_OAUTH_CLIENT_SECRET
+            and settings.GOOGLE_OAUTH_REDIRECT_URI
+        ):
             raise HTTPException(
                 status_code=503,
                 detail="MISSING_CONFIGURATION: Google OAuth client is not configured on this platform.",
@@ -275,29 +384,46 @@ def oauth_callback(
     error_description: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> Any:
-    """Provider redirect target. Tenant comes from the signed state token."""
+    """Provider redirect target. Tenant comes from the signed state token.
+
+    This runs in the merchant's browser with no Authorization header, so it
+    ALWAYS redirects back to the frontend with a safe integration/status/code
+    triple. Raw provider errors, tokens and free-text messages never reach
+    the browser URL or the page — the frontend maps the code to merchant copy.
+    """
     if provider not in ("google_ads", "meta_ads", "instagram"):
         raise HTTPException(status_code=404, detail=f"OAUTH_NOT_SUPPORTED: {provider}")
     if error:
-        raise HTTPException(
-            status_code=400,
-            detail=f"OAUTH_DENIED: {error_description or error}",
+        # Google's description stays server-side (it can echo request details).
+        log.warning(
+            "OAuth callback denied: provider=%s error=%s description=%s",
+            provider, error[:80], (error_description or "")[:200],
         )
+        return _callback_redirect(provider, status="error", code="OAUTH_DENIED")
     if not code or not state:
-        raise HTTPException(status_code=400, detail="OAUTH_CALLBACK requires code + state.")
+        log.warning("OAuth callback missing code/state: provider=%s", provider)
+        return _callback_redirect(provider, status="error", code="MISSING_CALLBACK_PARAMS")
     try:
-        merchant_id = verify_state(state, provider)
+        merchant_id, account_selector = verify_state_context(state, provider)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc) or "INVALID_STATE")
+        reason = str(exc) or "INVALID_STATE"
+        log.warning("OAuth callback state rejected: provider=%s reason=%s", provider, reason)
+        return _callback_redirect(
+            provider, status="error",
+            code=_STATE_REJECTIONS.get(reason, "OAUTH_STATE_INVALID"),
+        )
     row, result = svc.connect_oauth(
         db, merchant_id, actor="oauth_callback", provider=provider, code=code,
+        account_selector=account_selector,
     )
     if row is None:
-        raise HTTPException(status_code=502, detail=f"{result.error_code}: {result.message}")
-    return {
-        "provider": provider,
-        "status": "connected",
-        "account_id": row.account_id,
-        "account_name": row.account_name,
-        "message": result.message,
-    }
+        # Failure path: nothing was marked connected (see integration_service
+        # connect_oauth) — the merchant gets a whitelisted code only.
+        log.warning(
+            "OAuth callback connect failed: provider=%s merchant=%s code=%s",
+            provider, merchant_id, result.error_code or "PROVIDER_ERROR",
+        )
+        return _callback_redirect(
+            provider, status="error", code=result.error_code or "CONNECTION_FAILED"
+        )
+    return _callback_redirect(provider, status="connected")

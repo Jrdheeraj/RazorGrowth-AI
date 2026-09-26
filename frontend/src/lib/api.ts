@@ -132,10 +132,16 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     const message =
       typeof d === "string"
         ? d
-        : d && typeof d === "object" && "error" in (d as Record<string, unknown>)
-          ? String((d as Record<string, unknown>).error)
-          : `API error ${res.status}`;
-    throw new ApiError(res.status, message);
+        : d && typeof d === "object" && "message" in (d as Record<string, unknown>)
+          ? String((d as Record<string, unknown>).message)
+          : d && typeof d === "object" && "error" in (d as Record<string, unknown>)
+            ? String((d as Record<string, unknown>).error)
+            : `API error ${res.status}`;
+    const code =
+      d && typeof d === "object" && "code" in (d as Record<string, unknown>)
+        ? String((d as Record<string, unknown>).code)
+        : undefined;
+    throw new ApiError(res.status, message, code);
   }
 
   return (await res.json()) as T;
@@ -492,8 +498,10 @@ export function disconnectMarketingIntegration(
 
 export function startMarketingOAuth(
   provider: string,
+  accountId?: string,
 ): Promise<{ provider: string; authorization_url: string; state_expires_in_seconds: number }> {
-  return request(`/api/marketing-agi/integrations/${provider}/oauth/start`);
+  const qs = accountId ? `?account_id=${encodeURIComponent(accountId)}` : "";
+  return request(`/api/marketing-agi/integrations/${provider}/oauth/start${qs}`);
 }
 
 export function fetchMarketingIntegrationAudit(): Promise<{ audit_events: import("../types/api").MarketingIntegrationAuditEvent[] }> {

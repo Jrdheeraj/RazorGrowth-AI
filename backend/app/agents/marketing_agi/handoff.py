@@ -48,10 +48,31 @@ class HandoffInterface:
         required_output: str,
         run_id: uuid.UUID | None = None,
     ) -> MarketingAGIHandoff:
+        """Create or reuse a pending handoff for the given (run, specialist).
+
+        Idempotency: one pending handoff per (run, specialist).
+        Re-running the same phase (retry, worker restart, new cycle for same
+        opportunity) reuses the open handoff instead of minting duplicates.
+        """
         if specialist not in SUPPORTED_SPECIALISTS:
             raise ValueError(
                 f"Unsupported specialist: {specialist}. Supported: {SUPPORTED_SPECIALISTS}"
             )
+
+        # Idempotency: one pending handoff per (run, specialist).
+        # Re-running the same phase (retry, worker restart, new cycle for same
+        # opportunity) reuses the open handoff instead of minting duplicates.
+        if run_id is not None:
+            existing = self._db.scalar(
+                select(MarketingAGIHandoff).where(
+                    MarketingAGIHandoff.run_id == run_id,
+                    MarketingAGIHandoff.specialist == specialist,
+                    MarketingAGIHandoff.status == "pending",
+                )
+            )
+            if existing is not None:
+                return existing
+
         row = MarketingAGIHandoff(
             merchant_id=merchant_id,
             run_id=run_id,

@@ -1169,13 +1169,23 @@ body.magi-hide-site-footer .site-footer {
   align-self: start;
 }
 
-.magi-work__state--waiting_approval {
+.magi-work__state--waiting_approval,
+.magi-work__state--ready_for_approval,
+.magi-work__state--draft,
+.magi-work__state--verify {
   color: var(--coral-deep);
   font-weight: 700;
 }
 
-.magi-work__state--completed {
+.magi-work__state--completed,
+.magi-work__state--approved,
+.magi-work__state--measuring,
+.magi-work__state--learned {
   color: var(--green-deep);
+}
+
+.magi-work__state--executing {
+  color: var(--coral-deep);
 }
 
 .magi-work__state--blocked,
@@ -1227,8 +1237,24 @@ body.magi-hide-site-footer .site-footer {
   border: 1px solid var(--line);
 }
 
-.magi-activity__row:first-child .magi-activity__dot {
+/* Indicator state is carried by the row (`magi-activity__row--<state>`,
+ * derived from the activity's canonical semantic status) — never by row
+ * position. Completed keeps the established orange; active reuses the
+ * page's live convention (green pulse, same as magi-live__dot--on);
+ * pending keeps the empty outline dot above; failed uses strong coral. */
+.magi-activity__row--completed .magi-activity__dot {
   background: var(--coral);
+  border-color: var(--coral-deep);
+}
+
+.magi-activity__row--active .magi-activity__dot {
+  background: var(--green);
+  border-color: var(--green-deep);
+  animation: status-pulse 2.4s ease-in-out infinite;
+}
+
+.magi-activity__row--failed .magi-activity__dot {
+  background: var(--coral-strong);
   border-color: var(--coral-deep);
 }
 
@@ -1245,6 +1271,99 @@ body.magi-hide-site-footer .site-footer {
   font-size: 10.5px;
   letter-spacing: 0.04em;
   color: var(--ink-faint);
+}
+
+/* ── DASHBOARD UI ICONS ─────────────────────────────────────────────────
+ * One stroke family (currentColor) everywhere. Icons anchor headings and
+ * values via flex alignment — no absolute positioning, no layout shifts. */
+
+.magi-uiicon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+/* icon → heading rhythm */
+.magi-ico-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* snapshot metric values carry their icon inline */
+.magi-snap__value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* campaign preview tab-row mark */
+.magi-prev__icon {
+  display: inline-flex;
+  color: var(--ink-soft);
+}
+
+/* recent work: icon column joins title + status + meta grid */
+.magi-work__item {
+  grid-template-columns: auto 1fr auto;
+}
+
+.magi-work__icon {
+  grid-row: 1;
+  align-self: start;
+  display: inline-flex;
+  margin-top: 1px;
+  color: var(--ink-soft);
+}
+
+.magi-work__meta {
+  grid-column: 2 / -1;
+}
+
+/* activity titles carry a small event mark; timeline dots untouched */
+.magi-activity__title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.magi-activity__title .magi-uiicon {
+  color: var(--ink-faint);
+}
+
+/* learning verdicts carry a small spark */
+.magi-learn__verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* persisted execution facts inside a learning row — real keys only */
+.magi-learn__facts {
+  margin: 2px 0 0;
+  display: grid;
+  gap: 4px;
+}
+
+.magi-learn__facts > div {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.magi-learn__facts dt {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.magi-learn__facts dd {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--ink);
+  overflow-wrap: anywhere;
 }
 
 /* ── LEARNING ───────────────────────────────────────────────────────── */

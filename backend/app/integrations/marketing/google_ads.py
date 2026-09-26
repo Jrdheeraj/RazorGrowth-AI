@@ -1,19 +1,23 @@
-"""Google Ads provider — OAuth2 REST client (developer-token sunset model).
+"""Google Ads provider — OAuth2 REST client.
 
-Implements the CURRENT Google Ads API authentication contract:
+Implements the Google Ads API authentication contract:
   - OAuth 2.0 user flow, scope https://www.googleapis.com/auth/adwords;
     short-lived access tokens minted from the stored refresh token at
     https://oauth2.googleapis.com/token (grant_type=refresh_token).
-  - Since the September 2026 developer-token sunset, Google associates
-    API access levels with the Google Cloud project that owns the OAuth
-    credentials — NO developer token is required. The legacy
-    `developer-token` header is sent ONLY when a token is explicitly
-    available (backward compatibility); it is never required and never
-    requested from the merchant.
+  - A developer token is sent in the `developer-token` header when one is
+    configured (platform setting or per-connection override). Projects
+    enrolled in Google's token-less access may omit it; when Google
+    requires the header and it is missing, the API answers
+    requestError.DEVELOPER_TOKEN_PARAMETER_MISSING, which is surfaced as
+    a MISSING_CONFIGURATION application error (never raw Google JSON).
   - Verification = live `customers:listAccessibleCustomers` + customer read.
   - Reads use GAQL `googleAds:search`.
   - Writes use `googleAds:mutate` (campaign budgets + campaigns, created
     PAUSED for safety) and run ONLY from approval-gated executors.
+
+Every failure maps to a stable application error code with clean,
+merchant-safe copy (see `_classify_ads_error`); Google's raw diagnostics
+stay in server logs and ProviderResult.data.
 
 Note (2026 docs): generating NEW refresh tokens requires the Google
 account to have 2SV (and passkeys for enforced users). Existing refresh
@@ -35,9 +39,9 @@ from backend.app.integrations.marketing.base import (
     ERR_AUTH_EXPIRED,
     ERR_AUTH_REVOKED,
     ERR_GOOGLE_2SV_REQUIRED,
-    ERR_GOOGLE_ACCOUNT_NOT_LINKED,
+    ERR_GOOGLE_ADS_ACCOUNT_NOT_LINKED,
+    ERR_GOOGLE_ADS_AUTHENTICATION_FAILED,
     ERR_INSUFFICIENT_PERMISSIONS,
-    ERR_INVALID_CREDENTIALS,
     ERR_MALFORMED_RESPONSE,
     ERR_MISSING_CONFIGURATION,
     ERR_OAUTH_SCOPE_INSUFFICIENT,
@@ -130,6 +134,18 @@ def _extract_google_diagnostics(body_text: str = "") -> dict[str, str]:
                 out["sanitized_message"] = _sanitize_google_message(str(gerr["message"]), 300)
         if not request_id and isinstance(detail.get("requestId"), str):
             request_id = str(detail["requestId"])[:80]
+        # GoogleAdsError oneof rendered directly on the detail, e.g.
+        # {"requestError": "DEVELOPER_TOKEN_PARAMETER_MISSING"} — scan the
+        # remaining plain fields so those codes are not lost.
+        for _k, _v in detail.items():
+            if _k in ("@type", "message", "requestId", "errors", "reason", "errorCode", "details"):
+                continue
+            if isinstance(_v, str) and _v:
+                codes.append(_v.strip().upper())
+            elif isinstance(_v, dict):
+                for _sub in _v.values():
+                    if isinstance(_sub, str) and _sub:
+                        codes.append(_sub.strip().upper())
     # Deduplicate preserving order
     seen: set[str] = set()
     uniq: list[str] = []
@@ -335,68 +351,84 @@ class GoogleAdsProvider(BaseProvider):
         maps each authentication/authorization enum to a DISTINCT error
         code — never collapsing everything to INVALID_CREDENTIALS.
 
-        Precise mapping (post developer-token sunset, no token required):
-          OAUTH_TOKEN_INVALID                       -> INVALID_CREDENTIALS
-          OAUTH_TOKEN_EXPIRED / invalid_grant       -> AUTH_EXPIRED
-          OAUTH_TOKEN_REVOKED / DISABLED            -> AUTH_REVOKED
-          ACCESS_TOKEN_SCOPE_INSUFFICIENT           -> OAUTH_SCOPE_INSUFFICIENT
-          NOT_ADS_USER                              -> GOOGLE_ACCOUNT_NOT_LINKED_TO_ADS
+        The returned message is ALWAYS clean, merchant-safe copy. Google's
+        raw status / enums / message text are logged server-side (and
+        returned in ProviderResult.data) but never reach the merchant UI.
+
+        Precise mapping:
+          OAUTH_TOKEN_INVALID / AUTHENTICATION_ERROR
+                                                     -> GOOGLE_ADS_AUTHENTICATION_FAILED
+          OAUTH_TOKEN_EXPIRED / invalid_grant        -> AUTH_EXPIRED
+          OAUTH_TOKEN_REVOKED / DISABLED             -> AUTH_REVOKED
+          ACCESS_TOKEN_SCOPE_INSUFFICIENT            -> OAUTH_SCOPE_INSUFFICIENT
+          NOT_ADS_USER / GOOGLE_ACCOUNT_COOKIE_INVALID
+                                                     -> GOOGLE_ADS_ACCOUNT_NOT_LINKED
           TWO_STEP_VERIFICATION_NOT_ENROLLED (+ ADVANCED_PROTECTION)
-                                                    -> GOOGLE_2SV_REQUIRED
+                                                     -> GOOGLE_2SV_REQUIRED
+          DEVELOPER_TOKEN_PARAMETER_MISSING (+ omitted)
+                                                     -> MISSING_CONFIGURATION
           CLIENT_CUSTOMER_ID_INVALID / REQUIRED,
-          CUSTOMER_NOT_FOUND                        -> ACCOUNT_NOT_FOUND
+          CUSTOMER_NOT_FOUND                         -> ACCOUNT_NOT_FOUND
           CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION
           (+ ACTION_NOT_PERMITTED, USER_PERMISSION_DENIED,
            AUTHORIZATION_ERROR, CUSTOMER_NOT_ENABLED, org errors)
-                                                    -> INSUFFICIENT_PERMISSIONS
+                                                     -> INSUFFICIENT_PERMISSIONS
+          any other HTTP 401                         -> GOOGLE_ADS_AUTHENTICATION_FAILED
         """
         diag = _extract_google_diagnostics(body_text or "")
         gcode = (diag.get("google_error_code") or "").upper()
         gstatus = diag.get("google_status") or ""
         gmsg = diag.get("sanitized_message") or ""
-        where = f" at {endpoint}" if endpoint else ""
 
-        def _suffix() -> str:
-            base = f" (HTTP {status}"
-            if gstatus:
-                base += f" {gstatus}"
-            base += f"{where})"
-            if gmsg:
-                base += f" {gmsg}"
-            return base[:420]
+        if gcode or gmsg:
+            # SAFE server-side diagnostics only (enum, HTTP status, endpoint,
+            # sanitized snippet) — never forwarded to the merchant.
+            log.warning(
+                "Google Ads API error: %s",
+                cls._safe_log({
+                    "endpoint": endpoint,
+                    "http_status": status,
+                    "google_error_code": gcode,
+                    "google_status": gstatus,
+                    "google_message": gmsg,
+                }),
+            )
 
-        def _with_code(human: str) -> str:
-            if gcode:
-                return f"{human} [{gcode}]{_suffix()}"
-            return f"{human}{_suffix()}"
-
-        # --- precise GoogleAdsFailure / ErrorInfo mapping (checked first) ---
         if gcode:
             # Expiry / revocation stay distinct (also caught by base classifier).
             if any(k in gcode for k in ("OAUTH_TOKEN_EXPIRED", "OAUTH_TOKEN_HEADER_INVALID")) or "INVALID_GRANT" in gcode:
-                return ERR_AUTH_EXPIRED, _with_code(
+                return ERR_AUTH_EXPIRED, (
                     "Google Ads authorization has expired. Reconnect the account."
                 )
             if any(k in gcode for k in ("OAUTH_TOKEN_REVOKED", "OAUTH_TOKEN_DISABLED")):
-                return ERR_AUTH_REVOKED, _with_code(
+                return ERR_AUTH_REVOKED, (
                     "Google Ads access was revoked. Reconnect the account."
                 )
             if "ACCESS_TOKEN_SCOPE_INSUFFICIENT" in gcode:
-                return ERR_OAUTH_SCOPE_INSUFFICIENT, _with_code(
-                    "Google Ads OAuth scope is insufficient (missing "
-                    "https://www.googleapis.com/auth/adwords). Force a fresh "
-                    "consent with the adwords scope, then reconnect."
+                return ERR_OAUTH_SCOPE_INSUFFICIENT, (
+                    "Google Ads permission was not granted during sign-in. "
+                    "Reconnect and approve the requested Google Ads access."
                 )
             if "NOT_ADS_USER" in gcode or "GOOGLE_ACCOUNT_COOKIE_INVALID" in gcode:
-                return ERR_GOOGLE_ACCOUNT_NOT_LINKED, _with_code(
-                    "This Google account is not linked to any Google Ads account. "
-                    "Add it to an Ads account (or create one), then reconnect."
+                return ERR_GOOGLE_ADS_ACCOUNT_NOT_LINKED, (
+                    "Your Google account is connected, but it doesn't have access "
+                    "to a Google Ads account. Add this account to Google Ads "
+                    "(or create one), then reconnect."
                 )
             if any(k in gcode for k in ("TWO_STEP_VERIFICATION_NOT_ENROLLED", "ADVANCED_PROTECTION_NOT_ENROLLED")):
-                return ERR_GOOGLE_2SV_REQUIRED, _with_code(
+                return ERR_GOOGLE_2SV_REQUIRED, (
                     "Google Ads requires 2-Step Verification (and passkeys for "
                     "enforced users) on this Google account. Enable 2SV, then "
-                    "generate a fresh authorization."
+                    "reconnect."
+                )
+            if any(k in gcode for k in (
+                "DEVELOPER_TOKEN_PARAMETER_MISSING",
+                "DEVELOPER_TOKEN_OMITTED",
+            )):
+                return ERR_MISSING_CONFIGURATION, (
+                    "Google Ads API access is not configured on this platform "
+                    "(a developer token is required). Complete the Google Ads "
+                    "API setup, then reconnect."
                 )
             if any(k in gcode for k in (
                 "CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION",
@@ -409,7 +441,7 @@ class GoogleAdsProvider(BaseProvider):
                 "ORGANIZATION_NOT_APPROVED",
                 "ORGANIZATION_NOT_ASSOCIATED",
             )):
-                return ERR_INSUFFICIENT_PERMISSIONS, _with_code(
+                return ERR_INSUFFICIENT_PERMISSIONS, (
                     "Google Ads API access level denied. The Google Cloud "
                     "project owning this OAuth client needs the appropriate "
                     "Google Ads API access level for the requested account "
@@ -421,23 +453,30 @@ class GoogleAdsProvider(BaseProvider):
                 "CLIENT_CUSTOMER_ID_IS_REQUIRED",
                 "CUSTOMER_NOT_FOUND",
             )):
-                return ERR_ACCOUNT_NOT_FOUND, _with_code(
+                return ERR_ACCOUNT_NOT_FOUND, (
                     "The Google Ads account was not found or is not accessible "
                     "with this authorization. Verify the customer ID."
                 )
             if "OAUTH_TOKEN_INVALID" in gcode or "AUTHENTICATION_ERROR" in gcode:
-                return ERR_INVALID_CREDENTIALS, _with_code(
-                    "Google Ads rejected the credentials. Check the key/token and reconnect."
+                return ERR_GOOGLE_ADS_AUTHENTICATION_FAILED, (
+                    "Google Ads authentication could not be completed. "
+                    "Please reconnect your Google account."
                 )
             # Any other GoogleAdsFailure enum: preserve it, never hide behind
             # a generic label without the code.
-            if status in (401, 403):
-                return ERR_INSUFFICIENT_PERMISSIONS if status == 403 else ERR_INVALID_CREDENTIALS, _with_code(
-                    "Google Ads authentication/authorization failed."
-                )
             if status == 404:
-                return ERR_ACCOUNT_NOT_FOUND, _with_code(
+                return ERR_ACCOUNT_NOT_FOUND, (
                     "The Google Ads account was not found. Verify the account ID."
+                )
+            if status == 401:
+                return ERR_GOOGLE_ADS_AUTHENTICATION_FAILED, (
+                    "Google Ads authentication could not be completed. "
+                    "Please reconnect your Google account."
+                )
+            if status == 403:
+                return ERR_INSUFFICIENT_PERMISSIONS, (
+                    "Google Ads denied access for this account. Review the "
+                    "Google Ads API access level in the API Center, then reconnect."
                 )
 
         # --- legacy access-level body-marker fallback (no structured code) ---
@@ -445,13 +484,19 @@ class GoogleAdsProvider(BaseProvider):
             lowered = (body_text or "").lower()
             if any(m in lowered for m in cls._ACCESS_LEVEL_MARKERS):
                 return ERR_INSUFFICIENT_PERMISSIONS, (
-                    "Google Ads API access level denied [ACCESS_LEVEL_DENIED]"
-                    f"{_suffix()} The Google Cloud project owning this OAuth "
-                    "client needs the appropriate Google Ads API access level "
-                    "for the requested account (e.g. Test access cannot reach "
-                    "production accounts). Review access in the Google Ads API "
-                    "Center, then reconnect."
+                    "Google Ads API access level denied. The Google Cloud "
+                    "project owning this OAuth client needs the appropriate "
+                    "Google Ads API access level for the requested account "
+                    "(e.g. Test access cannot reach production accounts). "
+                    "Review access in the Google Ads API Center, then reconnect."
                 )
+        if status == 401:
+            # A 401 that we could not attribute to a Google enum is an OAuth
+            # credential problem — never reported as "no Ads account".
+            return ERR_GOOGLE_ADS_AUTHENTICATION_FAILED, (
+                "Google Ads authentication could not be completed. "
+                "Please reconnect your Google account."
+            )
         return classify_http_status(status, "Google Ads", body_text)
 
     def _headers(
@@ -462,7 +507,8 @@ class GoogleAdsProvider(BaseProvider):
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
         }
-        # Post-sunset the header is legacy: send only when explicitly set.
+        # Sent only when configured (platform setting or per-connection
+        # override). Never logged, never returned to the client.
         if developer_token:
             headers["developer-token"] = developer_token
         if login_customer_id:
@@ -485,8 +531,11 @@ class GoogleAdsProvider(BaseProvider):
         """Live verification: mint access token, list accessible customers,
         read the operating customer. Sets status=connected ONLY on success.
 
-        No developer token required (post-sunset model); a legacy token is
-        still forwarded when explicitly provided.
+        The merchant's refresh token is exchanged for a FRESH access token
+        here (never a cached/global token), and that token alone authenticates
+        the request. A developer token is forwarded when configured; when
+        Google requires the header and it is absent, the response maps to
+        MISSING_CONFIGURATION instead of a raw Google error.
         """
         if not all([refresh_token, client_id, client_secret]):
             return ProviderResult(
@@ -516,23 +565,12 @@ class GoogleAdsProvider(BaseProvider):
             return ProviderResult(ok=False, provider=self.provider_key, error_code=code_, message=message)
         if resp.status_code != 200:
             endpoint = "customers:listAccessibleCustomers"
+            # _classify_ads_error logs the safe Google diagnostics itself;
+            # the merchant only ever sees the clean message + error code.
             err_code, message = self._classify_ads_error(
                 resp.status_code, resp.text[:2000], endpoint=endpoint
             )
-            # SAFE diagnostics only: error enum/code, HTTP status, endpoint,
-            # whether an access token was minted — never token/secret material.
             diag = _extract_google_diagnostics(resp.text[:2000])
-            log.warning(
-                "Google Ads verify failed: %s",
-                self._safe_log({
-                    "endpoint": endpoint,
-                    "http_status": resp.status_code,
-                    "google_error_code": diag.get("google_error_code"),
-                    "google_status": diag.get("google_status"),
-                    "has_access_token": bool(access),
-                    "api_version": api_version,
-                }),
-            )
             return ProviderResult(
                 ok=False, provider=self.provider_key, error_code=err_code, message=message,
                 data={
@@ -561,11 +599,23 @@ class GoogleAdsProvider(BaseProvider):
                 ids.add(n)
         ids = sorted(ids)
         if not ids:
+            # HTTP 200 with an empty list: the OAuth consent is valid but the
+            # Google account owns/can access no Google Ads account. This is an
+            # application-level state, not an authentication crash.
+            log.warning(
+                "Google Ads verify: no accessible customers: %s",
+                self._safe_log({
+                    "endpoint": "customers:listAccessibleCustomers",
+                    "http_status": 200, "google_error_code": "NOT_ADS_USER(empty list)",
+                    "has_access_token": True,
+                }),
+            )
             return ProviderResult(
                 ok=False, provider=self.provider_key,
-                error_code=ERR_ACCOUNT_NOT_FOUND,
-                message="Google authorized the app but exposed no ad accounts [NOT_ADS_USER-equivalent]. "
-                "Add this Google account to a Google Ads account (or create one), then reconnect.",
+                error_code=ERR_GOOGLE_ADS_ACCOUNT_NOT_LINKED,
+                message="Your Google account is connected, but it doesn't have access "
+                "to a Google Ads account. Add this account to Google Ads (or create "
+                "one), then reconnect.",
                 data={"google_error_code": "NOT_ADS_USER(empty list)", "http_status": 200,
                       "endpoint": "customers:listAccessibleCustomers", "has_access_token": True},
             )

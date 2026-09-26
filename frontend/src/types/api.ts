@@ -833,6 +833,8 @@ export interface MarketingAGIStatus {
 export interface MarketingAGIRunEvent {
   id: string;
   run_id: string;
+  /** Logical action this lifecycle event belongs to (null for run details). */
+  action_id?: string | null;
   seq: number;
   phase: string;
   event_type: string;
@@ -903,6 +905,10 @@ export interface MarketingAGIRun {
   analysis_cycle_id: string | null;
   started_at: string | null;
   completed_at: string | null;
+  /** Canonical persisted action instants — Recent Work MUST render these. */
+  action_created_at?: string | null;
+  action_updated_at?: string | null;
+  action_completed_at?: string | null;
   llm_provider: string | null;
   llm_model: string | null;
   state: MarketingAGIStateSummary;
@@ -948,6 +954,7 @@ export interface MarketingAGICampaign {
   evidence_refs: string[];
   verification: Record<string, unknown> | null;
   action_id: string | null;
+  action_status: string | null;
   created_at: string;
 }
 

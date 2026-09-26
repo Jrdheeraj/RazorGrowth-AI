@@ -46,8 +46,8 @@ class IntegrationConnectRequest(BaseModel):
     access_token: str | None = None
     # account selection
     account_id: str | None = None
-    # legacy google ads developer-token override (post-sunset: optional,
-    # forwarded only when provided; never required, never requested in UI)
+    # google ads developer-token override (optional: forwarded only when
+    # provided; never required, never requested in UI)
     developer_token: str | None = None
 
 

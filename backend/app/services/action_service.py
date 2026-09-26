@@ -49,6 +49,7 @@ from backend.app.services.action_executor import (
     execute_approved_action,
     ExecutorResult,
 )
+from backend.app.services.marketing_action_sync import sync_marketing_from_action
 
 log = logging.getLogger(__name__)
 
@@ -246,6 +247,9 @@ def approve_action(
     action.approved_by = actor
     db.flush()
 
+    # Mirror to the Marketing Agent workspace (lifecycle + run snapshot).
+    sync_marketing_from_action(db, action)
+
     _write_audit_event(
         db,
         action.merchant_id,
@@ -282,6 +286,9 @@ def reject_action(
 
     action.status = AgentActionStatus.rejected
     db.flush()
+
+    # Mirror to the Marketing Agent workspace (lifecycle + run snapshot).
+    sync_marketing_from_action(db, action)
 
     _write_audit_event(
         db,
@@ -428,6 +435,9 @@ def execute_action(
         action.completed_at = datetime.now(timezone.utc)
         db.flush()
 
+        # Mirror the guardrail failure to the Marketing Agent workspace.
+        sync_marketing_from_action(db, action)
+
         _write_audit_event(
             db,
             action.merchant_id,
@@ -451,6 +461,9 @@ def execute_action(
     # ─── Status → executing ──────────────────────────────────────────────
     action.status = AgentActionStatus.executing
     db.flush()
+
+    # Mirror execution start to the Marketing Agent workspace.
+    sync_marketing_from_action(db, action)
 
     _write_audit_event(
         db,
@@ -525,6 +538,10 @@ def execute_action(
             "Action failed. id=%s merchant=%s error=%s retryable=%s",
             str(action.id), action.merchant_id, action.error_message, retryable,
         )
+
+    # Mirror the terminal execution result to the Marketing Agent workspace.
+    sync_marketing_from_action(db, action)
+    db.flush()
 
     return exec_result
 

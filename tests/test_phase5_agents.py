@@ -340,7 +340,7 @@ class TestAgentRunAudit:
             assert run.total_latency_ms >= 0
             # provider NAME may be recorded (never the key itself)
             assert getattr(run.llm_provider, "value", run.llm_provider) in (
-                None, "openai", "groq",
+                None, "openai", "groq", "openrouter",
             )
             assert isinstance(run.llm_model, str)
             assert "key" not in run.llm_model.lower()

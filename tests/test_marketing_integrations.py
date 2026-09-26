@@ -339,6 +339,57 @@ def _google_code_transport() -> httpx.MockTransport:
     return httpx.MockTransport(handler)
 
 
+# Real Google Ads API error shapes (as observed against the live API).
+GOOGLE_NOT_ADS_USER_BODY = {
+    "error": {
+        "code": 401,
+        "message": (
+            "Request is missing required authentication credential. "
+            "Expected OAuth 2 access token, login cookie or API key..."
+        ),
+        "status": "UNAUTHENTICATED",
+        "details": [
+            {
+                "@type": "type.googleapis.com/google.ads.googleads.v25.errors.GoogleAdsError",
+                "errors": [
+                    {
+                        "errorCode": {"authenticationError": "NOT_ADS_USER"},
+                        "message": "The Google account is not recognized as a Google Ads account.",
+                    }
+                ],
+            }
+        ],
+    }
+}
+
+GOOGLE_MISSING_DEVELOPER_TOKEN_BODY = {
+    "error": {
+        "code": 400,
+        "message": "Request is missing required authentication credential.",
+        "status": "INVALID_ARGUMENT",
+        "details": [
+            {
+                "@type": "type.googleapis.com/google.ads.googleads.v25.errors.GoogleAdsError",
+                "requestError": "DEVELOPER_TOKEN_PARAMETER_MISSING",
+            }
+        ],
+    }
+}
+
+
+def _google_ads_failing_transport(status: int, payload: dict) -> httpx.MockTransport:
+    """Successful OAuth token exchange, then a failing Google Ads API call."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/token":
+            return _json_response(200, {"access_token": "ya29.x", "refresh_token": "1//refresh", "expires_in": 3600})
+        if request.url.path.endswith(":listAccessibleCustomers"):
+            return _json_response(status, payload)
+        return _json_response(404, {})
+
+    return httpx.MockTransport(handler)
+
+
 class TestGoogleAdsConnect:
     def test_oauth_connect_success(self, db_session, google_env, monkeypatch):
         import backend.app.services.integration_service as mod
@@ -374,7 +425,11 @@ class TestGoogleAdsConnect:
             developer_token="ABcdeFGH93KL-NOPQ_STUv",
             transport=google_transport(customers=[]),
         )
-        assert not res.ok and res.error_code == "ACCOUNT_NOT_FOUND"
+        assert not res.ok
+        assert res.error_code == "GOOGLE_ADS_ACCOUNT_NOT_LINKED"
+        # Application-level state, merchant-safe copy — no Google internals.
+        assert "NOT_ADS_USER" not in (res.message or "")
+        assert "Google account" in (res.message or "")
 
     def test_missing_platform_config(self, db_session, monkeypatch):
         import backend.app.services.integration_service as mod
@@ -710,39 +765,72 @@ class TestIntegrationAPI:
         assert r.status_code == 404
 
     def test_oauth_start_needs_platform_config(self, client, db_session, monkeypatch):
+        from backend.app.core.config import get_settings
+
         monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "")
-        m, u, _ = make_world(db_session, slug_hint="api4")
-        r = client.get(
-            "/api/marketing-agi/integrations/google_ads/oauth/start", headers=bearer(u)
-        )
-        # owner passes role gate; missing platform config → honest 503
-        assert r.status_code in {503, 403}
+        monkeypatch.setenv("GOOGLE_OAUTH_REDIRECT_URI", "")
+        # get_settings() is @lru_cache'd — clear so the empty platform config
+        # above is actually observed by the route (local .env would otherwise
+        # keep a cached non-empty client id).
+        get_settings.cache_clear()
+        try:
+            m, u, _ = make_world(db_session, slug_hint="api4")
+            r = client.get(
+                "/api/marketing-agi/integrations/google_ads/oauth/start", headers=bearer(u)
+            )
+            # owner passes role gate; missing platform config → honest 503
+            assert r.status_code in {503, 403}
+        finally:
+            get_settings.cache_clear()
 
-    def test_oauth_callback_rejects_bad_state(self, client):
+    def test_oauth_callback_bad_state_redirects_safely(self, client):
+        # NEVER a raw JSON/HTTP dump — the browser gets a safe redirect.
         r = client.get(
             "/api/marketing-agi/integrations/google_ads/oauth/callback"
-            "?code=x&state=bogus"
+            "?code=x&state=bogus",
+            follow_redirects=False,
         )
-        assert r.status_code == 400
+        assert r.status_code == 302
+        loc = r.headers["location"]
+        assert "integration=google_ads" in loc
+        assert "status=error" in loc
+        assert "code=OAUTH_STATE_INVALID" in loc
+        # The forged state never leaks back into the URL.
+        assert "bogus" not in loc
+        assert "{" not in loc
 
-
-    def test_oauth_callback_rejects_bad_state(self, client):
+    def test_oauth_callback_google_denial_redirects_safely(self, client):
         r = client.get(
             "/api/marketing-agi/integrations/google_ads/oauth/callback"
-            "?code=x&state=bogus"
+            "?error=access_denied"
+            "&error_description=User+denied+access+to+the+requested+scope",
+            follow_redirects=False,
         )
-        assert r.status_code == 400
+        assert r.status_code == 302
+        loc = r.headers["location"]
+        assert "code=OAUTH_DENIED" in loc
+        # Google's free-text description stays server-side.
+        assert "denied" not in loc and "scope" not in loc
+
+    def test_oauth_callback_missing_params_redirects_safely(self, client):
+        r = client.get(
+            "/api/marketing-agi/integrations/google_ads/oauth/callback",
+            follow_redirects=False,
+        )
+        assert r.status_code == 302
+        assert "code=MISSING_CALLBACK_PARAMS" in r.headers["location"]
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Google Ads developer-token sunset (Sept 2026): no token required.
-# API access is governed by the Cloud project's access level.
+# Google Ads developer token: optional by platform policy. Google's own
+# response decides — accept without a header, or answer
+# requestError.DEVELOPER_TOKEN_PARAMETER_MISSING (mapped honestly).
 # ═══════════════════════════════════════════════════════════════════════
 
 
 @pytest.fixture
 def google_env_no_token(monkeypatch):
-    """OAuth client configured, developer token ABSENT (post-sunset)."""
+    """OAuth client configured, developer token ABSENT."""
     from backend.app.core.config import get_settings
 
     monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "test-client-id")
@@ -982,3 +1070,193 @@ class TestGoogleAdsSunset:
         assert res2.success and res2.result_metadata["executed"] is True
         assert res2.result_metadata["status"] == "PAUSED"
         assert len(calls) == 2
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Google Ads OAuth callback contract: redirect with a SAFE triple —
+# never a raw Google payload, never secrets in the URL.
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _patch_httpx(monkeypatch, transport) -> None:
+    """Route every httpx.Client through the given mock transport."""
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        httpx, "Client",
+        lambda *a, **k: real_client(*a, **{**k, "transport": transport}),
+    )
+
+
+def _location(r) -> str:
+    """Assert a 302 back to the frontend carrying only the safe triple."""
+    assert r.status_code == 302, r.text
+    loc = r.headers["location"]
+    assert loc.startswith("http://localhost:5173/marketing-agent?")
+    # No JSON body, no Google diagnostics, no tokens in the redirect.
+    assert "{" not in loc and "}" not in loc
+    for leak in ("NOT_ADS_USER", "UNAUTHENTICATED", "ya29", "1//refresh", "bogus"):
+        assert leak not in loc, leak
+    return loc
+
+
+class TestGoogleAdsOAuthCallback:
+    """The merchant-visible Google Ads OAuth round-trip (Phases 3/7/11)."""
+
+    def test_success_redirects_connected_without_secrets(
+        self, client, db_session, google_env, monkeypatch,
+    ):
+        from backend.app.core.config import get_settings
+
+        m, _, _ = make_world(db_session, slug_hint="cb1")
+        _patch_httpx(monkeypatch, _google_code_transport())
+        state = oauth_state.issue_state(m.id, "google_ads")
+        r = client.get(
+            "/api/marketing-agi/integrations/google_ads/oauth/callback"
+            f"?code=authcode&state={state}",
+            follow_redirects=False,
+        )
+        loc = _location(r)
+        assert "integration=google_ads" in loc and "status=connected" in loc
+        assert "code=" not in loc
+        assert loc.startswith(get_settings().FRONTEND_BASE_URL)
+        row = svc.get_connection(db_session, m.id, "google_ads")
+        assert row is not None and row.status == "connected"
+        assert row.account_id == "111"
+
+    def test_not_ads_user_redirects_to_account_not_linked(
+        self, client, db_session, google_env, monkeypatch,
+    ):
+        m, _, _ = make_world(db_session, slug_hint="cb2")
+        _patch_httpx(
+            monkeypatch, _google_ads_failing_transport(401, GOOGLE_NOT_ADS_USER_BODY)
+        )
+        state = oauth_state.issue_state(m.id, "google_ads")
+        r = client.get(
+            "/api/marketing-agi/integrations/google_ads/oauth/callback"
+            f"?code=authcode&state={state}",
+            follow_redirects=False,
+        )
+        loc = _location(r)
+        assert "status=error" in loc
+        assert "code=GOOGLE_ADS_ACCOUNT_NOT_LINKED" in loc
+        row = svc.get_connection(db_session, m.id, "google_ads")
+        assert row is None or row.status != "connected"
+
+    def test_expired_state_redirects_with_safe_code(self, client, db_session, monkeypatch):
+        m, _, _ = make_world(db_session, slug_hint="cb3")
+        state = oauth_state.issue_state(m.id, "google_ads")
+        real_time = oauth_state.time.time
+        # Jump past the 15-minute state TTL before the callback lands.
+        monkeypatch.setattr(oauth_state.time, "time", lambda: real_time() + 20 * 60)
+        r = client.get(
+            "/api/marketing-agi/integrations/google_ads/oauth/callback"
+            f"?code=authcode&state={state}",
+            follow_redirects=False,
+        )
+        loc = _location(r)
+        assert "code=OAUTH_STATE_EXPIRED" in loc
+
+    def test_missing_developer_token_maps_to_missing_configuration(
+        self, db_session, google_env_no_token, monkeypatch,
+    ):
+        """Google enforced the developer-token header: an app-level
+        MISSING_CONFIGURATION, never a raw requestError payload."""
+        import backend.app.services.integration_service as mod
+
+        m, _, _ = make_world(db_session, slug_hint="cb4")
+        _patch_httpx(
+            monkeypatch,
+            _google_ads_failing_transport(400, GOOGLE_MISSING_DEVELOPER_TOKEN_BODY),
+        )
+        row, result = mod.connect_oauth(
+            db_session, m.id, actor="o", provider="google_ads", code="authcode",
+        )
+        assert row is None and not result.ok
+        assert result.error_code == "MISSING_CONFIGURATION"
+        assert "DEVELOPER_TOKEN_PARAMETER_MISSING" not in (result.message or "")
+        assert "developer token" in (result.message or "").lower()
+        assert "INVALID_ARGUMENT" not in (result.message or "")
+
+    def test_connect_route_returns_structured_google_detail(
+        self, client, db_session, google_env, monkeypatch,
+    ):
+        m, u, _ = make_world(db_session, slug_hint="cb5")
+        _patch_httpx(
+            monkeypatch, _google_ads_failing_transport(401, GOOGLE_NOT_ADS_USER_BODY)
+        )
+        r = client.post(
+            "/api/marketing-agi/integrations/google_ads/connect",
+            json={"code": "authcode"},
+            headers=bearer(u),
+        )
+        assert r.status_code == 502
+        detail = r.json()["detail"]
+        assert set(detail) == {"code", "message", "action"}
+        assert detail["code"] == "GOOGLE_ADS_ACCOUNT_NOT_LINKED"
+        assert "NOT_ADS_USER" not in detail["message"]
+        assert "401" not in detail["message"]
+        assert detail["action"]
+
+    def test_classify_google_error_codes_are_clean(self):
+        classify = GoogleAdsProvider._classify_ads_error
+
+        code, msg = classify(
+            401, json.dumps(GOOGLE_NOT_ADS_USER_BODY),
+            endpoint="customers:listAccessibleCustomers",
+        )
+        assert code == "GOOGLE_ADS_ACCOUNT_NOT_LINKED"
+        for raw in ("NOT_ADS_USER", "UNAUTHENTICATED", "listAccessibleCustomers", "401"):
+            assert raw not in msg, raw
+
+        code, msg = classify(
+            400, json.dumps(GOOGLE_MISSING_DEVELOPER_TOKEN_BODY), endpoint="x",
+        )
+        assert code == "MISSING_CONFIGURATION"
+        assert "DEVELOPER_TOKEN_PARAMETER_MISSING" not in msg
+
+        # A generic 401 must NOT be reported as "account not linked".
+        code, msg = classify(
+            401,
+            json.dumps({"error": {"status": "UNAUTHENTICATED", "message": "Token invalid."}}),
+            endpoint="x",
+        )
+        assert code == "GOOGLE_ADS_AUTHENTICATION_FAILED"
+        assert "account" not in msg.lower() or "reconnect" in msg.lower()
+
+    def test_oauth_start_carries_selected_customer(self, client, db_session, google_env):
+        from urllib.parse import parse_qs, urlparse
+
+        m, u, _ = make_world(db_session, slug_hint="cb6")
+        r = client.get(
+            "/api/marketing-agi/integrations/google_ads/oauth/start"
+            "?account_id=1234-567-890",
+            headers=bearer(u),
+        )
+        assert r.status_code == 200, r.text
+        state = parse_qs(urlparse(r.json()["authorization_url"]).query)["state"][0]
+        merchant_id, selector = oauth_state.verify_state_context(state, "google_ads")
+        assert merchant_id == m.id
+        # The signed payload carries the normalized customer id only.
+        assert selector == "1234567890"
+
+    def test_oauth_start_ignores_junk_account_id(self, client, db_session, google_env):
+        from urllib.parse import parse_qs, urlparse
+
+        m, u, _ = make_world(db_session, slug_hint="cb7")
+        r = client.get(
+            "/api/marketing-agi/integrations/google_ads/oauth/start"
+            "?account_id=drop%20table--",
+            headers=bearer(u),
+        )
+        assert r.status_code == 200, r.text
+        state = parse_qs(urlparse(r.json()["authorization_url"]).query)["state"][0]
+        merchant_id, selector = oauth_state.verify_state_context(state, "google_ads")
+        assert merchant_id == m.id
+        assert selector is None
+
+    def test_state_replay_is_rejected(self, db_session):
+        m, _, _ = make_world(db_session, slug_hint="cb8")
+        state = oauth_state.issue_state(m.id, "google_ads")
+        assert oauth_state.verify_state(state, "google_ads") == m.id
+        with pytest.raises(ValueError):
+            oauth_state.verify_state(state, "google_ads")

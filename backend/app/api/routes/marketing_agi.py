@@ -194,8 +194,88 @@ def _llm_identity() -> tuple[bool, str | None, str | None]:
 # ---------------------------------------------------------------------------
 
 
-def _serialize_run(run: MarketingAGIRun) -> dict[str, Any]:
+from backend.app.models.marketing_agi import (
+    MarketingAGICampaign,
+    MarketingAGIRun,
+)
+from backend.app.models.agent_action import AgentAction
+
+
+def _live_action(
+    db: Session, merchant_id: object, action_id: str | None
+) -> AgentAction | None:
+    """Read the canonical agent_actions row (tenant-verified).
+
+    This is the read-path half of action synchronization: even if a
+    write-time mirror update was ever missed, serialized runs/campaigns
+    always report the live canonical state. Read-only — never mutates.
+    """
+    if not action_id:
+        return None
+    try:
+        aid = uuid.UUID(str(action_id))
+    except (ValueError, AttributeError):
+        return None
+    action = db.get(AgentAction, aid)
+    if action is None or action.merchant_id != merchant_id:
+        return None
+    return action
+
+
+def _live_action_status(
+    db: Session, merchant_id: object, action_id: str | None
+) -> str | None:
+    """Read the canonical agent_actions status (tenant-verified)."""
+    action = _live_action(db, merchant_id, action_id)
+    if action is None:
+        return None
+    status = action.status
+    return status.value if hasattr(status, "value") else str(status)
+
+
+def _iso(dt: object | None) -> str | None:
+    """Serialize a persisted timestamp for the frontend.
+
+    Uses ISO-8601 (with T separator + offset) so `new Date()` parses the
+    EXACT persisted instant — never a polling-time "now". Returns None
+    when no timestamp was persisted.
+    """
+    if dt is None:
+        return None
+    to_iso = getattr(dt, "isoformat", None)
+    if callable(to_iso):
+        try:
+            return str(to_iso())
+        except Exception:
+            return str(dt)
+    return str(dt)
+
+
+def _serialize_run(run: MarketingAGIRun, db: Session | None = None) -> dict[str, Any]:
     state = run.state or {}
+    prepared = dict(state.get("prepared_action") or {})
+    # Canonical action timestamps: Recent Work MUST show these (not
+    # run.started_at) so the row and the Live Activity timeline agree on
+    # ONE persisted backend instant per lifecycle transition.
+    action_created_at: str | None = None
+    action_updated_at: str | None = None
+    action_completed_at: str | None = None
+    if db is not None and prepared.get("action_id"):
+        # Overlay the live canonical status over the prepare-time snapshot.
+        live_action = _live_action(db, run.merchant_id, prepared.get("action_id"))
+        if live_action is not None:
+            from backend.app.services.marketing_action_sync import approval_state_for
+
+            live = live_action.status
+            live = live.value if hasattr(live, "value") else str(live)
+            prepared = {
+                **prepared,
+                "status": live,
+                "approval_state": approval_state_for(live),
+            }
+            action_created_at = _iso(live_action.created_at)
+            action_updated_at = _iso(live_action.updated_at)
+            action_completed_at = _iso(live_action.completed_at)
     return {
         "id": str(run.id),
         "merchant_id": str(run.merchant_id),
@@ -205,8 +285,11 @@ def _serialize_run(run: MarketingAGIRun) -> dict[str, Any]:
         "iterations": run.iterations,
         "tool_call_count": run.tool_call_count,
         "analysis_cycle_id": getattr(run, "analysis_cycle_id", None),
-        "started_at": str(run.started_at) if run.started_at else None,
-        "completed_at": str(run.completed_at) if run.completed_at else None,
+        "started_at": _iso(run.started_at),
+        "completed_at": _iso(run.completed_at),
+        "action_created_at": action_created_at,
+        "action_updated_at": action_updated_at,
+        "action_completed_at": action_completed_at,
         "llm_provider": run.llm_provider,
         "llm_model": run.llm_model,
         "state": {
@@ -221,7 +304,7 @@ def _serialize_run(run: MarketingAGIRun) -> dict[str, Any]:
             "plan": state.get("plan", []),
             "campaign_draft": state.get("campaign_draft"),
             "verification": state.get("verification"),
-            "prepared_action": state.get("prepared_action"),
+            "prepared_action": prepared or None,
             "iterations": state.get("iterations", run.iterations),
             "tool_call_count": state.get("tool_call_count", run.tool_call_count),
             "duplicate_tool_calls": state.get("duplicate_tool_calls", 0),
@@ -239,7 +322,12 @@ def _serialize_run(run: MarketingAGIRun) -> dict[str, Any]:
     }
 
 
-def _serialize_campaign(c: MarketingAGICampaign) -> dict[str, Any]:
+def _serialize_campaign(c: MarketingAGICampaign, db: Session | None = None) -> dict[str, Any]:
+    action_status = (
+        _live_action_status(db, c.merchant_id, str(c.action_id) if c.action_id else None)
+        if db is not None
+        else None
+    )
     return {
         "id": str(c.id),
         "run_id": str(c.run_id) if c.run_id else None,
@@ -259,7 +347,8 @@ def _serialize_campaign(c: MarketingAGICampaign) -> dict[str, Any]:
         "evidence_refs": c.evidence_refs or [],
         "verification": c.verification,
         "action_id": str(c.action_id) if c.action_id else None,
-        "created_at": str(c.created_at),
+        "action_status": action_status,
+        "created_at": _iso(c.created_at),
     }
 
 
@@ -464,7 +553,7 @@ def list_runs(
             MarketingAGIRun.analysis_cycle_id == analysis_cycle_id
         )
     runs = list(db.scalars(stmt).all())
-    return {"runs": [_serialize_run(r) for r in runs]}
+    return {"runs": [_serialize_run(r, db) for r in runs]}
 
 
 @router.get("/runs/{run_id}", response_model=AGIRunResponse)
@@ -480,7 +569,7 @@ def get_run(
     run = db.get(MarketingAGIRun, rid)
     if run is None or run.merchant_id != ctx.merchant_id:
         raise HTTPException(status_code=404, detail="RUN_NOT_FOUND")
-    return _serialize_run(run)
+    return _serialize_run(run, db)
 
 
 @router.post("/runs/{run_id}/cancel", response_model=AGIRunResponse)
@@ -502,7 +591,7 @@ def cancel_run(
         state["cancelled"] = True
         run.state = state
         db.commit()
-    return _serialize_run(run)
+    return _serialize_run(run, db)
 
 
 @router.get("/runs/{run_id}/events", response_model=AGIEventsResponse)
@@ -538,7 +627,7 @@ def list_campaigns(
         .limit(50)
     )
     rows = list(db.scalars(stmt).all())
-    return {"campaigns": [_serialize_campaign(c) for c in rows]}
+    return {"campaigns": [_serialize_campaign(c, db) for c in rows]}
 
 
 @router.get("/learnings", response_model=AGILearningListResponse)
@@ -558,7 +647,7 @@ def list_learnings(
                 "actual": r.actual,
                 "verdict": r.verdict,
                 "insights": r.insights,
-                "created_at": str(r.created_at),
+                "created_at": _iso(r.created_at),
             }
             for r in rows
         ]

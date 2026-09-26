@@ -16,6 +16,8 @@
 .env.staging
 .env.production
 .env.*.local
+.env.*
+!.env.example
 *.pem
 *.key
 *.crt
@@ -50,6 +52,7 @@ htmlcov/
 # ── Node.js / frontend build output ─────────────────────────────────────────
 node_modules/
 dist-ssr/
+.test-dist/
 .vite/
 *.local
 npm-debug.log*

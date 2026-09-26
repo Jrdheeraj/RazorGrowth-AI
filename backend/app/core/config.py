@@ -117,16 +117,24 @@ class Settings(BaseSettings):
     RESEND_FROM_EMAIL: str = ""
     RESEND_FROM_NAME: str = "RazorGrowth"
 
-    # Google Ads OAuth application (Google Cloud Console). Since the
-    # September 2026 developer-token sunset, API access is governed by the
-    # Cloud project's access level — no developer token is required. The
-    # setting below is an optional legacy passthrough (sent only when set);
-    # a merchant may still supply a per-connection override via the API.
+    # Google Ads OAuth application (Google Cloud Console).
+    # GOOGLE_ADS_DEVELOPER_TOKEN is sent as the `developer-token` header on
+    # Google Ads API calls when set (Google Ads API Center → API Central).
+    # Projects enrolled in Google's token-less access may leave it empty;
+    # when Google requires the header and it is missing, the API answers
+    # requestError.DEVELOPER_TOKEN_PARAMETER_MISSING, which the integration
+    # surfaces as a MISSING_CONFIGURATION error (never raw Google JSON).
+    # A merchant may also supply a per-connection override via the API.
     GOOGLE_OAUTH_CLIENT_ID: str = ""
     GOOGLE_OAUTH_CLIENT_SECRET: str = ""
     GOOGLE_OAUTH_REDIRECT_URI: str = ""
     GOOGLE_ADS_DEVELOPER_TOKEN: str = ""
     GOOGLE_ADS_API_VERSION: str = "v25"
+
+    # Base URL of the merchant-facing frontend. OAuth callbacks land on the
+    # backend (no auth header) and are redirected here with ONLY a safe
+    # integration/status/code triple — never tokens or provider payloads.
+    FRONTEND_BASE_URL: str = "http://localhost:5173"
 
     # Meta (Ads + Instagram) application (Meta Developers dashboard).
     META_APP_ID: str = ""

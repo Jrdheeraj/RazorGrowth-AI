@@ -476,6 +476,13 @@ export function ActionsPage() {
 
   useEffect(() => {
     load();
+    // Read-only polling: keeps this board in lockstep with the canonical
+    // agent_actions state when approve/reject/execute happens elsewhere
+    // (Marketing Agent dashboard, another tab) — never creates state.
+    const id = window.setInterval(() => {
+      void load();
+    }, 5000);
+    return () => window.clearInterval(id);
   }, [load]);
 
   /* Close the overlay on Escape — reference detail-overlay behavior. */

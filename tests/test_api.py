@@ -421,6 +421,9 @@ class TestActions:
         assert len(events) > 0, "Audit events should be created for state transitions"
 
     def test_no_secrets_returned(self, client, db_session):
+        import json as _json
+        import re as _re
+
         from backend.app.models.merchant import Merchant
         from backend.app.models.enums import AgentActionStatus, AgentActionType
 
@@ -431,18 +434,55 @@ class TestActions:
         action = self._action(db_session, m, "send_campaign", "requested")
         db_session.commit()
 
+        # Secret-bearing FIELD NAMES must never appear with a live value.
+        # (Substring "key" alone is not a secret: campaign_key / opportunity_key
+        # and English phrases like "no resend key" are legitimate.)
+        secret_field_names = {
+            "secret", "password", "token", "api_key", "apikey",
+            "access_token", "refresh_token", "client_secret",
+            "private_key", "secret_key", "auth_token",
+        }
+        # Secret-shaped VALUES (provider key formats) must never appear.
+        secret_value_re = _re.compile(
+            r"(sk-[A-Za-z0-9_\-]{8,}|re_[A-Za-z0-9]{10,}|ghp_[A-Za-z0-9]{10,}"
+            r"|AKIA[0-9A-Z]{16}|xox[baprs]-|-----BEGIN [A-Z ]*PRIVATE KEY-----)",
+            _re.I,
+        )
+
+        def assert_no_secret_leak(payload, where: str) -> None:
+            blob = _json.dumps(payload, default=str, ensure_ascii=False)
+            match = secret_value_re.search(blob)
+            assert match is None, (
+                f"secret-like value in {where}: {match.group(0)[:12]!r}"
+            )
+
+            def walk(obj, path: str = "") -> None:
+                if isinstance(obj, dict):
+                    for k, v in obj.items():
+                        if str(k).lower() in secret_field_names:
+                            assert v in (None, "", {}, []), (
+                                f"secret field {k!r} returned in {where}"
+                            )
+                        walk(v, f"{path}.{k}")
+                elif isinstance(obj, list):
+                    for i, item in enumerate(obj):
+                        walk(item, f"{path}[{i}]")
+
+            walk(payload)
+
         # List actions - no secrets
         response = client.get("/api/actions")
         assert response.status_code == 200
         body = response.json()
+        assert isinstance(body["actions"], list)
         for a in body["actions"]:
-            assert "secret" not in str(a).lower()
-            assert "key" not in str(a).lower()
+            assert_no_secret_leak(a, "GET /api/actions")
 
         # Get action - no secrets
         response = client.get(f"/api/actions/{action.id}")
         assert response.status_code == 200
         body = response.json()
+        assert_no_secret_leak(body, "GET /api/actions/{id}")
         for k in body.keys():
             if k.lower() in ("secret", "key", "password", "token"):
                 pytest.fail(f"Secret field {k} should not be returned in API response")

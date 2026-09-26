@@ -349,9 +349,13 @@ def connect_oauth(
         return None, res
 
     if provider == "google_ads":
-        if not settings.GOOGLE_OAUTH_CLIENT_ID or not settings.GOOGLE_OAUTH_CLIENT_SECRET:
+        if not (
+            settings.GOOGLE_OAUTH_CLIENT_ID
+            and settings.GOOGLE_OAUTH_CLIENT_SECRET
+            and settings.GOOGLE_OAUTH_REDIRECT_URI
+        ):
             return fail(
-                "Google OAuth is not configured on this platform (missing client ID/secret).",
+                "Google OAuth is not configured on this platform (missing client ID/secret/redirect URI).",
                 "MISSING_CONFIGURATION",
             )
         adapter: GoogleAdsProvider = _provider_adapter("google_ads")
@@ -363,10 +367,11 @@ def connect_oauth(
         if not exchanged.ok:
             return fail(exchanged.message or "Google authorization failed.", exchanged.error_code or "PROVIDER_ERROR")
         refresh_token = exchanged.data["refresh_token"]
-        # Post-September-2026 sunset model: no developer token is required.
-        # API access is governed by the Google Cloud project's access level.
-        # A legacy token is still forwarded when explicitly configured, but
-        # its absence is never a failure.
+        # A developer token is sent when configured (platform setting or the
+        # caller's per-connection override). Google may require the header; in
+        # that case verify() surfaces MISSING_CONFIGURATION instead of a raw
+        # Google error. Its absence here is never itself a success signal —
+        # status=connected is only ever set after verify() passes live.
         developer_token = (developer_token_override or settings.GOOGLE_ADS_DEVELOPER_TOKEN or "").strip() or None
         verified = adapter.verify(
             refresh_token=refresh_token, client_id=settings.GOOGLE_OAUTH_CLIENT_ID,
@@ -382,7 +387,12 @@ def connect_oauth(
             account_id=acct.get("customer_id"), account_name=acct.get("customer_name"),
             creds={"refresh_token": refresh_token,
                    **({"developer_token": developer_token_override} if developer_token_override else {})},
-            metadata={"customer_id": acct.get("customer_id"), "accessible_count": acct.get("accessible_count")},
+            metadata={
+                "customer_id": acct.get("customer_id"),
+                "accessible_count": acct.get("accessible_count"),
+                "accessible_customer_ids": verified.data.get("accessible_customer_ids", []),
+                "developer_token_configured": bool(developer_token),
+            },
             last_error=None, verified=True,
         )
     else:
