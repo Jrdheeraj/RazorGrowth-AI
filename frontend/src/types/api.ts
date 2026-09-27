@@ -394,6 +394,96 @@ export interface ProductListResponse {
   total: number;
 }
 
+/* ── Catalog orders (GET /api/orders — tenant-isolated) ─────────────────── */
+
+export interface CatalogOrderItem {
+  id: string;
+  product_id: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+}
+
+export interface CatalogOrder {
+  id: string;
+  merchant_id: string;
+  customer_id: string;
+  order_number: string;
+  status: string;
+  subtotal: number;
+  discount: number;
+  tax: number;
+  total: number;
+  currency: string;
+  items: CatalogOrderItem[];
+  created_at: string;
+  updated_at: string;
+}
+
+/** NOTE: `total` mirrors the backend's limited listing, not a warehouse count. */
+export interface CatalogOrderListResponse {
+  orders: CatalogOrder[];
+  total: number;
+}
+
+/* ── Product Agent (GET /api/product-agi/status) ────────────────────────────
+ * Planned backend contract for the /product-agent workstation. Until the
+ * endpoint ships, the page renders labelled preview state built from the
+ * same shape (see lib/productAgent.ts) — never unlabelled fake data. */
+
+export type ProductAgentSource = "live" | "preview";
+
+export interface ProductAgentInsight {
+  id: string;
+  icon: "chart" | "alert" | "doc" | "search-check" | "git-branch" | "target";
+  value: string;
+  detail: string;
+}
+
+export interface ProductAgentRecommendation {
+  id: string;
+  label: string;
+  text: string;
+  potential: string;
+  confidence: string;
+}
+
+export interface ProductAgentWorkItem {
+  id: string;
+  title: string;
+  state: string;
+  meta: string;
+}
+
+export interface ProductAgentActivityItem {
+  id: string;
+  title: string;
+  time: string;
+  state: "active" | "completed" | "failed";
+}
+
+export interface ProductAgentPlatform {
+  key: string;
+  name: string;
+  blurb: string;
+  status: "connected" | "not_connected";
+}
+
+export interface ProductAgentStatusResponse {
+  headline: string;
+  support: string;
+  status_label: string;
+  needs_approval: boolean;
+  /** 0-based index into the eight-step product workflow (5 = waiting for approval). */
+  step_index: number;
+  insights: ProductAgentInsight[];
+  recommendations: ProductAgentRecommendation[];
+  work: ProductAgentWorkItem[];
+  activity: ProductAgentActivityItem[];
+  learning_insight: string;
+  platforms: ProductAgentPlatform[];
+}
+
 export interface CustomerRow {
   id: string;
   merchant_id: string;

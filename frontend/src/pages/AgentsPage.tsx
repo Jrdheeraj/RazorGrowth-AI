@@ -725,6 +725,61 @@ function ProgressBar({ value, tone = "coral", striped = false }: { value: number
   );
 }
 
+/* ── Reusable AI-team specialist card ───────────────────────────────────
+   One visual system for both autonomous employees; `accent` only swaps the
+   identity color (terracotta = Marketing, muted green = Product). Only the
+   explicit action button navigates — the card itself is never clickable. */
+type AgentCardAccent = "marketing" | "product";
+
+interface AgentCardProps {
+  accent: AgentCardAccent;
+  label: string;
+  statusText: string;
+  statusTone: "neutral" | "ok" | "accent";
+  role: string;
+  description: string;
+  findingLabel: string;
+  finding: string;
+  support: string;
+  actionLabel: string;
+  onOpen: () => void;
+}
+
+function AgentCard({
+  accent,
+  label,
+  statusText,
+  statusTone,
+  role,
+  description,
+  findingLabel,
+  finding,
+  support,
+  actionLabel,
+  onOpen,
+}: AgentCardProps) {
+  return (
+    <article className={`employee-card employee-card--${accent}`} aria-label={label}>
+      <div className="employee-card__head">
+        <span className="meta-label">{label}</span>
+        <span className={`roster__badge roster__badge--${statusTone}`}>● {statusText}</span>
+      </div>
+      <h2 className="employee-card__role">{role}</h2>
+      <p className="employee-card__desc">{description}</p>
+      <div className="employee-card__finding">
+        <span className="employee-card__findingLabel">{findingLabel}</span>
+        <p className="employee-card__findingValue">{finding}</p>
+      </div>
+      <div className="employee-card__foot">
+        <span className="employee-card__support">{support}</span>
+        <Button variant="primary" mono onClick={onOpen}>
+          {actionLabel}
+        </Button>
+      </div>
+    </article>
+  );
+}
+
 /* ── Business Snapshot Compact ──────────────────────────────────────────── */
 function BusinessSnapshotStrip({ radar }: { radar: GrowthRadarResponse | null }) {
   const m = radar?.metrics;
@@ -1581,6 +1636,11 @@ export function AgentsPage() {
     })
     .filter((f): f is NonNullable<typeof f> => f !== null);
 
+  // Displayed findings exclude the Marketing Agent: its live state already
+  // renders in the autonomous-employees card below, so listing it here too
+  // would duplicate the old Marketing finding card on the page.
+  const visibleFindings = findings.filter((f) => f.name !== "MarketingAgent");
+
   // opportunities unified
   const runOpps = lastRunResult?.ranked_opportunities ?? [];
   const sources: Array<{ title: string; type?: string; expectedRevenue?: number | null; confidenceValue?: number | null; rank: number }> = [];
@@ -1816,7 +1876,7 @@ export function AgentsPage() {
                     boxShadow: "5px 5px 0 rgba(33,19,14,0.10)",
                   }}
                 >
-                  <OfficeFloor agents={officeAgents} selectedId={selectedAgent} onSelectAgent={setSelectedAgent} paused={isPaused} />
+                  <OfficeFloor agents={officeAgents} selectedId={selectedAgent} onSelectAgent={(id) => { if (id === "MarketingAgent") navigate("/marketing-agent"); else if (id === "ProductAgent") navigate("/product-agent"); else setSelectedAgent(id); }} paused={isPaused} />
                 </div>
                 <p
                   style={{
@@ -1980,7 +2040,7 @@ export function AgentsPage() {
                   </p>
                   <div className="cmd__tasks">
                     {liveInfos.map((a) => (
-                      <button key={a.key} type="button" className={`cmd__task${selectedAgent === a.key ? " cmd__task--sel" : ""}`} onClick={() => setSelectedAgent(a.key)}>
+                      <button key={a.key} type="button" className={`cmd__task${selectedAgent === a.key ? " cmd__task--sel" : ""}`} onClick={() => { if (a.key === "MarketingAgent") navigate("/marketing-agent"); else if (a.key === "ProductAgent") navigate("/product-agent"); else setSelectedAgent(a.key); }}>
                         <span className="cmd__taskMain">
                           <span className={`cmd__taskDot cmd__taskDot--${a.chipTone}${a.anim === "pulse" ? " cmd__taskDot--pulse" : ""}`} />
                           <span className="cmd__taskName">{a.label}</span>
@@ -2201,7 +2261,7 @@ export function AgentsPage() {
                   </p>
                   <div className="cmd__workers">
                     {liveInfos.map((a) => (
-                      <button key={a.key} type="button" className="cmd__worker" onClick={() => setSelectedAgent(a.key)}>
+                      <button key={a.key} type="button" className="cmd__worker" onClick={() => { if (a.key === "MarketingAgent") navigate("/marketing-agent"); else if (a.key === "ProductAgent") navigate("/product-agent"); else setSelectedAgent(a.key); }}>
                         <AgentAvatar agentKey={a.key} status={a.liveStatus} size={32} />
                         <span className="cmd__workerMain">
                           <strong>{a.label}</strong>
@@ -2267,15 +2327,55 @@ export function AgentsPage() {
           <h2>Agent Findings</h2>
           <p>What each specialist concluded — with evidence, reasoning, and next step. Not a single paragraph: real work.</p>
         </div>
-        {findings.length > 0 && <span className="agents-cc__count">{findings.length} FINDINGS</span>}
+        {visibleFindings.length > 0 && <span className="agents-cc__count">{visibleFindings.length} FINDINGS</span>}
       </div>
-      {findings.length === 0 ? (
-        <div className="agents-cc__empty">
-          {executedAgentNames.length === 0 ? "WAITING FOR ANALYSIS — findings will appear here once the team starts working. Every conclusion is backed by evidence from your live data." : "No summarized findings yet — the team may still be working, or conclusions were brief. Open a workstation above to inspect raw output."}
+      {/* ── AI TEAM SPECIALISTS: Marketing Agent + Product Agent ─────────
+          Immediately below the Agent Findings heading/description, before
+          Growth Opportunities. One reusable card (AgentCard); Marketing
+          carries the live run state, Product carries the frontend preview. */}
+      <WindowPanel title="autonomous.employees — marketing + product.app">
+        <div className="agents-cc__employees">
+          {(() => {
+            const marketing = liveInfos.find((a) => a.key === "MarketingAgent") ?? null;
+            const marketingFinding = findings.find((f) => f.name === "MarketingAgent") ?? null;
+            return (
+              <AgentCard
+                accent="marketing"
+                label="MARKETING AGENT"
+                statusText={marketing?.chipLabel ?? "IDLE"}
+                statusTone={marketing?.chipTone ?? "neutral"}
+                role="AUTONOMOUS MARKETING EMPLOYEE"
+                description="Researches business data, builds campaigns, verifies actions, and learns from outcomes — prepares everything for your approval."
+                findingLabel="LATEST FINDING"
+                finding={marketingFinding?.finding ?? "Start an AI Team analysis to put the Marketing Agent to work."}
+                support={marketingFinding?.evidence ?? marketing?.monitorLine ?? "Autonomous marketing employee"}
+                actionLabel="OPEN MARKETING AGENT →"
+                onOpen={() => navigate("/marketing-agent")}
+              />
+            );
+          })()}
+          <AgentCard
+            accent="product"
+            label="PRODUCT AGENT"
+            statusText="WORKING ON YOUR PRODUCTS"
+            statusTone="accent"
+            role="AUTONOMOUS PRODUCT GROWTH EMPLOYEE"
+            description="Analyzes products, finds catalog opportunities, recommends pricing and merchandising improvements, and prepares actions for approval."
+            findingLabel="CURRENT WORK"
+            finding="Found 3 product opportunities worth ₹12,450/month potential impact."
+            support="Frontend preview · human approval required"
+            actionLabel="OPEN PRODUCT AGENT →"
+            onOpen={() => navigate("/product-agent")}
+          />
         </div>
-      ) : (
+        <p className="agents-cc__employeesHint">
+          MARKETING AGENT ↓ PRODUCT AGENT — two specialists, one AI Growth Team.
+        </p>
+      </WindowPanel>
+
+      {visibleFindings.length > 0 && (
         <div className="agents-cc__findings">
-          {findings.map((f) => (
+          {visibleFindings.map((f) => (
             <article key={f.name} className="finding">
               <div className="finding__head">
                 <span className="finding__agent">{f.label.toUpperCase()}</span>
@@ -2306,9 +2406,9 @@ export function AgentsPage() {
                 <button
                   type="button"
                   className="finding__link"
-                  onClick={() => (f.name === "MarketingAgent" ? navigate("/marketing-agent") : setSelectedAgent(f.name))}
+                  onClick={() => (f.name === "MarketingAgent" ? navigate("/marketing-agent") : f.name === "ProductAgent" ? navigate("/product-agent") : setSelectedAgent(f.name))}
                 >
-                  {f.name === "MarketingAgent" ? "Open Marketing Agent →" : "Open workstation →"}
+                  {f.name === "MarketingAgent" ? "Open Marketing Agent →" : f.name === "ProductAgent" ? "Open Product Agent →" : "Open workstation →"}
                 </button>
                 <span className="finding__meta">Confidence: {f.confidence ?? "—"} · Related: Priority Ranking · Technical Feasibility · Growth Manager</span>
               </div>
@@ -2420,7 +2520,7 @@ export function AgentsPage() {
           </div>
           <div className="roster__scroll" role="list">
             {liveInfos.map((a) => (
-              <button key={a.key} type="button" role="listitem" className={`roster__tile${selectedAgent === a.key ? " roster__tile--sel" : ""} roster__tile--${a.liveStatus.toLowerCase()}`} onClick={() => (a.key === "MarketingAgent" ? navigate("/marketing-agent") : setSelectedAgent(a.key))} aria-pressed={selectedAgent === a.key}>
+              <button key={a.key} type="button" role="listitem" className={`roster__tile${selectedAgent === a.key ? " roster__tile--sel" : ""} roster__tile--${a.liveStatus.toLowerCase()}`} onClick={() => (a.key === "MarketingAgent" ? navigate("/marketing-agent") : a.key === "ProductAgent" ? navigate("/product-agent") : setSelectedAgent(a.key))} aria-pressed={selectedAgent === a.key}>
                 <AgentAvatar agentKey={a.key} status={a.liveStatus} size={42} />
                 <span className="roster__name">{a.label.toUpperCase()}</span>
                 <span className={`roster__badge roster__badge--${a.chipTone}`}>● {a.chipLabel}</span>
@@ -2438,9 +2538,9 @@ export function AgentsPage() {
         </div>
       </WindowPanel>
 
-      {/* ── DETAIL OVERLAY (legacy workstations; the new Marketing Agent
-          opens at /marketing-agent instead and never lands here) ───────── */}
-      {selectedAgent && selectedAgent !== "MarketingAgent" && selectedLive && (
+      {/* ── DETAIL OVERLAY (legacy workstations; the new Marketing + Product
+          Agents open at /marketing-agent and /product-agent instead) ─────── */}
+      {selectedAgent && selectedAgent !== "MarketingAgent" && selectedAgent !== "ProductAgent" && selectedLive && (
         <AgentDetailPanel
           agentKey={selectedAgent}
           onClose={() => setSelectedAgent(null)}

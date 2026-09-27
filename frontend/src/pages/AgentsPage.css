@@ -1291,3 +1291,147 @@
   .office-ws__bubble { width: 108px; }
   .cmd__chartGrid { grid-template-columns: 1fr; }
 }
+
+/* ── Autonomous employees (Marketing Agent + Product Agent cards) ───────
+   One reusable card system, two subtle identities: terracotta for
+   Marketing, muted green for Product. Cream cards, thin dark borders,
+   restrained offset shadows — same RazorGrowth AI visual language. */
+.agents-cc__employees {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.employee-card {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--coral);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  box-shadow: var(--shadow-float-card);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.employee-card--marketing {
+  border-left-color: var(--coral);
+}
+
+.employee-card--product {
+  border-left-color: var(--green-deep);
+}
+
+.employee-card:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-window);
+}
+
+.employee-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.employee-card__role {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 850;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  color: var(--ink);
+}
+
+.employee-card__desc {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+  max-width: 72ch;
+}
+
+.employee-card__finding {
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--coral);
+  border-radius: 0 var(--radius-window) var(--radius-window) 0;
+  background: var(--paper-deep);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.employee-card--product .employee-card__finding {
+  border-left-color: var(--green-deep);
+}
+
+.employee-card__findingLabel {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.employee-card__findingValue {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.employee-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 2px;
+}
+
+.employee-card__support {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  line-height: 1.5;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.employee-card__foot .btn {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.agents-cc__employeesHint {
+  margin: 12px 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+@media (max-width: 640px) {
+  .employee-card {
+    padding: 16px 16px;
+  }
+  .employee-card__role {
+    font-size: 1.05rem;
+  }
+  .employee-card__foot .btn {
+    width: 100%;
+    margin-left: 0;
+  }
+}

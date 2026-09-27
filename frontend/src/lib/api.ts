@@ -39,6 +39,8 @@ import type {
   AgentDashboardAgent,
   ProductResponse,
   ProductListResponse,
+  CatalogOrderListResponse,
+  ProductAgentStatusResponse,
   AnalyticsOverviewResponse,
   RevenueTimeSeriesResponse,
   OrderTimeSeriesResponse,
@@ -76,6 +78,8 @@ export type {
   AgentDashboardAgent,
   ProductResponse,
   ProductListResponse,
+  CatalogOrderListResponse,
+  ProductAgentStatusResponse,
   AnalyticsOverviewResponse,
   RevenueTimeSeriesResponse,
   OrderTimeSeriesResponse,
@@ -369,6 +373,21 @@ export function verifyPayment(
 
 export function fetchProducts(): Promise<ProductListResponse> {
   return request<ProductListResponse>("/api/products");
+}
+
+/** Orders for the caller's merchant (tenant-isolated). `limit` caps the page. */
+export function fetchOrders(limit = 100, offset = 0): Promise<CatalogOrderListResponse> {
+  return request<CatalogOrderListResponse>(`/api/orders?limit=${limit}&offset=${offset}`);
+}
+
+/**
+ * Product Agent authored state (status headline, insights, recommendations,
+ * activity). The backend endpoint is planned, not shipped yet — callers must
+ * handle the 404 and fall back to the labelled preview state in
+ * lib/productAgent.ts rather than inventing live values.
+ */
+export function fetchProductAgentStatus(): Promise<ProductAgentStatusResponse> {
+  return request<ProductAgentStatusResponse>("/api/product-agi/status");
 }
 
 /* ── Agent Debate Dashboard ────────────────────────────────────────────── */
