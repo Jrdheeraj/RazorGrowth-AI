@@ -43,6 +43,14 @@ class LLMValidationError(Exception):
 # instead of stalling the agent for a minute on free-tier limits.
 MAX_RETRY_DELAY_SECONDS = 20.0
 
+# Floor for structured (JSON-mode) generations. Reasoning models emit their
+# deliberation BEFORE the JSON body, so a caller-supplied budget that only
+# covers the answer runs out mid-deliberation and the provider rejects the
+# truncated output ("failed to validate JSON"). Rather than have every
+# call site remember that, structured calls are floored here. Cheap
+# non-reasoning models simply stop early, so this costs nothing for them.
+MIN_STRUCTURED_TOKENS = 900
+
 
 def _is_retryable(exc: Exception) -> bool:
     """Return True for transient OpenAI errors (rate-limit, 5xx)."""
@@ -175,7 +183,7 @@ class OpenAIProvider(BaseLLMProvider):
             system_prompt=system_prompt + json_instruction,
             user_prompt=user_prompt,
             temperature=temperature,
-            max_tokens=max_tokens or self._max_tokens,
+            max_tokens=max(MIN_STRUCTURED_TOKENS, max_tokens or self._max_tokens),
             json_mode=True,
         )
         try:

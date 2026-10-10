@@ -1,0 +1,447 @@
+/* ==========================================================================
+   ProductMedia — reusable premium product-image presentation system.
+   Scoped to `.rgpm-*` so it never leaks onto unrelated UI. Warm
+   RazorGrowth cream/brown/coral language; works inside or outside the
+   checkout catalog (falls back to its own tokens when --rgco-* vars
+   are absent).
+   ========================================================================== */
+
+.rgpm-stage {
+  --rgpm-cream: #fffdf8;
+  --rgpm-cream-deep: #faf3e6;
+  --rgpm-border: rgba(150, 124, 102, 0.45);
+  --rgpm-ink: #21140e;
+  --rgpm-soft: #735b4b;
+  --rgpm-faint: #9a7e6b;
+  --rgpm-coral: #e36a45;
+  --rgpm-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 170px;
+  margin: 8px 0 6px 0;
+  padding: 12px;
+  border: 1px solid var(--rgpm-border);
+  border-radius: 7px;
+  background: linear-gradient(180deg, var(--rgpm-cream) 0%, var(--rgpm-cream-deep) 100%);
+  overflow: hidden;
+  cursor: zoom-in;
+  font: inherit;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.rgpm-stage:hover {
+  border-color: var(--rgpm-coral);
+  box-shadow: 0 1px 2px rgba(36, 21, 15, 0.07), 0 5px 18px rgba(36, 21, 15, 0.08);
+}
+
+.rgpm-stage:focus-visible {
+  outline: 2px solid var(--rgpm-coral);
+  outline-offset: 2px;
+}
+
+/* The product photo itself — contained, never cropped or stretched. */
+.rgpm-img {
+  width: 100%;
+  height: 100%;
+  max-width: 92%;
+  max-height: 92%;
+  object-fit: contain;
+  transform-origin: center;
+  opacity: 0;
+  transition: opacity 200ms ease, transform 220ms ease;
+}
+
+.rgpm-img.is-loaded {
+  opacity: 1;
+}
+
+.rgpm-stage:hover .rgpm-img.is-loaded {
+  transform: scale(1.03);
+}
+
+/* Cream skeleton shimmer — reserves stage dimensions, no layout shift. */
+.rgpm-skeleton {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    #f7ecd9 0%,
+    #fffdf8 45%,
+    #f7ecd9 90%
+  );
+  background-size: 200% 100%;
+  animation: rgpm-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes rgpm-shimmer {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
+
+/* Polished fallback — never a broken-image icon. */
+.rgpm-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--rgpm-faint);
+  font-family: var(--rgpm-mono);
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.rgpm-fallback svg {
+  width: 26px;
+  height: 26px;
+  opacity: 0.75;
+}
+
+/* Subtle multi-image indicator (rendered only when images > 1). */
+.rgpm-meta {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.rgpm-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.rgpm-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(154, 126, 107, 0.45);
+}
+
+.rgpm-dots i.is-on {
+  background: var(--rgpm-coral);
+}
+
+.rgpm-count {
+  font-family: var(--rgpm-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  color: var(--rgpm-soft);
+  background: rgba(255, 253, 248, 0.9);
+  border: 1px solid rgba(150, 124, 102, 0.35);
+  border-radius: 8px;
+  padding: 1px 7px;
+}
+
+/* Zoom affordance — appears gently on hover. */
+.rgpm-zoomhint {
+  position: absolute;
+  right: 8px;
+  bottom: 7px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(33, 20, 14, 0.72);
+  color: #fff3df;
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity 200ms ease, transform 200ms ease;
+  pointer-events: none;
+}
+
+.rgpm-stage:hover .rgpm-zoomhint,
+.rgpm-stage:focus-visible .rgpm-zoomhint {
+  opacity: 1;
+  transform: none;
+}
+
+/* Hide the zoom hint when the gallery meta indicator is present. */
+.rgpm-meta ~ .rgpm-zoomhint {
+  display: none;
+}
+
+/* ── Lightbox ─────────────────────────────────────────────────────────── */
+
+.rgpm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(20, 12, 8, 0.78);
+  animation: rgpm-fade 180ms ease;
+  overflow-y: auto;
+}
+
+@keyframes rgpm-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.rgpm-viewer {
+  width: 82vw;
+  max-width: 1150px;
+  height: 84vh;
+  max-height: 860px;
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  background: #fffdf8;
+  border: 1px solid rgba(150, 124, 102, 0.5);
+  border-radius: 10px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  animation: rgpm-pop 180ms ease;
+}
+
+@keyframes rgpm-pop {
+  from { opacity: 0; transform: scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+.rgpm-viewer__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(150, 124, 102, 0.35);
+  background: #fff8ed;
+}
+
+.rgpm-viewer__name {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 750;
+  color: #21140e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rgpm-viewer__close {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #21140e;
+  border: 1px solid #21140e;
+  color: #fff3df;
+  cursor: pointer;
+  transition: background 180ms ease, transform 180ms ease;
+}
+
+.rgpm-viewer__close:hover {
+  background: #e36a45;
+  border-color: #e36a45;
+}
+
+.rgpm-viewer__close:focus-visible {
+  outline: 2px solid #e36a45;
+  outline-offset: 2px;
+}
+
+.rgpm-viewer__stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 64px;
+  background: linear-gradient(180deg, #fffdf8 0%, #faf3e6 100%);
+}
+
+.rgpm-viewer__imgwrap {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rgpm-viewer__img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  animation: rgpm-imgswap 200ms ease;
+}
+
+@keyframes rgpm-imgswap {
+  from { opacity: 0; transform: scale(0.99); }
+  to { opacity: 1; transform: none; }
+}
+
+.rgpm-fallback--viewer {
+  font-size: 12px;
+}
+
+.rgpm-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff8ed;
+  border: 1px solid rgba(150, 124, 102, 0.55);
+  color: #21140e;
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+  z-index: 1;
+}
+
+.rgpm-nav:hover {
+  background: #e36a45;
+  border-color: #e36a45;
+  color: #fff;
+}
+
+.rgpm-nav:focus-visible {
+  outline: 2px solid #e36a45;
+  outline-offset: 2px;
+}
+
+.rgpm-nav--prev { left: 14px; }
+.rgpm-nav--next { right: 14px; }
+
+.rgpm-thumbs {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  padding: 12px 16px 4px 16px;
+  overflow-x: auto;
+  background: #fffdf8;
+}
+
+.rgpm-thumb {
+  flex-shrink: 0;
+  width: 76px;
+  height: 76px;
+  padding: 6px;
+  border-radius: 6px;
+  background: #fffdf8;
+  border: 1px solid rgba(150, 124, 102, 0.4);
+  cursor: pointer;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rgpm-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.rgpm-thumb:hover {
+  border-color: rgba(227, 106, 69, 0.7);
+}
+
+.rgpm-thumb.is-sel {
+  border-color: #e36a45;
+  box-shadow: 0 0 0 1px #e36a45;
+}
+
+.rgpm-thumb:focus-visible {
+  outline: 2px solid #e36a45;
+  outline-offset: 2px;
+}
+
+.rgpm-thumb__fallback {
+  color: #9a7e6b;
+  display: flex;
+}
+
+.rgpm-counter {
+  margin: 0;
+  padding: 8px 0 14px 0;
+  text-align: center;
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  color: #735b4b;
+  background: #fffdf8;
+}
+
+/* ── Responsive ───────────────────────────────────────────────────────── */
+
+@media (max-width: 1020px) {
+  .rgpm-stage {
+    height: 150px;
+  }
+}
+
+@media (max-width: 640px) {
+  .rgpm-stage {
+    height: 170px;
+  }
+  .rgpm-overlay {
+    padding: 10px;
+  }
+  .rgpm-viewer {
+    width: 94vw;
+    height: 92vh;
+    min-height: 0;
+    border-radius: 8px;
+  }
+  .rgpm-viewer__stage {
+    padding: 12px 52px;
+  }
+  .rgpm-nav {
+    width: 34px;
+    height: 34px;
+  }
+  .rgpm-nav--prev { left: 8px; }
+  .rgpm-nav--next { right: 8px; }
+  .rgpm-thumb {
+    width: 64px;
+    height: 64px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rgpm-stage,
+  .rgpm-img,
+  .rgpm-viewer,
+  .rgpm-overlay,
+  .rgpm-viewer__img,
+  .rgpm-nav,
+  .rgpm-viewer__close,
+  .rgpm-thumb,
+  .rgpm-zoomhint {
+    animation: none;
+    transition: none;
+  }
+  .rgpm-img {
+    opacity: 1;
+  }
+  .rgpm-stage:hover .rgpm-img.is-loaded {
+    transform: none;
+  }
+}

@@ -22,6 +22,11 @@ const TEXT_COLOR = '#3d2e4a';           // ink-700
 const FONT_SIZE = 12;
 const RENDER_SCALE = 0.5;               // render at 2x, scale down for crispness
 const OFFSET_Y = -38;                   // a touch higher than the tool bubble
+// Bubbles always draw above the sprites (which are z-sorted by world Y in the
+// hundreds/thousands). Critical bubbles sit a notch higher than ordinary ones
+// so an approval gate is never buried under chatter.
+const NORMAL_Z = 100000;
+const CRITICAL_Z = 100100;
 const FADE_IN_DURATION = 0.15;
 const FADE_OUT_DURATION = 0.3;
 const LINGER_DURATION = 1.2;            // only used when hide() is requested
@@ -50,9 +55,20 @@ export class ThoughtBubble {
   private isThinking = false;
   private dotsElapsed = 0;
   private dotsPhase = 0;
+  // Operator-critical state (approval gate, blocked operation). Drives both
+  // placement priority and stacking order.
+  private critical = false;
+  // Alpha produced by the fade state machine. Crowd suppression is applied on
+  // top of it in applyVisibility(), so the two never fight each other.
+  private fadeAlpha = 0;
+  private suppressed = false;
   // Extra upward shift (px) applied on top of OFFSET_Y so two nearby bubbles can
   // stack instead of overlapping. Set each frame by the scene's overlap pass.
   private extraLift = 0;
+  // Absolute position chosen by the scene's overlap resolver. When set it wins
+  // over the avatar-anchored default, so a resolved bubble can never be
+  // re-clamped back on top of its neighbour.
+  private placement: { x: number; y: number } | null = null;
   // Current camera zoom. The bubble lives inside the zoomed world container, so
   // when the window shrinks (fit-to-screen zoom < 1) the text used to scale
   // down with the map and turn into ragged mush. Counter-scale so the bubble
@@ -99,8 +115,13 @@ export class ThoughtBubble {
   }
 
   /** Show the current activity. Empty text → an animated "…" (model thinking).
-   *  `tool` (an agent's `carrying`) prefixes a small glyph when present. */
-  show(text: string, tool?: string): void {
+   *  `tool` (an agent's `carrying`) prefixes a small glyph when present.
+   *  `critical` marks state an operator must not miss (an approval gate, a
+   *  blocked operation): the scene places those first when space is tight,
+   *  and raises them above ordinary chatter when bubbles are stacked. */
+  show(text: string, tool?: string, critical = false): void {
+    this.critical = critical;
+    this.refreshDepth();
     this.isThinking = !text.trim();
     if (this.isThinking) {
       this.dotsElapsed = 0;
@@ -123,11 +144,11 @@ export class ThoughtBubble {
     if (this.state === 'hidden' || this.state === 'fading-out') {
       this.state = 'fading-in';
       this.fadeElapsed = 0;
-      this.container.visible = true;
+      this.setFadeAlpha(0);
     } else {
       // already up — swap text in place without re-fading
       this.state = 'visible';
-      this.container.alpha = 1;
+      this.setFadeAlpha(1);
     }
     this.lingerElapsed = 0;
   }
@@ -137,6 +158,37 @@ export class ThoughtBubble {
     if (this.state === 'hidden') return;
     this.state = 'lingering';
     this.lingerElapsed = 0;
+  }
+
+  /**
+   * Temporarily hide this cloud because the scene could not find it a
+   * collision-free slot this frame.
+   *
+   * This is deliberately NOT `startLinger()`: crowding is a layout problem,
+   * not the agent going quiet, so the state machine keeps running and the
+   * cloud reappears the moment a slot frees up instead of staying gone until
+   * the agent's next state change.
+   */
+  setSuppressed(suppressed: boolean): void {
+    if (this.suppressed === suppressed) return;
+    this.suppressed = suppressed;
+    this.applyVisibility();
+  }
+
+  /** The alpha the state machine wants, honouring crowd suppression. */
+  private applyVisibility(): void {
+    if (this.suppressed) {
+      this.container.visible = false;
+      this.container.alpha = 0;
+      return;
+    }
+    this.container.visible = this.state !== 'hidden';
+    this.container.alpha = this.fadeAlpha;
+  }
+
+  private setFadeAlpha(value: number): void {
+    this.fadeAlpha = value;
+    this.applyVisibility();
   }
 
   /** Update for the camera zoom: keep the bubble's SCREEN size from dropping
@@ -162,6 +214,17 @@ export class ThoughtBubble {
     const comp = this.compensation();
     const w = this.bgW * RENDER_SCALE * comp;
     const h = this.bgH * RENDER_SCALE * comp;
+
+    // An explicit placement from the scene's overlap resolver wins. It is
+    // already inside the world, and re-clamping it here is what used to
+    // silently undo the resolver's work and put two bubbles back on top of
+    // each other.
+    if (this.placement) {
+      this.container.x = Math.round(this.placement.x);
+      this.container.y = Math.round(this.placement.y);
+      return;
+    }
+
     let x = px - w / 2;
     let y = py + OFFSET_Y - h - this.extraLift;
     if (this.boundsW > 0) {
@@ -173,6 +236,35 @@ export class ThoughtBubble {
     }
     this.container.x = Math.round(x);
     this.container.y = Math.round(y);
+  }
+
+  /** Absolute rect chosen by the scene's overlap resolver, or null to fall
+   *  back to the avatar-anchored default. */
+  setPlacement(rect: { x: number; y: number } | null): void {
+    this.placement = rect;
+  }
+
+  /** The rect this bubble must stay inside, for the resolver's bounds test. */
+  getBounds(): { w: number; h: number } {
+    return { w: this.boundsW, h: this.boundsH };
+  }
+
+  /** True once the cloud is no longer on screen (hidden or fully faded out),
+   *  so the resolver stops treating it as occupying space. */
+  isOffStage(): boolean {
+    return this.state === 'hidden' || this.fadeAlpha <= 0.01;
+  }
+
+  /** Operator-critical bubbles render above ordinary chatter. */
+  isCritical(): boolean {
+    return this.critical;
+  }
+
+  /** Keep approval-gate / blocked clouds above ordinary chatter when two
+   *  stacks do meet, so the operator never has to hunt for the message that
+   *  is waiting on them. */
+  refreshDepth(): void {
+    this.container.zIndex = this.critical ? CRITICAL_Z : NORMAL_Z;
   }
 
   /** Extra upward shift (px), set by the scene's bubble-overlap pass. */
@@ -201,8 +293,7 @@ export class ThoughtBubble {
   hide(): void {
     this.state = 'hidden';
     this.isThinking = false;
-    this.container.alpha = 0;
-    this.container.visible = false;
+    this.setFadeAlpha(0);
   }
 
   isHidden(): boolean {
@@ -224,7 +315,7 @@ export class ThoughtBubble {
       case 'fading-in': {
         this.fadeElapsed += dt;
         const t = Math.min(this.fadeElapsed / FADE_IN_DURATION, 1);
-        this.container.alpha = t;
+        this.setFadeAlpha(t);
         if (t >= 1) this.state = 'visible';
         break;
       }
@@ -239,7 +330,7 @@ export class ThoughtBubble {
       case 'fading-out': {
         this.fadeElapsed += dt;
         const t = Math.min(this.fadeElapsed / FADE_OUT_DURATION, 1);
-        this.container.alpha = 1 - t;
+        this.setFadeAlpha(1 - t);
         if (t >= 1) this.hide();
         break;
       }

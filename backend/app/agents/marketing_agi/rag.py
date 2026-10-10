@@ -19,8 +19,9 @@ engine falls back to deterministic heuristics so tests run offline.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from pydantic import BaseModel, Field
 
@@ -166,7 +167,14 @@ def _extract_statements(tool_result: dict[str, Any], tool: str) -> list[str]:
 
 
 class AgenticRAG:
-    """Retrieve → evaluate → gap-check → reformulate → cross-check."""
+    """Retrieve → evaluate → gap-check → reformulate → cross-check.
+
+    ``invoke`` is the tool-execution seam. When the Marketing Agent supplies
+    an MCP-backed invoker, retrieval runs through the MCP layer (policy,
+    caching, retries, normalized results); otherwise it falls back to the
+    legacy registry. The retrieve/evaluate/reformulate loop itself is
+    unchanged — MCP is one evidence source, not the reasoner.
+    """
 
     def __init__(
         self,
@@ -175,6 +183,9 @@ class AgenticRAG:
         llm: BaseLLMProvider | None = None,
         limits: LoopLimits | None = None,
         prompt_catalog: list[dict[str, Any]] | None = None,
+        invoke: Callable[[str, dict[str, Any]], dict[str, Any] | None] | None = None,
+        type_tools: dict[str, list[str]] | None = None,
+        role: str = "marketing",
     ) -> None:
         self._ctx = ctx
         self._registry = registry
@@ -184,6 +195,14 @@ class AgenticRAG:
         # Stage-filtered catalog for prompts only (smaller/faster); the
         # execution allowlist (self._tools) always stays complete.
         self._prompt_catalog = prompt_catalog
+        # Optional MCP-backed executor. Returns None when the tool has no
+        # MCP equivalent so the caller falls back to the legacy registry.
+        self._invoke_mcp = invoke
+        # Deterministic routing table. Defaults to the marketing map; a
+        # second agent (Product Agent) passes its own so retrieval picks the
+        # right evidence sources for its domain WITHOUT a second RAG loop.
+        self._type_tools = type_tools if type_tools is not None else TYPE_TOOLS
+        self._role = role
 
     # ── public entry ─────────────────────────────────────────────────────
 
@@ -201,7 +220,7 @@ class AgenticRAG:
     def _research_llm(self, question: str, result: AgenticRAGResult) -> None:
         catalog = self._prompt_catalog or self._registry.catalog()
         system = (
-            "You are the retrieval strategist of an autonomous marketing agent. "
+            f"You are the retrieval strategist of an autonomous {self._role} agent. "
             "Classify the information need, choose the single best registered tool, "
             "and reformulate the query. Use ONLY tools from the catalog. "
             "Return JSON per the schema."
@@ -265,7 +284,7 @@ class AgenticRAG:
 
     def _research_deterministic(self, question: str, result: AgenticRAGResult) -> None:
         info_type = classify_information_type(question)
-        tools = TYPE_TOOLS.get(info_type, ["get_business_overview"])
+        tools = self._type_tools.get(info_type, [next(iter(self._tools), "")])
         # cross-check: always add a second, independent source
         if len(tools) < 2:
             tools = tools + ["recall_memory"]
@@ -321,6 +340,25 @@ class AgenticRAG:
             params = {"query": query}
         elif tool == "find_customers":
             params = {"min_orders": 1}
+        t0 = time.perf_counter()
+        # Prefer the MCP path when this tool is MCP-backed; fall back to the
+        # legacy registry for anything MCP does not cover.
+        if self._invoke_mcp is not None:
+            try:
+                mcp_result = self._invoke_mcp(tool, params)
+            except Exception as exc:
+                log.warning("AgenticRAG MCP tool %s failed: %s", tool, exc)
+                return None
+            if mcp_result is not None:
+                statements = _extract_statements(mcp_result, tool)
+                return RetrievalOutcome(
+                    query=query,
+                    tool=tool,
+                    information_type=info_type,
+                    item_count=len(statements),
+                    statements=statements,
+                    latency_ms=int((time.perf_counter() - t0) * 1000),
+                )
         try:
             call = self._registry.call(self._ctx, tool, params)
         except Exception as exc:

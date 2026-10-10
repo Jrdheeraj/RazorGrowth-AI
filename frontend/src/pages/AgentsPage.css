@@ -1,10 +1,10 @@
 /**
- * /agents — AI Workforce Command Center
- * Cream / ink / coral neo-brutalist office — no gradients, no glass.
+ * /agents â€” AI Workforce Command Center
+ * Cream / ink / coral neo-brutalist office â€” no gradients, no glass.
  * Structure: office floor + command center + bottom roster.
  */
 
-/* ── Page shell — FULL-WIDTH command-center workspace ───────────────── */
+/* â”€â”€ Page shell â€” FULL-WIDTH command-center workspace â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .agents-cc {
   display: flex;
   flex-direction: column;
@@ -12,24 +12,24 @@
   padding-block: 18px 56px;
 }
 .agents-cc--wide {
-  width: min(1920px, calc(100vw - 80px));
+  width: min(1920px, calc(100% - 80px));
   max-width: none;
   margin-inline: auto;
   padding-inline: 0;
-  /* calc(100vw - 80px) = 40px outer margins each side — clearly visible balanced gap, centered, still large — matches shell gutter */
+  /* calc(100% - 80px) = 40px outer margins each side â€” clearly visible balanced gap, centered, still large â€” matches shell gutter */
 }
 @media (max-width: 1100px) {
   .agents-cc--wide {
-    width: min(1920px, calc(100vw - 48px));
+    width: min(1920px, calc(100% - 48px));
   }
 }
 @media (max-width: 640px) {
   .agents-cc--wide {
-    width: min(1920px, calc(100vw - 32px));
+    width: min(1920px, calc(100% - 32px));
   }
 }
 
-/* ── Hero ─────────────────────────────────────────────────────────────── */
+/* â”€â”€ Hero â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .agents-cc__hero {
   display: grid;
   grid-template-columns: 1.35fr 0.85fr;
@@ -137,7 +137,7 @@
   font-size: var(--text-small);
 }
 
-/* ── Snapshot strip (compact) ─────────────────────────────────────────── */
+/* â”€â”€ Snapshot strip (compact) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .agents-cc__snapshotHead {
   display: flex;
   align-items: center;
@@ -209,7 +209,7 @@
   color: var(--cream-muted);
 }
 
-/* ── Main grid — TRUE command-center split: 65-70% office / 30-35% console, minimal margins, app-height ── */
+/* â”€â”€ Main grid â€” TRUE command-center split: 65-70% office / 30-35% console, minimal margins, app-height â”€â”€ */
 .agents-cc__mainGrid {
   display: grid;
   grid-template-columns: minmax(0, 2.05fr) minmax(340px, 0.95fr);
@@ -226,7 +226,7 @@
 }
 /* effectively ~76/24 at 1440, ~78/22 at 1680, minimal 12px outer padding via .agents-cc--wide */
 
-/* ── AI Office ────────────────────────────────────────────────────────── */
+/* â”€â”€ AI Office â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .ai-office { padding: 0; }
 .ai-office__head {
   display: flex;
@@ -325,7 +325,7 @@
 .ai-office__legendDot--blocked { background: #8a6f5c; }
 .ai-office__footHint { color: var(--ink-faint); }
 
-/* ── Workstation (desk) ───────────────────────────────────────────────── */
+/* â”€â”€ Workstation (desk) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .ws {
   position: relative;
   display: flex;
@@ -564,7 +564,7 @@
 .rec__statValue { font-family: var(--font-mono); font-weight: 800; font-size: 1.25rem; color: var(--green); line-height: 1; }
 .rec__hint { font-size: 0.76rem; color: var(--cream-muted); line-height: 1.4; }
 
-/* Command Center — matches office app-height */
+/* Command Center â€” matches office app-height */
 .cmd {
   border: 1px solid var(--line);
   border-radius: var(--radius-window);
@@ -877,7 +877,7 @@
   .snapshot-strip__cell:nth-child(n+4) { border-top: 1px solid rgba(247,235,215,0.12); }
 }
 
-/* ── Illustrated face avatar ──────────────────────────────────────────── */
+/* â”€â”€ Illustrated face avatar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .face-ava {
   position: relative;
   display: inline-flex;
@@ -922,7 +922,7 @@
   animation: typing 1.2s steps(3,end) infinite;
 }
 
-/* ── Top-down office canvas — APP-HEIGHT, full-bleed ──────────────────── */
+/* â”€â”€ Top-down office canvas â€” APP-HEIGHT, full-bleed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .office-canvasWrap { padding: 10px 10px 10px; background: var(--paper-bright); }
 .office-canvas {
   position: relative;
@@ -960,7 +960,7 @@
 .office-canvas__wall--bottom { bottom: 0; left: 0; right: 0; height: 8px; }
 .office-canvas__wall--left { top: 0; bottom: 0; left: 0; width: 8px; }
 .office-canvas__wall--right { top: 0; bottom: 0; right: 0; width: 8px; }
-/* interior walls — leave door gaps via :after maybe, but we approximate with gaps */
+/* interior walls â€” leave door gaps via :after maybe, but we approximate with gaps */
 .office-canvas__wall--h1 { top: 30%; left: 8px; right: 8px; height: 5px; background: var(--line); opacity: 0.95; }
 .office-canvas__wall--h2 { top: 77%; left: 8px; right: 8px; height: 5px; background: var(--line); opacity: 0.95; }
 .office-canvas__wall--v1 { top: 8px; bottom: 8px; left: 50%; width: 5px; transform: translateX(-50%); background: var(--line); opacity: 0.9; display: none; }
@@ -1088,7 +1088,7 @@
 .office-canvas__walker { position: absolute; z-index: 6; width: 10px; height: 10px; transform: translate(-50%,-50%); pointer-events: none; animation: walker-walk 1.4s linear infinite; }
 .office-canvas__walkerDot { display:block; width:8px; height:8px; background: var(--coral); border: 1px solid var(--paper-bright); border-radius: 50%; box-shadow: 0 0 0 2px rgba(217,119,87,0.18); }
 
-/* workstation — top-down — larger desks, clear room hierarchy */
+/* workstation â€” top-down â€” larger desks, clear room hierarchy */
 .office-ws {
   position: absolute;
   z-index: 4;
@@ -1225,7 +1225,7 @@
   .roster__tile { flex: 0 0 168px; }
   .detail-overlay { padding: 8px; }
 }
-/* ── Detail log (timestamped) ─────────────────────────────────────── */
+/* â”€â”€ Detail log (timestamped) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .detail-overlay__section--log { background: var(--paper-deep); }
 .detail-overlay__log { display:flex; flex-direction:column; gap:6px; max-height: 260px; overflow-y:auto; padding: 6px 2px 2px; }
 .detail-overlay__logRow { display:grid; grid-template-columns: 72px 10px 1fr; gap:8px; align-items:start; padding: 6px 8px; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--paper-bright); font-size: 0.78rem; line-height:1.35; }
@@ -1242,7 +1242,7 @@
 .detail-overlay__logText { color: var(--ink-soft); }
 .detail-overlay__logHint { margin: 6px 0 0; font-family: var(--font-mono); font-size:0.66rem; letter-spacing:0.06em; text-transform:uppercase; color: var(--ink-faint); }
 
-/* ── Operational charts (GRAPH tab) ────────────────────────────────── */
+/* â”€â”€ Operational charts (GRAPH tab) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cmd__charts { display:flex; flex-direction:column; gap:12px; }
 .cmd__chartBox { border:1px solid var(--line-soft); border-radius: var(--radius-window); background: var(--paper); padding:10px 10px; display:flex; flex-direction:column; gap:8px; }
 .cmd__workloadBars { display:flex; flex-direction:column; gap:5px; max-height: 220px; overflow-y:auto; padding-right:2px; }
@@ -1270,7 +1270,7 @@
 .cmd__details { border:1px solid var(--line-soft); border-radius: var(--radius-window); background: var(--paper); padding:8px 10px; }
 .cmd__details summary { cursor:pointer; }
 
-/* ── Retro terminal ────────────────────────────────────────────────── */
+/* â”€â”€ Retro terminal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cmd__panel--terminal { padding:0; display:flex; flex-direction:column; }
 .cmd__termHeader { display:flex; align-items:center; gap:8px; padding:8px 10px; background: var(--choc-900); border-bottom:1px solid var(--line-strong); }
 .cmd__termScreen { background:#0e0a08; color:#c8f5c8; font-family: var(--font-mono); font-size:0.68rem; line-height:1.6; padding:10px 12px; min-height: 320px; max-height: 420px; overflow-y:auto; }
@@ -1292,10 +1292,10 @@
   .cmd__chartGrid { grid-template-columns: 1fr; }
 }
 
-/* ── Autonomous employees (Marketing Agent + Product Agent cards) ───────
+/* â”€â”€ Autonomous employees (Marketing Agent + Product Agent cards) â”€â”€â”€â”€â”€â”€â”€
    One reusable card system, two subtle identities: terracotta for
    Marketing, muted green for Product. Cream cards, thin dark borders,
-   restrained offset shadows — same RazorGrowth AI visual language. */
+   restrained offset shadows â€” same RazorGrowth AI visual language. */
 .agents-cc__employees {
   display: flex;
   flex-direction: column;

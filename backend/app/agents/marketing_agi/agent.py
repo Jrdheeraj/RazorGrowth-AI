@@ -63,6 +63,10 @@ from backend.app.agents.marketing_agi.memory import (
 from backend.app.agents.marketing_agi.handoff import HandoffInterface
 from backend.app.agents.marketing_agi.tools.bootstrap import register_all_tools
 from backend.app.agents.marketing_agi.tools.registry import ToolContext, get_registry
+from backend.app.integrations.mcp import bridge as mcp_bridge
+from backend.app.integrations.mcp.client import MCPToolCallRecord
+from backend.app.integrations.mcp.errors import MCPError
+from backend.app.integrations.mcp.observability import MCPLedger
 from backend.app.models.marketing_agi import (
     MarketingAGIEvent,
     MarketingAGICampaign,
@@ -76,6 +80,28 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+#: Agent phase → MCP catalog phase. This mapping lives on the AGENT side
+#: on purpose: the MCP layer stays agent-agnostic (it only knows
+#: observe/research/campaign_prep/execution), while each agent translates
+#: its own workflow into a tool-visibility phase. The LLM therefore only
+#: ever sees the tools relevant to the stage it is in — never the whole
+#: catalog (the pre-existing prompt-bloat problem).
+_MCP_CATALOG_PHASE: dict[str, str] = {
+    Phase.load_context.value: "observe",
+    Phase.observe.value: "observe",
+    Phase.investigate.value: "research",
+    Phase.plan.value: "research",
+    Phase.create.value: "campaign_prep",
+    # Verification is read-only by construction: reads from research +
+    # observe, writes excluded by include_write=False at the call site.
+    Phase.verify.value: "research",
+    Phase.prepare.value: "campaign_prep",
+    # Execution exposes ONLY externally-permitted write tools.
+    Phase.awaiting_approval.value: "execution",
+    Phase.complete.value: "execution",
+}
+
+
 def _rupees_short(v: Any) -> str | None:
     """Format a numeric INR value compactly; None when not numeric."""
     try:
@@ -83,6 +109,43 @@ def _rupees_short(v: Any) -> str | None:
     except (TypeError, ValueError):
         return None
     return f"₹{f:,.0f}"
+
+
+def mcp_result_summary(record: dict[str, Any]) -> str:
+    """Honest one-line summary of an MCP call for the activity feed.
+
+    Success reports what the tool returned (or that it was cached); a
+    refusal or failure reports the classified reason instead of a
+    success-shaped phrase.
+    """
+    status = record.get("status")
+    tool = record.get("tool", "mcp tool")
+    if status == "denied":
+        return f"refused — {record.get('error_code')}"
+    if status == "error":
+        code = record.get("error_code")
+        return f"failed — {code}" if code else "failed"
+    if record.get("cached"):
+        return "served from this run's cache"
+    summary = record.get("summary")
+    return summary if summary else "done"
+
+
+def _payload_failed(payload: Any) -> bool:
+    """True when a tool payload represents a FAILURE, not a result.
+
+    The existing integration tools report a provider failure by returning a
+    normal dict carrying ``status="error"`` plus ``error_code``, not by
+    raising — so checking only for an ``error`` key records a dead provider
+    read as a successful observation. All three shapes are recognised here.
+    """
+    if not isinstance(payload, dict):
+        return False
+    if payload.get("error"):
+        return True
+    if str(payload.get("status") or "").lower() == "error":
+        return True
+    return bool(payload.get("error_code"))
 
 
 def summarize_tool_result(name: str, result: Any) -> str:
@@ -318,9 +381,29 @@ class MarketingAGI:
         # Disconnected external providers (Phase 8): their live tools are
         # omitted from LLM prompts but stay executable via the allowlist.
         self._unavailable_providers: frozenset[str] = self._detect_unavailable_providers()
+        # MCP — the standardized tool connectivity layer underneath the
+        # agent. Bound to the authenticated merchant for this run; it never
+        # decides, approves, or reasons. Tools not registered in MCP fall
+        # back to the legacy registry unchanged.
+        # MCP observability: the client records one safe row per call; the
+        # ledger mirrors those rows into run state + Live Activity events.
+        self._mcp_ledger = MCPLedger()
+        self._mcp = mcp_bridge.build_client(
+            db,
+            merchant_id,
+            embedding_provider=embedding_provider,
+            on_call=self._mcp_ledger.record,
+        )
+        # Active run bindings for the MCP observability mirror. Set by run();
+        # None before/after a run so no stray call can write state.
+        self._active_state: MarketingAGIState | None = None
+        self._active_recorder: EventRecorder | None = None
         self._rag = AgenticRAG(
             self._tool_ctx, self._registry, llm, self._limits,
-            prompt_catalog=self._prompt_catalog(include_write=False),
+            prompt_catalog=self._mcp_prompt_catalog(
+                phase=Phase.investigate.value, include_write=False
+            ),
+            invoke=lambda name, params: mcp_bridge.mcp_invoke(self._mcp, name, params),
         )
         self._memory = MarketingAGIMemory(db, embedding_provider)
         self._handoffs = HandoffInterface(db)
@@ -572,6 +655,13 @@ class MarketingAGI:
             run_row.analysis_cycle_id = analysis_cycle_id
         # Fresh per-run cache: never leaks results across runs/merchants.
         self._tool_cache = {}
+        # Bind the MCP observability mirror to THIS run and reset its
+        # per-run caches (MCP cache, degraded providers, records) so a
+        # previous run can never influence this one. The run id joins every
+        # MCP record to this run for audit/observability.
+        self._mcp.clear_run_state()
+        self._mcp.context.run_id = str(run_row.id)
+        self._active_state = state
         if self._llm is not None:
             state.reasoning_status = "reasoning"
             state.reasoning_summary = (
@@ -584,6 +674,10 @@ class MarketingAGI:
             )
             state.llm_degraded = True
         recorder = EventRecorder(self._db, run_row)
+        # Bind MCP observability to this run + recorder so MCP calls join
+        # the existing activity workstream.
+        self._active_recorder = recorder
+        self._mcp_ledger.bind(self._on_mcp_call)
         deadline = time.monotonic() + self._limits.run_timeout_seconds
         t0 = time.perf_counter()
 
@@ -932,7 +1026,7 @@ class MarketingAGI:
                     schema=_Pick,
                     safe_summary="LLM selected the campaign workflow from evidence",
                     temperature=0.0,
-                    max_tokens=60,
+                    max_tokens=256,
                 )
                 for w in candidates:
                     if w.key == pick.workflow:
@@ -1135,7 +1229,7 @@ class MarketingAGI:
                     },
                     "success_metric": strategy.success_metric,
                     "evidence_refs": [e.source for e in state.evidence[:10]],
-                    "run_id": uuid.UUID(state.run_id),
+                    "run_id": str(uuid.UUID(state.run_id)),
                 },
             )
             self._record_tool_call(
@@ -1428,10 +1522,18 @@ class MarketingAGI:
         run_row: MarketingAGIRun,
         deadline: float,
     ) -> None:
-        # Prompt carries the stage-filtered catalog (read-only, connected
-        # only); validation below still uses the FULL allowlist.
-        prompt_catalog = self._prompt_catalog(include_write=False)
+        # Prompt carries the PHASE-SCOPED MCP catalog (research-phase reads,
+        # connected providers only); validation below still uses the FULL
+        # allowlist — legacy registry names + every MCP-registered name, so
+        # a dotted name picked from the prompt dispatches like a legacy one.
+        prompt_catalog = self._mcp_prompt_catalog(
+            phase=run_row.phase, include_write=False
+        )
         allowed_tools = {c["name"] for c in self._registry.catalog()}
+        try:
+            allowed_tools |= mcp_bridge.registered_names()
+        except Exception:
+            log.debug("MCP allowlist unavailable; using legacy allowlist")
         system = (
             "You are the tool-selection engine of an autonomous marketing agent. "
             "Given the objective, the evidence so far, and the tool catalog, choose "
@@ -1576,6 +1678,10 @@ class MarketingAGI:
         SQLite (tests/local) uses a single shared-cache connection that is
         not thread-safe, so threading is only used on server databases
         (PostgreSQL); SQLite always takes the sequential path.
+
+        Tools go through the MCP client where MCP covers them, so the
+        parallel path shares MCP's per-run cache (identical concurrent
+        reads collapse) and MCP observability records each call.
         """
         try:
             bind = self._db.get_bind()
@@ -1588,23 +1694,45 @@ class MarketingAGI:
         except ImportError:
             return self._observe_sequential(state, names)
 
-        def _one(name: str) -> tuple[str, dict[str, Any], int]:
+        def _one(name: str) -> tuple[str, dict[str, Any], int, list[Any]]:
             from sqlalchemy.orm import Session as _Session
 
             t0 = time.perf_counter()
             sess = _Session(bind=bind, autoflush=False, expire_on_commit=False)
             try:
+                if mcp_bridge.resolve(name) is not None:
+                    # One MCP client per worker: its cache is shared (so
+                    # duplicate reads collapse) while its DB session is
+                    # the worker's own, never the shared one.
+                    #
+                    # NO on_call hook here. The hook writes through the
+                    # agent's SHARED EventRecorder session and its plain
+                    # sequence counter, neither of which is thread-safe;
+                    # emitting from N workers would race the counter (a
+                    # duplicated seq permanently shadows an event from the
+                    # dashboard's cursor) and mutate one Session from
+                    # several threads. Records are replayed on the main
+                    # thread in the drain loop below instead.
+                    client = mcp_bridge.build_client(
+                        sess,
+                        self._merchant_id,
+                        embedding_provider=self._embedding_provider,
+                        client=self._mcp,
+                    )
+                    data = mcp_bridge.mcp_invoke(client, name, {})
+                    return name, data or {}, int(
+                        (time.perf_counter() - t0) * 1000), list(client.records)
                 ctx = ToolContext(
                     db=sess, merchant_id=self._merchant_id,
                     llm=None, embedding_provider=None,
                 )
                 call = self._registry.call(ctx, name, {})
                 return name, call.get("result", {}), int(
-                    (time.perf_counter() - t0) * 1000)
+                    (time.perf_counter() - t0) * 1000), []
             except Exception as exc:
                 log.warning("parallel observe tool %s failed: %s", name, exc)
                 return name, {"error": str(exc), "tool": name}, int(
-                    (time.perf_counter() - t0) * 1000)
+                    (time.perf_counter() - t0) * 1000), []
             finally:
                 try:
                     sess.close()
@@ -1619,16 +1747,23 @@ class MarketingAGI:
                 futures = {pool.submit(_one, n): n for n in names}
                 results: dict[str, Any] = {}
                 for fut, n in futures.items():
+                    records: list[Any] = []
                     try:
-                        _, payload, latency_ms = fut.result(timeout=30)
+                        _, payload, latency_ms, records = fut.result(timeout=30)
                     except Exception as exc:
                         log.warning("parallel observe tool %s timed out: %s", n, exc)
                         payload, latency_ms = (
                             {"error": f"{type(exc).__name__}", "tool": n}, 0)
+                    # Mirror this worker's MCP calls into the agent's
+                    # observability NOW, on the main thread, so state and
+                    # the event sequence stay single-threaded.
+                    for rec in records:
+                        self._mcp_ledger.record(rec)
                     results[n] = payload
                     self._record_tool_call(
                         state, n, {}, payload,
-                        ok="error" not in payload, latency_ms=latency_ms,
+                        ok=not _payload_failed(payload),
+                        latency_ms=latency_ms,
                         dedupe=False,
                     )
                     state.timing["tool_total_ms"] += latency_ms
@@ -1649,7 +1784,8 @@ class MarketingAGI:
             results[n] = payload
             self._record_tool_call(
                 state, n, {}, payload,
-                ok="error" not in payload, latency_ms=latency_ms,
+                ok=not _payload_failed(payload),
+                latency_ms=latency_ms,
                 dedupe=False,
             )
             state.timing["tool_total_ms"] += latency_ms
@@ -1718,7 +1854,7 @@ class MarketingAGI:
                 # lightweight inline record (no event emission here).
                 t0 = time.perf_counter()
                 strategy = self._llm.generate_structured(
-                    system, user, CampaignStrategy, temperature=0.2, max_tokens=900
+                    system, user, CampaignStrategy, temperature=0.2, max_tokens=1400
                 )
                 latency_ms = int((time.perf_counter() - t0) * 1000)
                 stats = self._accumulate_llm_timing(state, latency_ms)
@@ -1858,10 +1994,88 @@ class MarketingAGI:
                 return w
         return WORKFLOWS[0]
 
+    # ── MCP integration ──────────────────────────────────────────────────
+
+    def _on_mcp_call(self, record: MCPToolCallRecord) -> None:
+        """Mirror one MCP invocation into the agent's existing observability.
+
+        Runs inside the MCP client's call path, so it must stay cheap and
+        failure-tolerant: a broken ledger can never fail a tool call.
+        """
+        try:
+            state = self._active_state
+            recorder = self._active_recorder
+            if state is None:
+                return
+            row = record.to_dict()
+            row["ts"] = utcnow().isoformat()
+            # Stamp run-level observability context the client cannot know:
+            # the current agent phase and the AI-Team analysis cycle.
+            phase = "research"
+            if recorder is not None:
+                run_row = getattr(recorder, "run", None)
+                if run_row is not None:
+                    row["phase"] = run_row.phase
+                    row["analysis_cycle_id"] = run_row.analysis_cycle_id
+                    phase = run_row.phase or phase
+            state.mcp_calls.append(row)
+            if recorder is None:
+                return
+            message = (
+                f"MCP · {record.tool} · "
+                + ("success" if record.status == "success" else record.status.upper())
+            )
+            recorder.emit(
+                phase=phase,
+                event_type="mcp_tool_call",
+                message=message,
+                data={
+                    "tool": record.tool,
+                    "server": record.server,
+                    "provider": record.provider,
+                    "status": record.status,
+                    "read_only": record.read_only,
+                    "requires_approval": record.requires_approval,
+                    "risk_level": record.risk_level,
+                    "duration_ms": record.duration_ms,
+                    "error_code": record.error_code,
+                    "cached": record.cached,
+                    "retries": record.retries,
+                    "summary": record.summary,
+                },
+            )
+        except Exception:
+            log.debug("MCP observability mirror failed", exc_info=True)
+
+    def _mcp_prompt_catalog(
+        self, *, phase: str | None = None, include_write: bool = True
+    ) -> list[dict[str, Any]]:
+        """Phase-scoped MCP catalog for prompts (small by construction).
+
+        The agent phase is translated through ``_MCP_CATALOG_PHASE`` so
+        the MCP layer never needs to know agent names. Falls back to the
+        legacy registry catalog when MCP is unavailable or returns nothing
+        for that phase, so the agent still runs with a usable catalog.
+        """
+        mcp_phase = _MCP_CATALOG_PHASE.get(phase or "", "research")
+        try:
+            catalog = self._mcp.catalog(phase=mcp_phase, include_write=include_write)
+            if catalog:
+                return catalog
+        except Exception:
+            log.debug("MCP catalog unavailable; using legacy catalog", exc_info=True)
+        return self._prompt_catalog(include_write=include_write)
+
+    def _mcp_metrics(self) -> dict[str, Any]:
+        try:
+            return self._mcp.metrics()
+        except Exception:
+            return {}
+
     def _dispatch_tool(
         self, state: MarketingAGIState, name: str, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Bounded, deduplicated tool dispatch."""
+        """Bounded, deduplicated tool dispatch (MCP-backed where possible)."""
         fingerprint = (name, _stable(params))
         if fingerprint in state.seen_tool_calls():
             state.duplicate_tool_calls += 1
@@ -1871,6 +2085,13 @@ class MarketingAGI:
         if state.tool_call_count >= self._limits.max_tool_calls:
             raise _BudgetExceeded(f"tool-call budget exhausted ({self._limits.max_tool_calls})")
 
+        self._active_state = state
+        mcp_name = mcp_bridge.resolve(name)
+        if mcp_name is not None:
+            return self._mcp_dispatch(state, name, mcp_name, params)
+
+        # Not MCP-backed (an orchestration pseudo-tool, or a tool MCP does
+        # not cover): the original legacy-registry path, unchanged.
         call = self._registry.call(self._tool_ctx, name, params)
         state.tool_call_count += 1
         state.timing["tool_total_ms"] += int(call.get("latency_ms", 0))
@@ -1885,6 +2106,105 @@ class MarketingAGI:
         )
         return call
 
+    def _mcp_dispatch(
+        self,
+        state: MarketingAGIState,
+        name: str,
+        mcp_name: str,
+        params: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Dispatch one MCP-backed tool and return the legacy call shape.
+
+        A refusal or provider failure is recorded in the tool activity as a
+        FAILED call (never as a silent skip) and then raised, so the run
+        carries an honest knowledge gap forward.
+        """
+        self._active_state = state
+        before = len(self._mcp.records)
+        try:
+            data = mcp_bridge.mcp_invoke(self._mcp, mcp_name, params)
+        except MCPError:
+            self._record_failed_mcp_call(state, name, mcp_name, params, before)
+            raise
+        finally:
+            self._sync_mcp_timing(state)
+        record = self._mcp.records[-1] if len(self._mcp.records) > before else None
+        latency_ms = record.duration_ms if record is not None else 0
+        state.tool_call_count += 1
+        state.timing["tool_total_ms"] += latency_ms
+        state.timing["tool_calls"] = state.tool_call_count
+        # Recorded under the legacy name so the existing activity shape,
+        # duplicate detector and workflow/UI expectations are unchanged.
+        self._record_tool_call(
+            state,
+            name,
+            params,
+            data or {},
+            ok=True,
+            latency_ms=latency_ms,
+            summary=(mcp_result_summary(record.to_dict()) if record is not None else None),
+        )
+        return {
+            "spec": {
+                "name": name,
+                "category": mcp_name.split(".")[1] if "." in mcp_name else "internal",
+                "integration_status": "mcp",
+            },
+            "result": data or {},
+            "latency_ms": latency_ms,
+            "mcp_tool": mcp_name,
+        }
+
+    def _record_failed_mcp_call(
+        self,
+        state: MarketingAGIState,
+        name: str,
+        mcp_name: str,
+        params: dict[str, Any],
+        before: int,
+    ) -> None:
+        """Record a refused/failed MCP call in the tool activity.
+
+        Uses the MCP record's own status and classified reason so the UI
+        shows "refused — APPROVAL_REQUIRED" / "failed — TIMEOUT" instead
+        of a success-shaped row. Idempotent: it only writes when the client
+        actually recorded a new entry for this invocation.
+        """
+        if len(self._mcp.records) <= before:
+            return
+        record = self._mcp.records[-1]
+        if record.status == "success":
+            return
+        state.tool_call_count += 1
+        state.timing["tool_calls"] = state.tool_call_count
+        self._record_tool_call(
+            state,
+            name,
+            params,
+            {},
+            ok=False,
+            latency_ms=record.duration_ms,
+            summary=mcp_result_summary(record.to_dict()),
+        )
+
+    def _sync_mcp_timing(self, state: MarketingAGIState) -> None:
+        """Fold MCP call durations and counters into the run timing block."""
+        try:
+            metrics = self._mcp.metrics()
+        except Exception:
+            return
+        state.timing["mcp_total_ms"] = metrics.get("mcp_total_ms", 0)
+        state.timing["mcp_calls"] = metrics.get("mcp_calls", 0)
+        state.timing["mcp_cache_hits"] = metrics.get("mcp_cache_hits", 0)
+        state.timing["mcp_errors"] = metrics.get("mcp_errors", 0)
+        state.timing["mcp_rate_limited"] = metrics.get("mcp_rate_limited", 0)
+        state.timing["retry_count"] = state.timing.get("retry_count", 0) + metrics.get(
+            "mcp_retries", 0
+        )
+        state.timing["rate_limit_count"] = state.timing.get(
+            "rate_limit_count", 0
+        ) + metrics.get("mcp_rate_limited", 0)
+
     @staticmethod
     def _record_tool_call(
         state: MarketingAGIState,
@@ -1895,6 +2215,7 @@ class MarketingAGI:
         ok: bool,
         latency_ms: int = 0,
         dedupe: bool = True,
+        summary: str | None = None,
     ) -> None:
         """Append a workstation-ready tool activity entry.
 
@@ -1903,6 +2224,10 @@ class MarketingAGI:
         Timestamp / Duration without guessing. Observation-baseline reads
         pass dedupe=False so they stay visible without poisoning the
         reasoning-loop duplicate detector.
+
+        ``summary`` overrides the shape-derived summary — used by the MCP
+        mirror, whose normalized envelope has a different shape than the
+        legacy tool payload.
         """
         state.tool_calls.append(
             {
@@ -1911,12 +2236,24 @@ class MarketingAGI:
                 "ok": ok,
                 "latency_ms": latency_ms,
                 "ts": utcnow().isoformat(),
-                "summary": summarize_tool_result(name, result) if ok else "failed",
+                "summary": summary
+                if summary is not None
+                else (summarize_tool_result(name, result) if ok else "failed"),
                 "dedupe": dedupe,
             }
         )
 
     def _tool(self, name: str, params: dict[str, Any]) -> dict[str, Any]:
+        """Invoke a tool for the agent's own internal phases.
+
+        MCP-backed tools go through the MCP client (which owns the per-run
+        read-only cache, retries, policy and observability). Everything
+        else keeps the original legacy-registry path, including the legacy
+        cache, so behaviour is unchanged for non-MCP tools.
+        """
+        if mcp_bridge.resolve(name) is not None:
+            self._active_state = getattr(self, "_active_state", None)
+            return mcp_bridge.mcp_invoke(self._mcp, name, params) or {}
         # Per-run cache for identical READ-ONLY calls (same tenant/run by
         # construction: cache is cleared at run() start). Writes, live
         # integrations requiring connections, and unknown tools bypass.

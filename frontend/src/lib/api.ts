@@ -41,6 +41,14 @@ import type {
   ProductListResponse,
   CatalogOrderListResponse,
   ProductAgentStatusResponse,
+  ProductAgentCatalogResponse,
+  ProductAgentPlatform,
+  ProductAgentStartResponse,
+  ProductAgentRun,
+  ProductAgentRunListResponse,
+  ProductAgentFindingListResponse,
+  ProductAgentRecommendationListResponse,
+  ProductAgentActivityResponse,
   AnalyticsOverviewResponse,
   RevenueTimeSeriesResponse,
   OrderTimeSeriesResponse,
@@ -80,6 +88,14 @@ export type {
   ProductListResponse,
   CatalogOrderListResponse,
   ProductAgentStatusResponse,
+  ProductAgentCatalogResponse,
+  ProductAgentPlatform,
+  ProductAgentStartResponse,
+  ProductAgentRun,
+  ProductAgentRunListResponse,
+  ProductAgentFindingListResponse,
+  ProductAgentRecommendationListResponse,
+  ProductAgentActivityResponse,
   AnalyticsOverviewResponse,
   RevenueTimeSeriesResponse,
   OrderTimeSeriesResponse,
@@ -381,13 +397,93 @@ export function fetchOrders(limit = 100, offset = 0): Promise<CatalogOrderListRe
 }
 
 /**
- * Product Agent authored state (status headline, insights, recommendations,
- * activity). The backend endpoint is planned, not shipped yet — callers must
- * handle the 404 and fall back to the labelled preview state in
- * lib/productAgent.ts rather than inventing live values.
+ * Product Agent — the autonomous product-growth employee's control surface.
+ *
+ * NOTE: `startProductAgentRun` is retained for the API contract but is NOT
+ * the Product Agent dashboard's trigger. The Product Agent joins the shared
+ * AI Team analysis cycle started from the AI Team page's Start Analysis.
+ *
+ * `fetchProductAgentStatus` returns the complete dashboard read model
+ * (header, business snapshot, progress stage, findings, recommendations,
+ * real activity, honest platform states) in ONE request, so the page never
+ * has to stitch several endpoints together or invent a value in between.
  */
-export function fetchProductAgentStatus(): Promise<ProductAgentStatusResponse> {
-  return request<ProductAgentStatusResponse>("/api/product-agi/status");
+export function fetchProductAgentStatus(
+  windowDays?: number,
+): Promise<ProductAgentStatusResponse> {
+  const qs = windowDays ? `?window_days=${windowDays}` : "";
+  return request<ProductAgentStatusResponse>(`/api/product-agi/status${qs}`);
+}
+
+export function fetchProductAgentCatalog(
+  windowDays = 365,
+): Promise<ProductAgentCatalogResponse> {
+  return request<ProductAgentCatalogResponse>(
+    `/api/product-agi/catalog?window_days=${windowDays}`,
+  );
+}
+
+export function fetchProductAgentPlatforms(): Promise<{
+  platforms: ProductAgentPlatform[];
+}> {
+  return request("/api/product-agi/platforms");
+}
+
+export function startProductAgentRun(
+  windowDays = 365,
+  objective?: string,
+): Promise<ProductAgentStartResponse> {
+  const qs = new URLSearchParams({ window_days: String(windowDays) });
+  if (objective) qs.set("objective", objective);
+  return request<ProductAgentStartResponse>(`/api/product-agi/runs?${qs}`, {
+    method: "POST",
+  });
+}
+
+export function fetchProductAgentRuns(
+  analysisCycleId?: string,
+): Promise<ProductAgentRunListResponse> {
+  const qs = analysisCycleId
+    ? `/api/product-agi/runs?limit=20&analysis_cycle_id=${encodeURIComponent(analysisCycleId)}`
+    : "/api/product-agi/runs?limit=20";
+  return request<ProductAgentRunListResponse>(qs);
+}
+
+export function fetchProductAgentRun(
+  runId: string,
+): Promise<ProductAgentRun> {
+  return request<ProductAgentRun>(`/api/product-agi/runs/${runId}`);
+}
+
+export function fetchProductAgentFindings(
+  runId: string,
+): Promise<ProductAgentFindingListResponse> {
+  return request<ProductAgentFindingListResponse>(
+    `/api/product-agi/runs/${runId}/findings`,
+  );
+}
+
+export function fetchProductAgentRecommendations(
+  runId: string,
+): Promise<ProductAgentRecommendationListResponse> {
+  return request<ProductAgentRecommendationListResponse>(
+    `/api/product-agi/runs/${runId}/recommendations`,
+  );
+}
+
+export function fetchProductAgentActivity(
+  runId: string,
+  afterSeq = 0,
+): Promise<ProductAgentActivityResponse> {
+  return request<ProductAgentActivityResponse>(
+    `/api/product-agi/runs/${runId}/activity?after_seq=${afterSeq}&limit=300`,
+  );
+}
+
+export function cancelProductAgentRun(runId: string): Promise<ProductAgentRun> {
+  return request<ProductAgentRun>(`/api/product-agi/runs/${runId}/cancel`, {
+    method: "POST",
+  });
 }
 
 /* ── Agent Debate Dashboard ────────────────────────────────────────────── */

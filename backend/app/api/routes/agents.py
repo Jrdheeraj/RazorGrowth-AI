@@ -155,11 +155,13 @@ def run_agents(
 
     In mode="team" (the AI Team "Start Analysis" entry point) execution is
     REQUEST-INDEPENDENT: the cycle and audit rows are persisted, the
-    Marketing Agent and the orchestrator plan are dispatched to
-    server-owned background workers, and this endpoint returns 202 with
-    the cycle id immediately. The browser only observes via polling;
-    navigation, refresh, or disconnect never cancels backend execution.
-    Other modes run synchronously (unchanged legacy behavior).
+    Marketing Agent, the Product Agent and the orchestrator plan are
+    dispatched to server-owned background workers, and this endpoint
+    returns 202 with the cycle id immediately. The browser only observes
+    via polling; navigation, refresh, or disconnect never cancels backend
+    execution. Both autonomous employees share the same cycle id and run
+    concurrently — neither waits for the other. Other modes run
+    synchronously (unchanged legacy behavior).
     """
     if request.mode not in ("fast", "deep", "growth_team", "team"):
         raise HTTPException(status_code=422, detail="mode must be 'fast', 'deep', 'growth_team', or 'team'")
@@ -225,6 +227,17 @@ def run_agents(
             # contains its own failures): Start Analysis never fails
             # because the Marketing Agent could not start.
             log.exception("AI Team Marketing Agent startup failed (isolated)")
+            try:
+                db.rollback()
+            except Exception:
+                pass
+        # Same shared cycle, same user action, independent worker. Added
+        # alongside the Marketing Agent above, never in front of it: both
+        # are dispatched and neither waits for the other.
+        try:
+            _start_team_product_agent(db, merchant_id, params, cycle_id)
+        except Exception:
+            log.exception("AI Team Product Agent startup failed (isolated)")
             try:
                 db.rollback()
             except Exception:
@@ -452,6 +465,74 @@ def _start_team_marketing_agent(
     except Exception:
         # Isolation boundary: Marketing Agent startup must never fail Start Analysis.
         log.exception("AI Team Marketing Agent startup failed (isolated)")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+
+def _start_team_product_agent(
+    db: Session,
+    merchant_id: uuid.UUID,
+    params: dict[str, Any],
+    cycle_id: str,
+) -> None:
+    """Start the Product Agent as part of an AI Team analysis cycle.
+
+    Structurally identical to ``_start_team_marketing_agent`` and
+    deliberately kept as its own helper: it reuses the existing
+    ``ProductAgentRun`` row, the existing ProductAGI loop (shared MCP
+    client, RAG, safety gate, approval wiring) and the existing AgentRun
+    audit table. It creates NO new orchestrator, NO new MCP client and NO
+    new approval system. Every failure path is swallowed so the Product
+    Agent can never break the team analysis.
+    """
+    try:
+        from backend.app.agents.product_agi.cycle import (
+            PRODUCT_AGENT_AGENT_NAME,
+            create_cycle_run as create_product_cycle_run,
+            trigger_product_agent_parallel,
+        )
+        from backend.app.services.agent_run_service import AgentRunService
+
+        objective = str(params.get("objective") or "AI Team analysis")
+        run_row = create_product_cycle_run(
+            db,
+            merchant_id=merchant_id,
+            objective=objective,
+            cycle_id=cycle_id,
+            window_days=params.get("window_days", 90),
+        )
+        db.flush()
+        # Audit row so the AI Team page lists Product Agent under this cycle.
+        AgentRunService(db).start_run(
+            merchant_id=merchant_id,
+            agent_name=PRODUCT_AGENT_AGENT_NAME,
+            orchestrator_run_id=cycle_id,
+            mode="team",
+            input_summary={"objective": objective[:200]},
+        )
+        db.flush()
+        from backend.app.db.session import get_session_factory
+
+        # Commit the rows BEFORE the worker thread can see them: the
+        # worker uses its own session and must observe committed state.
+        try:
+            db.commit()
+        except Exception:
+            log.exception("Failed to commit team Product Agent rows")
+            db.rollback()
+            return
+        trigger_product_agent_parallel(
+            get_session_factory(),
+            merchant_id=merchant_id,
+            objective=objective,
+            cycle_id=cycle_id,
+            run_id=run_row.id,
+        )
+    except Exception:
+        # Isolation boundary: Product Agent startup must never fail Start Analysis.
+        log.exception("AI Team Product Agent startup failed (isolated)")
         try:
             db.rollback()
         except Exception:

@@ -7,7 +7,7 @@
    stays visible above, between and around sections. No giant opaque
    container, no glassmorphism, no dark SaaS theme.
 
-   Grid (12 cols, 1440px target):
+    Grid (12 cols, shared Radar container):
      hero:            copy (7) + illustration (5)
      row 1:           agent.status (8) + business.snapshot (4)
      row 2:           agent.progress (12)
@@ -29,13 +29,23 @@
 .magi-shell {
   position: relative;
   z-index: 1;
-  width: 100%;
-  max-width: var(--shell-max);
+  /* Shared Radar container: same width, centering and gutters as
+   * .rg-page--wide in GrowthRadar.css (min(1920px, 100% - 80px)).
+   * The previous max-width: var(--shell-max) (1200px) compressed the whole
+   * dashboard; the horizontal gutter is dropped because the container width
+   * already carries the 40px outer margins. */
+  width: min(1920px, calc(100% - 80px));
+  max-width: none;
   margin-inline: auto;
-  padding: clamp(28px, 5vw, 56px) var(--gutter) 8px;
+  padding: clamp(28px, 5vw, 56px) 0 8px;
   display: flex;
   flex-direction: column;
   gap: clamp(16px, 2.4vw, 24px);
+}
+@media (max-width: 1100px) {
+  .magi-shell {
+    width: min(1920px, calc(100% - 48px));
+  }
 }
 
 .magi-loading {
@@ -44,13 +54,9 @@
   padding: 40px 0;
 }
 
-/* While the Marketing Agent page is mounted, hide the shared tall
- * SiteFooter (homepage + other routes are unaffected — the class is
- * removed on unmount). The compact .magi-signoff strip below acts as
- * this page's finishing footer. */
-body.magi-hide-site-footer .site-footer {
-  display: none;
-}
+/* The shared global SiteFooter stays visible on this page (like every
+ * other route). The compact .magi-signoff strip below is page content,
+ * not site chrome. */
 
 /* Compact finishing strip: one horizontal flex row, vertically centred,
  * same container as the dashboard above, transparent so the illustrated
@@ -1200,6 +1206,89 @@ body.magi-hide-site-footer .site-footer {
   color: var(--ink-faint);
 }
 
+/* ── MCP TOOL CALLS ───────────────────────────────────────────────────────
+   * Additive panel: shows what the standardized connectivity layer did
+   * during the selected run. State tone comes from the backend's recorded
+   * status, so a refusal can never render as a success. */
+
+.magi-mcp {
+  margin-top: 4px;
+}
+
+.magi-mcp__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.magi-mcp__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.magi-mcp__tool {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.magi-mcp__state {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.magi-mcp__state--ok {
+  color: var(--ink-soft);
+}
+
+.magi-mcp__state--denied {
+  color: var(--amber-deep, #8a5a1a);
+}
+
+.magi-mcp__state--idle {
+  color: var(--ink-faint);
+}
+
+.magi-mcp__state--bad {
+  color: var(--coral-deep);
+}
+
+.magi-mcp__flag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--coral-deep);
+  border: 1px solid var(--coral-deep);
+  padding: 0 4px;
+}
+
+.magi-mcp__meta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  margin-left: auto;
+}
+
+.magi-mcp__note {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  line-height: 1.4;
+}
+
 /* ── AGENT ACTIVITY ─────────────────────────────────────────────────── */
 
 .magi-activity {
@@ -1552,6 +1641,26 @@ body.magi-hide-site-footer .site-footer {
   background: var(--paper-bright);
 }
 
+/* Withheld send: approved and ready, but external execution is off so
+   nothing was delivered. Reads as "waiting on a switch", not as an error. */
+.magi-int__status--preview_only {
+  color: var(--act-amber-deep);
+  border-color: rgba(180, 130, 40, 0.45);
+  background: rgba(224, 176, 74, 0.14);
+}
+
+.magi-int__status--sent {
+  color: var(--green-deep);
+  border-color: rgba(112, 184, 138, 0.5);
+  background: rgba(112, 184, 138, 0.1);
+}
+
+.magi-int__status--failed {
+  color: var(--coral-deep);
+  border-color: rgba(169, 79, 56, 0.4);
+  background: var(--coral-wash);
+}
+
 .magi-int__status--requires_integration {
   color: var(--coral-deep);
   border-color: rgba(169, 79, 56, 0.4);
@@ -1684,6 +1793,7 @@ body.magi-hide-site-footer .site-footer {
 
 @media (max-width: 640px) {
   .magi-shell {
+    width: min(1920px, calc(100% - 32px));
     padding-top: 20px;
   }
   .magi-span-third {

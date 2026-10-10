@@ -187,12 +187,14 @@ def me(
         .scalars()
         .all()
     )
+    created = getattr(user, "created_at", None)
     return {
         "id": str(user.id),
         "email": user.email,
         "full_name": user.full_name,
         "status": str(getattr(user.status, "value", user.status)),
         "memberships": [_membership_out(m) for m in rows],
+        "member_since": created.isoformat() if created is not None else None,
     }
 
 

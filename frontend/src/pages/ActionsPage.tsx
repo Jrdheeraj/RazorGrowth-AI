@@ -137,7 +137,7 @@ function statusLabel(status: string): string {
     case "executing": return "Running";
     case "completed": return "Completed";
     case "failed": return "Failed";
-    default: return status;
+    default: return "Unknown state";
   }
 }
 
@@ -151,6 +151,49 @@ function statusTone(status: string): string {
     case "failed": return "failed";
     default: return "waiting";
   }
+}
+
+/* ── Real failure reasons ───────────────────────────────────────────────── */
+
+/**
+ * The backend's own explanation for a failed operation, in the operator's
+ * language. A refused execution is not a mystery: the API returns a stable
+ * error code, and every one of these has a different remedy, so collapsing
+ * them into one generic sentence hid the actual cause.
+ */
+function describeError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err ?? "");
+  if (raw.startsWith("NETWORK_ERROR")) {
+    return "The backend is unreachable — no change was saved.";
+  }
+  if (raw.includes("EXECUTION_DISABLED_BY_ENVIRONMENT")) {
+    return "Execution is disabled in this environment.";
+  }
+  if (raw.includes("GUARDRAIL_REJECTED")) {
+    return `The safety policy blocked it: ${raw.replace(/^GUARDRAIL_REJECTED:\s*/, "")}`;
+  }
+  if (raw.includes("INTEGRATION_UNAVAILABLE")) {
+    return "The connected integration is not available yet.";
+  }
+  if (raw.includes("ACTION_ALREADY_EXECUTING")) {
+    return "This action is already running.";
+  }
+  if (raw.includes("MERCHANT_ACCESS_DENIED")) {
+    return "This action belongs to another workspace.";
+  }
+  if (raw.includes("ACTION_NOT_FOUND")) {
+    return "This action no longer exists.";
+  }
+  if (raw.includes("INVALID_ACTION_STATE")) {
+    return raw.replace(/^INVALID_ACTION_STATE:\s*/, "");
+  }
+  if (raw.includes("INSUFFICIENT_ROLE")) {
+    return "Your role does not allow this decision. An admin must approve it.";
+  }
+  if (/\b40[13]\b/.test(raw)) {
+    return raw;
+  }
+  return raw || "The server did not return a reason.";
 }
 
 /** Board column definition — adapted from the reference kanban's COLUMNS. */
@@ -186,6 +229,24 @@ function audienceOf(action: AgentAction): number | null {
   return typeof input.target_count === "number" ? input.target_count : null;
 }
 
+/**
+ * The expected impact an agent stated, when it stated one.
+ * The Product Agent records this in metadata.expected_impact as
+ * {status, text, basis}; it is only reported when the agent could actually
+ * support it, so an unavailable impact never becomes a number.
+ */
+function expectedImpactText(action: AgentAction): string | null {
+  const input = action.input_payload ?? {};
+  const meta = (input.metadata ?? {}) as Record<string, unknown>;
+  const impact = meta.expected_impact as
+    | { status?: string; text?: string }
+    | undefined;
+  if (impact && impact.status === "available" && typeof impact.text === "string") {
+    return impact.text;
+  }
+  return null;
+}
+
 /** 1–5 impact meter (reference PriorityDots) over the real money involved. */
 function impactLevel(amount: number | null): number {
   if (amount === null || amount <= 0) return 0;
@@ -199,6 +260,8 @@ function impactLevel(amount: number | null): number {
 function impactTooltip(action: AgentAction): string {
   const amount = amountOf(action);
   if (amount !== null) return `Expected impact: up to ${rupees(amount)}`;
+  const stated = expectedImpactText(action);
+  if (stated !== null) return `Expected impact: ${stated}`;
   const audience = audienceOf(action);
   if (audience !== null) return `Expected impact: ${audience} selected customers`;
   return "No monetary impact recorded for this action";
@@ -336,9 +399,10 @@ function ImpactDots({ action }: { action: AgentAction }) {
   const level = impactLevel(amountOf(action));
   const title = impactTooltip(action);
   if (level === 0) {
+    const stated = expectedImpactText(action);
     return (
       <span className="impact-dots impact-dots--none" title={title}>
-        no money involved
+        {stated !== null ? "impact stated" : "no money involved"}
       </span>
     );
   }
@@ -368,6 +432,7 @@ function BoardCard({
   onReject,
   onRun,
   busy,
+  locked = false,
   result,
 }: {
   action: AgentAction;
@@ -377,10 +442,12 @@ function BoardCard({
   onReject: () => void;
   onRun: () => void;
   busy: boolean;
+  locked?: boolean;
   result: ExecutionResponse | undefined;
 }) {
   const copy = actionCopy(action.action_type);
   const audience = audienceOf(action);
+  const disabled = busy || locked;
   return (
     <div className={`board-card board-card--${accent}`}>
       <button type="button" className="board-card__main" onClick={onOpen} title="Open action details">
@@ -403,17 +470,17 @@ function BoardCard({
       {/* Controls render as siblings (never nested buttons) — reference pattern. */}
       {action.status === "requested" && (
         <div className="board-card__controls">
-          <Button variant="primary" mono size="sm" disabled={busy} onClick={onApprove}>
+          <Button variant="primary" mono size="sm" disabled={disabled} onClick={onApprove}>
             {busy ? "Saving…" : "Approve"}
           </Button>
-          <Button variant="secondary" mono size="sm" disabled={busy} onClick={onReject}>
-            Reject
+          <Button variant="secondary" mono size="sm" disabled={disabled} onClick={onReject}>
+            {busy ? "Saving…" : "Reject"}
           </Button>
         </div>
       )}
       {action.status === "approved" && (
         <div className="board-card__controls">
-          <Button variant="primary" mono size="sm" disabled={busy} onClick={onRun}>
+          <Button variant="primary" mono size="sm" disabled={disabled} onClick={onRun}>
             {busy ? "Running…" : "Run now"}
           </Button>
         </div>
@@ -435,7 +502,7 @@ function BoardCard({
         </div>
       )}
       {result && (
-        <div className={`board-card__result${result.status === "failed" ? " board-card__result--failure" : ""}`}>
+        <div className={`board-card__result${result.status === "failed" || action.status === "failed" ? " board-card__result--failure" : ""}`}>
           {result.message}
         </div>
       )}
@@ -464,9 +531,11 @@ export function ActionsPage() {
   const [audits, setAudits] = useState<Record<string, AuditEventRow[]>>({});
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  /* ``silent`` is used by the background poller: a periodic refresh must not
+   * wipe a decision error the operator still needs to read. */
+  const load = useCallback(async (silent = false) => {
     try {
-      setError(null);
+      if (!silent) setError(null);
       const data = await fetchActions();
       setActions(data.actions ?? []);
     } catch (err) {
@@ -475,14 +544,24 @@ export function ActionsPage() {
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
     // Read-only polling: keeps this board in lockstep with the canonical
     // agent_actions state when approve/reject/execute happens elsewhere
     // (Marketing Agent dashboard, another tab) — never creates state.
     const id = window.setInterval(() => {
-      void load();
+      void load(true);
     }, 5000);
     return () => window.clearInterval(id);
+  }, [load]);
+
+  // Re-read when the tab regains focus so a decision made elsewhere is never
+  // presented as the current state after a long pause.
+  useEffect(() => {
+    const onFocus = () => {
+      void load(true);
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [load]);
 
   /* Close the overlay on Escape — reference detail-overlay behavior. */
@@ -540,8 +619,22 @@ export function ActionsPage() {
     .sort((x, y) => new Date(y.at ?? 0).getTime() - new Date(x.at ?? 0).getTime())
     .slice(0, 8);
 
-  /* Approve / reject / execute — existing APIs, unchanged. */
+  /* Approve / reject / execute — existing authenticated endpoints, unchanged.
+   *
+   * Rules this preserves:
+   *  - a single mutation at a time (busyId is one slot, and the controls for
+   *    an in-flight action are disabled) so a double click cannot race;
+   *  - success is only reported AFTER the backend confirms it;
+   *  - a failure surfaces the server's real reason (status code + message)
+   *    instead of a generic string, so "blocked", "already executed" and
+   *    "needs a higher role" are distinguishable;
+   *  - the execution result is stored for BOTH outcomes, because the backend
+   *    answers a failed execution with HTTP 400 + {error, action_id, metadata};
+   *  - the cached audit trail for this action is invalidated so the overlay
+   *    shows the decision that was just made, not the pre-decision history;
+   *  - refreshes only after the server has answered, never optimistically. */
   const handle = async (action: AgentAction, op: "approve" | "reject" | "execute") => {
+    if (busyId) return;
     setBusyId(action.id);
     setError(null);
     try {
@@ -550,16 +643,39 @@ export function ActionsPage() {
       } else if (op === "reject") {
         await rejectAction(action.id);
       } else {
-        const result = await executeAction(action.id);
-        setResults((r) => ({ ...r, [action.id]: result }));
+        try {
+          const result = await executeAction(action.id);
+          setResults((r) => ({ ...r, [action.id]: result }));
+        } catch (execErr) {
+          // The backend returns HTTP 400 with the real reason for a refused
+          // execution. Keep that reason on the card instead of only in a
+          // banner, so the operator can see WHY it stopped.
+          const reason = describeError(execErr);
+          setResults((r) => ({
+            ...r,
+            [action.id]: {
+              action_id: action.id,
+              action_type: action.action_type,
+              status: action.status,
+              result: {},
+              message: reason,
+            },
+          }));
+          throw execErr;
+        }
       }
+      setAudits((a) => {
+        if (!(action.id in a)) return a;
+        const next = { ...a };
+        delete next[action.id];
+        return next;
+      });
       await load();
     } catch (err) {
-      // Friendly message only — no raw API errors surfaced.
       setError(
         op === "execute"
-          ? "The action could not run. It stopped safely — nothing unauthorized happened."
-          : "The decision could not be saved. Please try again."
+          ? `The action could not run. ${describeError(err)}`
+          : `The decision could not be saved. ${describeError(err)}`
       );
       await load();
     } finally {
@@ -570,15 +686,14 @@ export function ActionsPage() {
   /* Audit trail — loaded when a detail overlay opens (existing API). */
   const openDetail = async (action: AgentAction) => {
     setOpenId(action.id);
-    if (!audits[action.id]) {
-      try {
-        const data = await fetchActionAudit(action.id);
-        // Ascending — story order: proposed → decision → execution → result.
-        const events = [...(data.audit_events ?? [])].reverse();
-        setAudits((a) => ({ ...a, [action.id]: events }));
-      } catch {
-        setError("The audit trail could not be loaded. Please try again.");
-      }
+    setError(null);
+    try {
+      const data = await fetchActionAudit(action.id);
+      // Ascending — story order: proposed → decision → execution → result.
+      const events = [...(data.audit_events ?? [])].reverse();
+      setAudits((a) => ({ ...a, [action.id]: events }));
+    } catch (err) {
+      setError(`The audit trail could not be loaded. ${describeError(err)}`);
     }
   };
 
@@ -723,6 +838,10 @@ export function ActionsPage() {
                         action={action}
                         accent={col.accent}
                         busy={busyId === action.id}
+                        // While ANY decision is in flight every control is
+                        // disabled, so a second click can never race the first
+                        // request or re-enable controls mid-flight.
+                        locked={busyId !== null}
                         result={results[action.id]}
                         onOpen={() => void openDetail(action)}
                         onApprove={() => void handle(action, "approve")}
@@ -765,6 +884,7 @@ export function ActionsPage() {
           audit={audits[openAction.id]}
           result={results[openAction.id]}
           busy={busyId === openAction.id}
+          locked={busyId !== null && busyId !== openAction.id}
           onApprove={() => void handle(openAction, "approve")}
           onReject={() => void handle(openAction, "reject")}
           onRun={() => void handle(openAction, "execute")}
@@ -793,6 +913,7 @@ function ActionDetailOverlay({
   audit,
   result,
   busy,
+  locked = false,
   onApprove,
   onReject,
   onRun,
@@ -802,6 +923,7 @@ function ActionDetailOverlay({
   audit: AuditEventRow[] | undefined;
   result: ExecutionResponse | undefined;
   busy: boolean;
+  locked?: boolean;
   onApprove: () => void;
   onReject: () => void;
   onRun: () => void;
@@ -963,16 +1085,16 @@ function ActionDetailOverlay({
           <div className="action-overlay__controls">
             {action.status === "requested" && (
               <>
-                <Button variant="primary" mono disabled={busy} onClick={onApprove}>
+                <Button variant="primary" mono disabled={busy || locked} onClick={onApprove}>
                   {busy ? "Saving…" : "Approve"}
                 </Button>
-                <Button variant="secondary" mono disabled={busy} onClick={onReject}>
-                  Reject
+                <Button variant="secondary" mono disabled={busy || locked} onClick={onReject}>
+                  {busy ? "Saving…" : "Reject"}
                 </Button>
               </>
             )}
             {action.status === "approved" && (
-              <Button variant="primary" mono disabled={busy} onClick={onRun}>
+              <Button variant="primary" mono disabled={busy || locked} onClick={onRun}>
                 {busy ? "Running…" : "Run now"}
               </Button>
             )}

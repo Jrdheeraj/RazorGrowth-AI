@@ -152,7 +152,7 @@ class TestRouteRegistration:
 class TestLifecycle:
     def test_full_lifecycle_requested_to_completed(self, client, db_session):
         m = make_merchant(db_session)
-        action = make_action(db_session, m, "send_campaign")
+        action = make_action(db_session, m, "create_discount")
 
         r = client.get(f"/api/actions/{action.id}")
         assert r.status_code == 200 and r.json()["status"] == "requested"
@@ -171,8 +171,8 @@ class TestLifecycle:
         refreshed = db_session.get(AgentAction, action.id)
         assert refreshed.status == AgentActionStatus.completed
         assert refreshed.output_payload.get("mode") == "test"
-        # Test mode must never claim a real send happened
-        assert refreshed.output_payload.get("sent") is False
+        # Test mode must never claim a real external effect happened.
+        assert refreshed.output_payload.get("created") is False
 
     def test_approve_twice_fails(self, client, db_session):
         m = make_merchant(db_session)
@@ -638,7 +638,11 @@ class TestUnknownActionType:
 class TestAuditTrail:
     def test_audit_records_each_lifecycle_step(self, client, db_session):
         m = make_merchant(db_session)
-        action = make_action(db_session, m)
+        # create_discount: an existing offline executor. This test asserts the
+        # action STATE MACHINE + audit trail, which are action-type agnostic
+        # and live in action_service. Marketing external writes are routed
+        # through MCP instead - see tests/test_mcp_write_routing.py.
+        action = make_action(db_session, m, "create_discount")
 
         client.post(f"/api/actions/{action.id}/approve")
         client.post(f"/api/actions/{action.id}/execute")

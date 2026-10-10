@@ -37,13 +37,18 @@ def _seed_action(db_session, merchant) -> uuid.UUID:
     from backend.app.models.agent_action import AgentAction
     from backend.app.models.enums import AgentActionStatus, AgentActionType
 
+    # create_discount: this suite asserts the ROLE/STATE matrix, which is
+    # action-type agnostic. Marketing external writes (send_campaign,
+    # publish_social_post, create_ad_campaign) are routed through MCP and
+    # refused there without their integration connected - which would make
+    # every execute here fail for a connectivity reason instead of a role
+    # reason. MCP write routing is covered in tests/test_mcp_write_routing.py.
     action = AgentAction(
         id=uuid.uuid4(),
         merchant_id=merchant.id,
-        action_type=AgentActionType.send_campaign,
+        action_type=AgentActionType.create_discount,
         status=AgentActionStatus.requested,
-        input_payload={"campaign_type": "email", "target": {"segment": "all"},
-                       "target_count": 3},
+        input_payload={"percentage": 10},
         requested_by="role_seed",
     )
     db_session.add(action)
@@ -160,7 +165,7 @@ class TestOperationalRoleEnforcement:
         # Admin approves…
         r = client.post(f"/api/actions/{aid}/approve", headers=bearer(u_admin))
         assert r.status_code == 200
-        # …operator may now execute (test-mode executor).
+        # …operator may now execute (non-marketing action type).
         r = client.post(f"/api/actions/{aid}/execute", headers=bearer(u_op))
         assert r.status_code == 200
 

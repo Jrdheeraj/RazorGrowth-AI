@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "isolatedModules": false,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": [],
+    "outDir": ".test-dist"
+  },
+  "include": [
+    "src/office/bubbleLayout.ts",
+    "src/office/__tests__/officeLayout.test.ts",
+    "src/pages/agentsShared.ts",
+    "src/pages/agentStatusMapping.ts",
+    "src/types/api.ts"
+  ]
+}

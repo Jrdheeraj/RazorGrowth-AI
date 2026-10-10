@@ -19,9 +19,18 @@
 .world-column {
   position: relative;
   z-index: 1;
+  /* minmax(0, 1fr) — never let a wide child stretch the track past the
+     viewport; blocks and scroll containers inside size themselves normally. */
+  grid-template-columns: minmax(0, 1fr);
   display: grid;
   gap: clamp(28px, 5vw, 64px);
   padding: clamp(28px, 5vw, 64px) clamp(10px, 2.5vw, 28px) 0;
+}
+
+/* Grid/flex items default to `min-width: auto`, which lets min-content
+   blow the sheet out past the viewport. Opt out explicitly. */
+.world-column > * {
+  min-width: 0;
 }
 
 /* Pre-JS defaults — a valid calm morning world on first paint. */
@@ -148,6 +157,7 @@
 .readable {
   --sheet-pad: clamp(20px, 4vw, 52px);
   position: relative;
+  min-width: 0;
   width: min(100%, calc(var(--shell-max) + 2 * var(--sheet-pad)));
   margin-inline: auto;
   padding: clamp(24px, 4vw, 48px) var(--sheet-pad);
@@ -169,11 +179,12 @@
 /* headings become small editorial title-cards on the sheet */
 .readable .page-hero {
   display: inline-block;
+  max-width: 100%;
   background: var(--paper-bright);
   border: 1px solid var(--line);
   border-radius: var(--radius-window);
   box-shadow: 5px 5px 0 rgba(33, 19, 14, 0.12);
-  padding: 18px 26px;
+  padding: 18px clamp(16px, 5vw, 26px);
 }
 
 /* mobile: tighter margins, sheets keep their solid ground */

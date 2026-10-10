@@ -36,6 +36,10 @@ body {
   line-height: var(--leading-body);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Long words, ids and URLs may break instead of pushing the layout past
+     the viewport. `anywhere` (unlike `break-word`) also shrinks the
+     min-content size, which is what lets flex/grid items actually shrink. */
+  overflow-wrap: anywhere;
 }
 
 /* No accidental horizontal overflow, ever. */

@@ -54,7 +54,7 @@
 
   /* Display scale — heavy, compact, editorial */
   --text-display-xl: clamp(2.6rem, 6.4vw, 4.9rem);   /* hero statements     */
-  --text-display-lg: clamp(2.1rem, 4.6vw, 3.4rem);   /* section headlines   */
+  --text-display-lg: clamp(1.85rem, 4.6vw, 3.4rem);  /* section headlines   */
   --text-display-md: clamp(1.45rem, 2.6vw, 2rem);    /* panel headlines     */
   --text-title: 1.15rem;                              /* card titles        */
   --text-body: 0.98rem;

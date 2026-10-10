@@ -173,6 +173,11 @@ class MarketingAGIState:
     # tool usage
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     selected_tools: list[str] = field(default_factory=list)
+    # MCP (standardized tool connectivity) observability. One safe row per
+    # invocation: tool, server, provider, status, duration, error code,
+    # read/write, approval requirement, risk. Never credentials, prompts or
+    # raw provider bodies.
+    mcp_calls: list[dict[str, Any]] = field(default_factory=list)
 
     # plan
     plan: list[dict[str, Any]] = field(default_factory=list)
@@ -222,6 +227,11 @@ class MarketingAGIState:
         "retry_count": 0,
         "tool_calls": 0,
         "rag_rounds": 0,
+        "mcp_calls": 0,
+        "mcp_total_ms": 0,
+        "mcp_cache_hits": 0,
+        "mcp_errors": 0,
+        "mcp_rate_limited": 0,
     })
 
     # ── helpers ──────────────────────────────────────────────────────────
@@ -266,6 +276,7 @@ class MarketingAGIState:
             "retrieval_log": self.retrieval_log,
             "tool_calls": self.tool_calls,
             "selected_tools": self.selected_tools,
+            "mcp_calls": self.mcp_calls,
             "plan": self.plan,
             "completed_steps": self.completed_steps,
             "failed_steps": self.failed_steps,

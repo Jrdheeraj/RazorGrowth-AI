@@ -43,6 +43,9 @@ class AGIStateSummary(BaseModel):
     evidence: list[dict[str, Any]] = Field(default_factory=list)
     retrieval_log: list[dict[str, Any]] = Field(default_factory=list)
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    # MCP tool-call activity for this run (safe metadata only — never
+    # credentials, never raw provider bodies).
+    mcp_calls: list[dict[str, Any]] = Field(default_factory=list)
     workflow: str | None = None
     plan: list[dict[str, Any]] = Field(default_factory=list)
     campaign_draft: dict[str, Any] | None = None
@@ -155,6 +158,32 @@ class AGIHandoffListResponse(BaseModel):
 
 class AGIToolCatalogResponse(BaseModel):
     tools: list[dict[str, Any]]
+    # MCP — the standardized tool connectivity layer. ``mcp_tools`` is the
+    # normalized, policy-declared catalog (read/write, approval, risk,
+    # integration requirement) the Marketing Agent reasons over.
+    mcp_tools: list[dict[str, Any]] = Field(default_factory=list)
+    mcp_policies: list[dict[str, Any]] = Field(default_factory=list)
+    mcp_allowlists: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class AGIMCPToolCall(BaseModel):
+    """One MCP invocation as the dashboard shows it."""
+
+    tool: str
+    server: str
+    provider: str
+    status: str
+    read_only: bool
+    requires_approval: bool
+    risk_level: str
+    duration_ms: int = 0
+    error_code: str | None = None
+    error_message: str | None = None
+    cached: bool = False
+    retries: int = 0
+    summary: str = ""
+    args: dict[str, Any] = Field(default_factory=dict)
+    ts: str | None = None
 
 
 class AGIWorkflowCatalogResponse(BaseModel):
@@ -170,3 +199,6 @@ class AGIStatusResponse(BaseModel):
     marketing_stack: list[dict[str, Any]] = Field(default_factory=list)
     tools_available: int
     workflows_available: int
+    # MCP tool-connectivity layer summary (counts + servers only — never
+    # credentials, never connection secrets).
+    mcp: dict[str, Any] = Field(default_factory=dict)

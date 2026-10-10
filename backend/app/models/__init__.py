@@ -75,3 +75,12 @@ from backend.app.models.marketing_agi import (  # noqa: F401
 from backend.app.models.integration_connection import (  # noqa: F401
     IntegrationConnection,
 )
+
+# Product AGI — autonomous product-growth employee (isolated module).
+# Imported AFTER agent_actions because recommendations reference it.
+from backend.app.models.product_agi import (  # noqa: F401
+    ProductAgentRun,
+    ProductAgentEvent,
+    ProductAgentFinding,
+    ProductAgentRecommendation,
+)

@@ -35,6 +35,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import get_settings
+from backend.app.core.execution_policy import (
+    describe_blocking_reason,
+    is_external_execution_enabled,
+)
 from backend.app.models.enums import AgentActionType, AgentActionStatus, ActorType, AuditEventType
 from backend.app.models.agent_action import AgentAction
 from backend.app.models.audit_event import AuditEvent
@@ -50,6 +54,7 @@ from backend.app.services.action_executor import (
     ExecutorResult,
 )
 from backend.app.services.marketing_action_sync import sync_marketing_from_action
+from backend.app.services.product_action_sync import sync_product_agent_from_action
 
 log = logging.getLogger(__name__)
 
@@ -250,6 +255,9 @@ def approve_action(
     # Mirror to the Marketing Agent workspace (lifecycle + run snapshot).
     sync_marketing_from_action(db, action)
 
+    # Mirror to the Product Agent workspace (run status + events).
+    sync_product_agent_from_action(db, action)
+
     _write_audit_event(
         db,
         action.merchant_id,
@@ -289,6 +297,9 @@ def reject_action(
 
     # Mirror to the Marketing Agent workspace (lifecycle + run snapshot).
     sync_marketing_from_action(db, action)
+
+    # Mirror to the Product Agent workspace (run status + events).
+    sync_product_agent_from_action(db, action)
 
     _write_audit_event(
         db,
@@ -351,33 +362,62 @@ def execute_action(
         return ExecutorResult(success=False, error="MERCHANT_ACCESS_DENIED")
 
     # ─── Idempotency & terminal-state checks (BEFORE anything else) ──────
+    # A PREVIEW is not a delivery. When execution was withheld the action was
+    # still marked completed, so a blanket "completed ⇒ no-op" made the
+    # campaign permanently unsendable: enabling execution later could never
+    # retry it. A completed action whose recorded result was a preview is
+    # therefore re-armed and run for real. A completed action that actually
+    # reached a provider remains a strict no-op, so a retry can never deliver
+    # a second email.
     if action.status == AgentActionStatus.completed:
-        # Duplicate execute → safe no-op. Never perform the action twice.
-        log.info(
-            "Idempotent skip — action already completed. id=%s merchant=%s",
-            str(action.id), action.merchant_id,
-        )
-        _write_audit_event(
-            db,
-            action.merchant_id,
-            ActorType.merchant_user,
-            AuditEventType.action_skipped_idempotent,
-            str(action.id),
-            {
-                "action_type": _enum_value(action.action_type),
-                "previous_status": AgentActionStatus.completed.value,
-                "requested_by": actor,
-            },
-            actor_id=actor,
-        )
-        return ExecutorResult(
-            success=True,
-            result_metadata={
-                "idempotent": True,
-                "previous_status": AgentActionStatus.completed.value,
-                "note": "Action already completed — duplicate execute is a safe no-op.",
-            },
-        )
+        if _was_preview_only(action):
+            log.info(
+                "Re-arming previewed action for a real attempt. id=%s merchant=%s",
+                str(action.id), action.merchant_id,
+            )
+            action.status = AgentActionStatus.approved
+            action.completed_at = None
+            _write_audit_event(
+                db,
+                action.merchant_id,
+                ActorType.merchant_user,
+                AuditEventType.action_started,
+                str(action.id),
+                {
+                    "action_type": _enum_value(action.action_type),
+                    "reason": "PREVIEW_RETRY",
+                    "previous_status": AgentActionStatus.completed.value,
+                },
+                actor_id=actor,
+            )
+            db.flush()
+        else:
+            # Duplicate execute → safe no-op. Never perform the action twice.
+            log.info(
+                "Idempotent skip — action already completed. id=%s merchant=%s",
+                str(action.id), action.merchant_id,
+            )
+            _write_audit_event(
+                db,
+                action.merchant_id,
+                ActorType.merchant_user,
+                AuditEventType.action_skipped_idempotent,
+                str(action.id),
+                {
+                    "action_type": _enum_value(action.action_type),
+                    "previous_status": AgentActionStatus.completed.value,
+                    "requested_by": actor,
+                },
+                actor_id=actor,
+            )
+            return ExecutorResult(
+                success=True,
+                result_metadata={
+                    "idempotent": True,
+                    "previous_status": AgentActionStatus.completed.value,
+                    "note": "Action already completed — duplicate execute is a safe no-op.",
+                },
+            )
 
     if action.status in (
         AgentActionStatus.executing,
@@ -405,11 +445,18 @@ def execute_action(
             error=f"INVALID_ACTION_STATE: action is '{_enum_value(action.status)}', expected 'approved'",
         )
 
-    # ─── Environment kill-switch (Phase 6 defence in depth) ──────────────
-    # In production nothing may execute unless EXECUTION_ENABLED was
-    # explicitly set. No role, token, or approval can bypass this.
+    # ─── Environment kill-switch (defence in depth) ───────────────────────
+    # Production refuses the action outright when EXECUTION_ENABLED is off.
+    #
+    # Outside production the action is NOT blocked here: the executor applies
+    # the authoritative policy per external write and returns an explicit,
+    # retryable preview. That used to be the reverse split — this check ran
+    # only in production while the MCP gate and the executor always blocked —
+    # so the same request produced different answers per environment.
+    # Neither path weakens the other: nothing reaches a provider without the
+    # executor's own gate.
     settings = get_settings()
-    if settings.is_production and not settings.EXECUTION_ENABLED:
+    if settings.is_production and not is_external_execution_enabled():
         log.warning(
             "Execution refused — EXECUTION_ENABLED=false in production. "
             "id=%s merchant=%s",
@@ -419,6 +466,9 @@ def execute_action(
             success=False,
             error="EXECUTION_DISABLED_BY_ENVIRONMENT",
             result_metadata={
+                "delivery_status": "preview_only",
+                "blocking_reason": "EXECUTION_DISABLED",
+                "remediation": describe_blocking_reason(),
                 "note": "Execution is disabled by environment configuration "
                 "(EXECUTION_ENABLED=false in production).",
             },
@@ -437,6 +487,9 @@ def execute_action(
 
         # Mirror the guardrail failure to the Marketing Agent workspace.
         sync_marketing_from_action(db, action)
+
+        # Mirror the guardrail failure to the Product Agent workspace.
+        sync_product_agent_from_action(db, action)
 
         _write_audit_event(
             db,
@@ -465,6 +518,9 @@ def execute_action(
     # Mirror execution start to the Marketing Agent workspace.
     sync_marketing_from_action(db, action)
 
+    # Mirror execution start to the Product Agent workspace.
+    sync_product_agent_from_action(db, action)
+
     _write_audit_event(
         db,
         action.merchant_id,
@@ -487,6 +543,13 @@ def execute_action(
         exec_result = ExecutorResult(success=False, error=f"EXECUTION_ERROR: {exc}")
 
     if exec_result.success:
+        # A preview is a successful *preview*, not a delivery. It still
+        # completes the ACTION (the merchant's decision was evaluated and
+        # deliberately withheld) so every mirror keeps propagating, but the
+        # recorded payload says sent=False and names the blocking reason, and
+        # the retry guard below treats it as retryable — otherwise enabling
+        # execution later could never send the campaign, because a completed
+        # action is an idempotency no-op.
         action.status = AgentActionStatus.completed
         action.output_payload = exec_result.result_metadata or {}
         action.error_code = None
@@ -503,8 +566,12 @@ def execute_action(
                 "action_type": _enum_value(action.action_type),
                 "result": exec_result.result_metadata,
             },
-            actor_id=actor,
+actor_id=actor,
         )
+
+        # NOTE: a `delivery_status == "preview_only"` result is flagged on the
+        # campaign AFTER the mirrors below, so the derived lifecycle is not
+        # overwritten back to "completed".
 
         log.info(
             "Action completed. id=%s merchant=%s result=%s",
@@ -541,6 +608,22 @@ def execute_action(
 
     # Mirror the terminal execution result to the Marketing Agent workspace.
     sync_marketing_from_action(db, action)
+
+    # Mirror the terminal execution result to the Product Agent workspace.
+    sync_product_agent_from_action(db, action)
+
+    # Runs AFTER the mirrors: they derive the campaign lifecycle from the
+    # action's status, so a preview marker placed earlier would be overwritten
+    # by "completed" and the campaign would claim a delivery that never
+    # happened.
+    if exec_result.success and (
+        exec_result.result_metadata.get("delivery_status") == "preview_only"
+    ):
+        _mark_campaign_preview_only(
+            db,
+            action,
+            reason=exec_result.result_metadata.get("blocking_reason") or "PREVIEW_ONLY",
+        )
     db.flush()
 
     return exec_result
@@ -549,6 +632,63 @@ def execute_action(
 # ---------------------------------------------------------------------------
 # Audit trail
 # ---------------------------------------------------------------------------
+
+
+def _was_preview_only(action: AgentAction) -> bool:
+    """Did this completed action end in a withheld preview rather than a send?
+
+    Reads only the executor's own recorded metadata. A real send records
+    ``sent=True``; a preview records ``delivery_status="preview_only"`` and
+    ``sent=False``. Anything we cannot positively identify as a real send is
+    treated as NOT preview, so this can never turn a genuine duplicate-execute
+    guard off.
+    """
+    meta = dict(action.output_payload or {})
+    if not meta:
+        return False
+    if meta.get("sent") is True or meta.get("executed") is True:
+        return False
+    return meta.get("delivery_status") == "preview_only"
+
+
+def _mark_campaign_preview_only(
+    db: Session, action: AgentAction, *, reason: str
+) -> None:
+    """Flag the linked campaign as preview-only rather than sent.
+
+    A withheld send must leave an accurate, retryable state on the campaign:
+    previously the row kept ``draft_only`` / ready, so the merchant saw a
+    sendable campaign that had in fact been refused. Best-effort — never
+    raises, and never downgrades a real delivery.
+    """
+    try:
+        import uuid as _uuid
+
+        from backend.app.models.marketing_agi import MarketingAGICampaign
+
+        payload = dict(action.input_payload or {})
+        campaign_id = (payload.get("target") or {}).get("marketing_agi_campaign_id")
+        if not campaign_id:
+            return
+        try:
+            draft = db.get(MarketingAGICampaign, _uuid.UUID(str(campaign_id)))
+        except (ValueError, AttributeError, TypeError):
+            return
+        if draft is None or draft.merchant_id != action.merchant_id:
+            return
+        if draft.integration_status == "sent":
+            return  # a real delivery is never downgraded
+        # Delivery truth lives in ``integration_status``. The ``lifecycle``
+        # field deliberately keeps mirroring the ACTION status (that contract
+        # drives the Marketing UI), so a preview is expressed here rather than
+        # by rewinding the lifecycle.
+        draft.integration_status = "preview_only"
+        content = dict(draft.content or {})
+        content["last_preview_reason"] = reason
+        draft.content = content
+        db.flush()
+    except Exception:  # pragma: no cover - status bookkeeping must not fail a send
+        log.exception("Could not mark campaign as preview_only for action %s", action.id)
 
 
 def _write_audit_event(

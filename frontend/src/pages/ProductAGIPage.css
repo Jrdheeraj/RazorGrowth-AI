@@ -48,13 +48,8 @@
   padding: 40px 0;
 }
 
-/* While the Marketing Agent page is mounted, hide the shared tall
- * SiteFooter (homepage + other routes are unaffected — the class is
- * removed on unmount). The compact .pagi-signoff strip below acts as
- * this page's finishing footer. */
-body.pagi-hide-site-footer .site-footer {
-  display: none;
-}
+/* The shared global SiteFooter stays visible on every route. The compact
+ * .pagi-signoff strip below is page content, not site chrome. */
 
 /* Compact finishing strip: one horizontal flex row, vertically centred,
  * same container as the dashboard above, transparent so the illustrated

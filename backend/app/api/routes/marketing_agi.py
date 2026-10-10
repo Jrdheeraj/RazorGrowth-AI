@@ -51,6 +51,9 @@ from backend.app.agents.marketing_agi.agent import MarketingAGI
 from backend.app.agents.marketing_agi.events import list_events, serialize_event
 from backend.app.agents.marketing_agi.tools.bootstrap import register_all_tools
 from backend.app.agents.marketing_agi.tools.registry import get_registry
+from backend.app.integrations.mcp.policy import allowlists
+from backend.app.integrations.mcp.domains import AGENT_CAPABILITIES, domain_report
+from backend.app.integrations.mcp.registry import get_mcp_registry
 from backend.app.agents.marketing_agi.workflows import workflow_catalog
 from backend.app.agents.marketing_agi.memory import MarketingAGILearningStore
 from backend.app.agents.marketing_agi.handoff import HandoffInterface, serialize_handoff
@@ -300,6 +303,7 @@ def _serialize_run(run: MarketingAGIRun, db: Session | None = None) -> dict[str,
             "evidence": state.get("evidence", []),
             "retrieval_log": state.get("retrieval_log", []),
             "tool_calls": state.get("tool_calls", []),
+            "mcp_calls": state.get("mcp_calls", []),
             "workflow": state.get("workflow"),
             "plan": state.get("plan", []),
             "campaign_draft": state.get("campaign_draft"),
@@ -453,10 +457,36 @@ def agi_status(
             entry["last_verified_at"] = None
             entry["connection"] = None
     live_email = (live.get("email") or {}).get("status") == "connected"
+    # MCP — advertised as the connectivity layer, with the REAL allowlist
+    # sizes. Never a claim about connections: those come from `live`.
+    mcp_registry = get_mcp_registry()
+    mcp_allow = allowlists()
     return {
         "llm_configured": llm_configured,
         "llm_provider": provider,
         "llm_model": model,
+        "mcp": {
+            "enabled": True,
+            "tools": len(mcp_registry.names()),
+            "read_tools": len(mcp_allow["read"]),
+            "write_tools": len(mcp_allow["write"]),
+            "approval_required_tools": len(mcp_allow["approval_required"]),
+            "internal_tools": len(mcp_allow["internal"]),
+            "external_tools": len(mcp_allow["external"]),
+            "servers": sorted({s.server for s in mcp_registry.all_specs()}),
+            "domains": sorted({s.domain for s in mcp_registry.all_specs()}),
+            # Shared-platform inventory for future agents (Product Agent,
+            # Growth Radar). Each domain reports its REAL status: only a
+            # domain with registered, implemented tools is 'operational'.
+            # A 'structural' domain is a supported registration target with
+            # no tools yet - nothing is faked to make it look complete.
+            "capability_domains": domain_report(),
+            "agent_capabilities": {
+                agent: list(caps.domains)
+                for agent, caps in AGENT_CAPABILITIES.items()
+            },
+            "phases": ["observe", "research", "campaign_prep", "execution"],
+        },
         "integration_status": {
             "email_marketing": "connected" if live_email else "draft_only",
             "google_ads": "connected" if (live.get("google_ads") or {}).get("status") == "connected" else "requires_integration",
@@ -477,6 +507,13 @@ def tool_catalog(
     db: Session = Depends(get_db),
     ctx: MerchantContext = Depends(merchant_ctx),
 ) -> Any:
+    """Legacy tool catalog PLUS the normalized MCP catalog.
+
+    ``tools`` is unchanged (backward compatible). ``mcp_tools`` is the
+    standardized view the Marketing Agent actually reasons over, with each
+    tool's guardrail declaration and this workspace's REAL connection state
+    — a disconnected provider is never shown as available.
+    """
     register_all_tools()
     tools = get_registry().catalog()
     # Overlay live per-merchant connection state so the catalog never
@@ -490,7 +527,24 @@ def tool_catalog(
     for tool in tools:
         if tool.get("provider") in live_providers:
             tool["integration_status"] = "connected"
-    return {"tools": tools}
+
+    mcp_registry = get_mcp_registry()
+    mcp_tools = []
+    for spec in mcp_registry.all_specs():
+        entry = spec.to_catalog_entry()
+        entry["integration_status"] = (
+            "connected"
+            if not spec.requires_integration
+            or spec.requires_integration in live_providers
+            else "requires_integration"
+        )
+        mcp_tools.append(entry)
+    return {
+        "tools": tools,
+        "mcp_tools": mcp_tools,
+        "mcp_policies": mcp_registry.policies(),
+        "mcp_allowlists": {k: sorted(v) for k, v in allowlists().items()},
+    }
 
 
 @router.get("/workflows", response_model=AGIWorkflowCatalogResponse)

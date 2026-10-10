@@ -244,10 +244,14 @@ class TestGuardrailBypass:
         action = AgentAction(
             id=uuid.uuid4(),
             merchant_id=m.id,
-            action_type=AgentActionType.send_campaign,
             status=AgentActionStatus.approved,
-            input_payload={"campaign_type": "email",
-                           "target": {"segment": "all"}, "target_count": 1},
+            # create_discount, not a marketing external write: this test
+            # pins action_service's own production kill-switch. Marketing
+            # external writes now enter through MCP first and are refused
+            # there (see tests/test_mcp_write_routing.py), which would no
+            # longer reach this branch.
+            action_type=AgentActionType.create_discount,
+            input_payload={"percentage": 10},
             requested_by="prod_probe",
         )
         db_session.add(action)

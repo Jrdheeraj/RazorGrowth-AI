@@ -1,23 +1,38 @@
 /**
- * /checkout — AI Buyer commerce flow.
+ * /checkout — AI Buyer commerce flow (scoped visual redesign).
  *
  * An AI buyer reads the merchant's real catalog (GET /api/products),
  * selects a product, creates a Razorpay TEST order at the product's real
  * price, and completes payment through Razorpay TEST checkout.
  *
- * Success and failure are both handled honestly:
- *   - Success  → payment verified server-side, result shown.
- *   - Failure  → "Payment could not be completed" safe state, no fake data,
- *                retry available.
+ * PRESERVED FUNCTIONALITY (untouched logic):
+ *   - fetchProducts() real catalog + first-purchasable auto-select
+ *   - createCheckoutSession() with the REAL catalog price
+ *   - Razorpay checkout.js loading + openRazorpay() + server-side
+ *     verifyPayment() before any success is claimed
+ *   - modal ondismiss + payment.failed honest failure states
+ *   - login_required / catalog error / empty catalog states
+ *   - price rendering (₹ + Number(price).toFixed(2)) and stock rules
  *
- * REAL DATA ONLY — no hardcoded products, prices, or results.
+ * VISUAL LAYER ONLY: hero + stepper + catalog chrome + purchase panel +
+ * process guide + brand card + illustrated footer. The hero reuses the
+ * EXACT shared illustration component from the Marketing / Product Agent
+ * dashboards (components/AgentOfficeArt, sign="RAZORGROWTH AI") — same
+ * composition, colors and line-art, only the sign text adapted.
+ * Product images resolve
+ * through the app's EXISTING local photography (data/productCatalog.ts,
+ * matched by product name — the same 10 seeded products) with the same
+ * initials + onError fallback the Product Agent page already uses.
+ * The backend catalog carries no image field, so nothing is invented.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createCheckoutSession, verifyPayment, fetchProducts } from "../lib/api";
 import type { ProductResponse, CheckoutSessionResponse } from "../types/api";
-import { WindowPanel } from "../components/WindowPanel";
-import { Button } from "../components/Button";
+import { catalogImageFor } from "../data/productCatalog";
+import { AgentOfficeArt } from "../components/AgentOfficeArt";
+import { ProductMedia } from "../components/ProductMedia";
+import razorpayLogo from "../assets/brands/razorpay.svg";
 import "./Checkout.css";
 
 declare global {
@@ -30,6 +45,81 @@ type Outcome =
   | { kind: "success"; paymentId: string | null }
   | { kind: "failed"; reason: string };
 
+type SortKey = "recommended" | "price-asc" | "price-desc" | "name";
+
+/* ── existing product photography: each live product resolves to its REAL
+   local photo via the layered catalog resolver (exact name → SKU keyword
+   → distinctive tokens, unicode-safe). Null only when no known photo
+   matches — never a wrong product's photo. */
+function imageForProduct(p: Pick<ProductResponse, "name" | "sku">): string | null {
+  return catalogImageFor(p.name, p.sku);
+}
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return parts.length >= 2
+    ? (parts[0][0] + parts[1][0]).toUpperCase()
+    : name.trim().slice(0, 2).toUpperCase();
+}
+function inr(price: unknown): string {
+  return `₹${Number(price).toFixed(2)}`;
+}
+function isPurchasable(p: ProductResponse): boolean {
+  return p.active && p.stock_quantity > 0 && Number(p.price) > 0;
+}
+function catTone(category: string | null): string {
+  const c = (category ?? "").toLowerCase();
+  if (c.includes("audio")) return "rgco-card__cat--audio";
+  if (c.includes("desk")) return "rgco-card__cat--desk";
+  if (c.includes("access")) return "rgco-card__cat--accessories";
+  return "rgco-card__cat--other";
+}
+
+/* ── tiny outline icons (1.8px stroke, no emoji) ───────────────────────── */
+function I({ size = 16, children }: { size?: number; children: React.ReactNode }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"
+      strokeLinejoin="round" aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
+const IconSearch = () => (<I size={14}><><circle cx="11" cy="11" r="6" /><path d="M15.5 15.5L20 20" /></></I>);
+const IconShieldCheck = () => (<I size={15}><><path d="M12 3l7 2.8v5.4c0 4.4-3 7.6-7 9.3-4-1.7-7-4.9-7-9.3V5.8L12 3z" /><path d="M9 11.6l2.2 2.2 3.8-4.4" /></></I>);
+const IconWallet = () => (<I size={15}><><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h12A1.5 1.5 0 0 1 18 7.5V18a1.5 1.5 0 0 1-1.5 1.5h-12A1.5 1.5 0 0 1 3 18V7.5z" /><path d="M3 9h15" /><circle cx="16" cy="14.5" r="1" /></></I>);
+const IconSpark = () => (<I size={15}><><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.5l-1.7-4.5L6 9.3l4.3-1.7L12 3z" /><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z" /></></I>);
+const IconPay = () => (<I size={15}><><rect x="3" y="6" width="18" height="13" rx="1.5" /><path d="M3 10.5h18" /><path d="M7 15h4" /></></I>);
+const IconBag = () => (<I size={40}><><path d="M6 8h12l1 12.5H5L6 8z" /><path d="M9 10V6.5a3 3 0 0 1 6 0V10" /></></I>);
+const IconTag = () => (<I size={13}><><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11l9 9-6.5 6.5-9-9V5.5z" /><circle cx="9" cy="9" r="1.2" /></></I>);
+const IconCube = () => (<I size={13}><><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" /><path d="M12 12l8-4.5M12 12L4 7.5M12 12v9" /></></I>);
+const IconHead = () => (<I size={13}><><path d="M4 14v-2a8 8 0 0 1 16 0v2" /><rect x="3" y="13.5" width="4" height="6" rx="1.2" /><rect x="17" y="13.5" width="4" height="6" rx="1.2" /></></I>);
+const IconGrid = () => (<I size={13}><><rect x="4" y="4" width="7" height="7" rx="1" /><rect x="13" y="4" width="7" height="7" rx="1" /><rect x="4" y="13" width="7" height="7" rx="1" /><rect x="13" y="13" width="7" height="7" rx="1" /></></I>);
+const IconChev = () => (<I size={14}><><path d="M9 5l7 7-7 7" /></></I>);
+const IconCart = () => (<I size={17}><><path d="M3 4h2.5l2.2 11h10.6l2.2-8H6" /><circle cx="9.5" cy="19.5" r="1.3" /><circle cx="16.5" cy="19.5" r="1.3" /></></I>);
+function catIcon(category: string) {
+  const c = category.toLowerCase();
+  if (c.includes("audio")) return <IconHead />;
+  if (c.includes("desk")) return <IconCube />;
+  if (c.includes("access")) return <IconTag />;
+  return <IconGrid />;
+}
+
+const STEPS = [
+  { n: 1, title: "Read Catalog", sub: "AI analyzes products" },
+  { n: 2, title: "Select Product", sub: "Choose from catalog" },
+  { n: 3, title: "Create Order", sub: "Razorpay test order" },
+  { n: 4, title: "Test Payment", sub: "Simulate success" },
+  { n: 5, title: "Result Recorded", sub: "AI logs the outcome" },
+] as const;
+
+const GUIDE = [
+  { t: "Already read product catalog", s: "Analyzes real product data from your store.", icon: <IconGrid /> },
+  { t: "You select a product", s: "Choose any product from the catalog.", icon: <IconTag /> },
+  { t: "AI creates test order", s: "Creates a Razorpay TEST order.", icon: <IconCube /> },
+  { t: "Complete test payment", s: "Use test payment details to simulate success.", icon: <IconPay /> },
+  { t: "Result recorded", s: "AI logs the purchase outcome.", icon: <IconShieldCheck /> },
+];
+
 export function Checkout() {
   const navigate = useNavigate();
   const [products, setProducts] = useState<ProductResponse[] | null>(null);
@@ -40,8 +130,12 @@ export function Checkout() {
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+  /* catalog chrome state (client-side only, over the REAL list) */
+  const [query, setQuery] = useState("");
+  const [cat, setCat] = useState<string>("all");
+  const [sort, setSort] = useState<SortKey>("recommended");
 
-  /* Load the real merchant catalog. */
+  /* Load the real merchant catalog. (PRESERVED) */
   useEffect(() => {
     fetchProducts()
       .then((data) => {
@@ -64,7 +158,7 @@ export function Checkout() {
       });
   }, []);
 
-  /* Load Razorpay Checkout JS. */
+  /* Load Razorpay Checkout JS. (PRESERVED) */
   useEffect(() => {
     if (window.Razorpay) {
       setRazorpayLoaded(true);
@@ -170,282 +264,469 @@ export function Checkout() {
     rzp.open();
   };
 
+  /* ── derived catalog chrome (dynamic categories, search, sort) ──────── */
+  const categories = useMemo(() => {
+    const m = new Map<string, number>();
+    (products ?? []).forEach((p) => {
+      const c = (p.category ?? "product").trim() || "product";
+      m.set(c, (m.get(c) ?? 0) + 1);
+    });
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [products]);
+
+  const totalCount = products?.length ?? 0;
+
+  const visible = useMemo(() => {
+    let list = products ?? [];
+    if (cat !== "all") list = list.filter((p) => (p.category ?? "product") === cat);
+    const q = query.trim().toLowerCase();
+    if (q) {
+      list = list.filter((p) =>
+        `${p.name} ${p.description ?? ""} ${p.category ?? ""}`.toLowerCase().includes(q),
+      );
+    }
+    const arr = [...list];
+    if (sort === "price-asc") arr.sort((a, b) => Number(a.price) - Number(b.price));
+    else if (sort === "price-desc") arr.sort((a, b) => Number(b.price) - Number(a.price));
+    else if (sort === "name") arr.sort((a, b) => a.name.localeCompare(b.name));
+    return arr;
+  }, [products, cat, query, sort]);
+
+  /* stepper reflects REAL state — success only after backend verification */
+  const stepIndex: number = outcome ? 5 : session ? 4 : selected ? 3 : products && products.length > 0 ? 2 : 1;
+
+  const pick = (id: string) => {
+    setSelectedId(id);
+    setSession(null);
+    setOutcome(null);
+  };
+
   return (
-    <section id="checkout" className="shell section" aria-labelledby="checkout-heading">
-      {/* Header */}
-      <div className="checkout-header">
-        <div>
-          <p className="meta-label">AI BUYER · RAZORPAY TEST MODE</p>
-          <h2 id="checkout-heading" className="display-lg" style={{ margin: "10px 0 0" }}>
-            AI Buyer Checkout
-          </h2>
-          <p className="checkout-header__lead">
-            An AI buyer reads this merchant's real product catalog, selects a product, and completes
-            a genuine Razorpay TEST purchase — no real money moves.
-          </p>
+    <div className="rgco-page">
+      {/* ══ HERO ══ */}
+      <section className="rgco-hero" aria-labelledby="checkout-heading">
+        <div className="rgco-hero__inner">
+          <div className="rgco-hero__copy">
+            <p className="rgco-eyebrow">AI BUYER · RAZORPAY TEST MODE</p>
+            <h1 id="checkout-heading" className="rgco-hero__title">AI Buyer Checkout</h1>
+            <p className="rgco-hero__lead">
+              An AI buyer reads this merchant&apos;s real product catalog, selects a product,
+              and completes a genuine Razorpay TEST purchase — no real money moves.
+            </p>
+            <div className="rgco-trust" aria-label="Trust indicators">
+              <span className="rgco-trust__badge">
+                <span className="rgco-trust__icon"><IconShieldCheck /></span>
+                <span><p className="rgco-trust__name">Safe Test Mode</p><p className="rgco-trust__sub">No real payment</p></span>
+              </span>
+              <span className="rgco-trust__badge">
+                <span className="rgco-trust__icon"><IconWallet /></span>
+                <span><p className="rgco-trust__name">Real Catalog Data</p><p className="rgco-trust__sub">Live products</p></span>
+              </span>
+              <span className="rgco-trust__badge">
+                <span className="rgco-trust__icon"><IconSpark /></span>
+                <span><p className="rgco-trust__name">AI Powered Flow</p><p className="rgco-trust__sub">Complete purchase</p></span>
+              </span>
+              <span className="rgco-trust__badge">
+                <span className="rgco-trust__icon"><IconPay /></span>
+                <span><p className="rgco-trust__name">Razorpay Test</p><p className="rgco-trust__sub">Simulate success</p></span>
+              </span>
+            </div>
+          </div>
+          <div className="rgco-hero__art" aria-hidden="false" role="img" aria-label="Illustrated RazorGrowth AI storefront — same artwork as the Marketing and Product Agent dashboards">
+            {/* Reuses the EXACT shared illustration component from the
+                Marketing Agent / Product Agent dashboards
+                (components/AgentOfficeArt). Only the sign text is adapted
+                for Checkout — same composition, colors, line-art, tree,
+                sun and wall tags. */}
+            <AgentOfficeArt
+              sign="RAZORGROWTH AI"
+              className="rgco-hero__office"
+              label="Illustrated RazorGrowth AI storefront for AI buyer checkout"
+            />
+          </div>
         </div>
-        <span className="checkout-mode">
-          <span className="checkout-mode__dot" aria-hidden="true" />
-          Razorpay Test Mode
-        </span>
+      </section>
+
+      {/* ══ STEPPER ══ */}
+      <div className="rgco-steps" aria-label="Checkout progress">
+        <div className="rgco-steps__inner">
+          {STEPS.map((s, i) => (
+            <div key={s.n} className="rgco-step" style={{ flex: i === STEPS.length - 1 ? "0 0 auto" : undefined }}>
+              <div
+                className={`rgco-step${s.n === stepIndex ? " is-active" : ""}${s.n < stepIndex ? " is-done" : ""}`}
+                style={{ display: "flex", alignItems: "center", gap: 9 }}
+                aria-current={s.n === stepIndex ? "step" : undefined}
+              >
+                <span className="rgco-step__num">{s.n < stepIndex ? "✓" : s.n}</span>
+                <span>
+                  <span className="rgco-step__idx">Step {s.n}</span>
+                  <p className="rgco-step__name">{s.title}</p>
+                  <p className="rgco-step__sub">{s.sub}</p>
+                </span>
+              </div>
+              {i < STEPS.length - 1 && (
+                <span className="rgco-step__chev" aria-hidden="true"><IconChev /></span>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* AI buyer flow strip */}
-      <div className="checkout-flow" aria-hidden="true">
-        <span>AI buyer reads catalog</span>
-        <span className="checkout-flow__rule" />
-        <span>Product selected</span>
-        <span className="checkout-flow__rule" />
-        <span>Order created</span>
-        <span className="checkout-flow__rule" />
-        <span>Test payment</span>
-        <span className="checkout-flow__rule" />
-        <span>Result recorded</span>
-      </div>
-
-      <div className="checkout-workspace">
-        {/* Catalog */}
-        <main aria-label="AI-readable product catalog">
-          <p className="meta-label" style={{ marginBottom: 12 }}>THE CATALOG THE AI BUYER READS</p>
+      {/* ══ MAIN ══ */}
+      <div className="rgco-main">
+        {/* ── CATALOG ── */}
+        <section className="rgco-catalog" aria-label="Product catalog">
+          <h2 className="rgco-catalog__title">Product Catalog</h2>
+          <p className="rgco-catalog__sub">Products available for AI buyer test purchase. Select a product to continue.</p>
 
           {catalogError === "login_required" && (
-            <WindowPanel title="login-required.app">
-              <p className="meta-label" style={{ marginBottom: 12 }}>SIGN IN REQUIRED</p>
-              <p style={{ fontSize: "var(--text-body)", lineHeight: "var(--leading-body)", color: "var(--ink-soft)" }}>
-                Checkout reads your merchant catalog and creates Razorpay TEST orders for your
-                workspace. Sign in to continue.
-              </p>
-              <div style={{ marginTop: 20 }}>
-                <Button variant="primary" mono onClick={() => navigate("/login")}>
+            <div className="rgco-state" role="alert">
+              <strong>Sign in required</strong>
+              Checkout reads your merchant catalog and creates Razorpay TEST orders for your
+              workspace. Sign in to continue.
+              <div style={{ marginTop: 12 }}>
+                <button type="button" className="rgco-card__btn" style={{ maxWidth: 180 }} onClick={() => navigate("/login")}>
                   Sign in
-                </Button>
+                </button>
               </div>
-            </WindowPanel>
+            </div>
           )}
 
           {catalogError && catalogError !== "login_required" && (
-            <WindowPanel title="catalog.app">
-              <p style={{ color: "var(--coral-strong)" }}>
-                The catalog could not be loaded. Please try again.
-              </p>
-            </WindowPanel>
+            <div className="rgco-state" role="alert">
+              <strong>Catalog unavailable</strong>
+              The catalog could not be loaded. Please try again.
+            </div>
           )}
 
           {!products && !catalogError && (
-            <WindowPanel title="catalog.app">
-              <p className="meta-label" style={{ color: "var(--ink-soft)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "var(--tracking-meta)" }}>
-                Reading the merchant catalog…
-              </p>
-            </WindowPanel>
+            <div className="rgco-state" aria-live="polite">
+              <strong>Reading the merchant catalog…</strong>
+              Loading real products from your store.
+            </div>
           )}
 
           {products && products.length === 0 && (
-            <div className="checkout-empty">
-              <p className="meta-label" style={{ color: "var(--coral-strong)" }}>NO PRODUCTS YET</p>
-              <p>
-                This merchant has no products in the catalog yet. Products from the real business data
-                will appear here, and the AI buyer will be able to select one and complete a TEST purchase.
-              </p>
+            <div className="rgco-state" role="status">
+              <strong>No products yet</strong>
+              This merchant has no products in the catalog yet. Products from the real business data
+              will appear here, and the AI buyer will be able to select one and complete a TEST purchase.
             </div>
           )}
 
           {products && products.length > 0 && (
-            <div className="checkout-catalog">
-              {products.map((product) => (
-                <article
-                  className={`buyer-card${selectedId === product.id ? " buyer-card--selected" : ""}`}
-                  key={product.id}
+            <>
+              <div className="rgco-toolbar">
+                <div className="rgco-search">
+                  <IconSearch />
+                  <input
+                    type="search"
+                    placeholder="Search products..."
+                    aria-label="Search products"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                </div>
+                <div className="rgco-sort">
+                  <label htmlFor="rgco-sort">Sort by</label>
+                  <select id="rgco-sort" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+                    <option value="recommended">Recommended</option>
+                    <option value="price-asc">Price: Low to High</option>
+                    <option value="price-desc">Price: High to Low</option>
+                    <option value="name">Name A–Z</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="rgco-cats" role="group" aria-label="Filter by category">
+                <button
+                  type="button"
+                  className={`rgco-cat${cat === "all" ? " is-on" : ""}`}
+                  onClick={() => setCat("all")}
+                  aria-pressed={cat === "all"}
                 >
-                  <div className="buyer-card__bar">
-                    <span>{(product.category ?? "product").toUpperCase()}</span>
-                    <span>
-                      {product.active && product.stock_quantity > 0 && Number(product.price) > 0
-                        ? "AVAILABLE"
-                        : "NOT PURCHASABLE"}
-                    </span>
-                  </div>
-                  <div className="buyer-card__body">
-                    <h3 className="buyer-card__name">{product.name}</h3>
-                    <p className="buyer-card__desc">
-                      {product.description ?? "No description was provided for this product."}
-                    </p>
-                    <p className="buyer-card__price">₹{Number(product.price).toFixed(2)}</p>
-                    <p className="buyer-card__meta">
-                      {product.stock_quantity > 0
-                        ? `${product.stock_quantity} in stock`
-                        : "Out of stock"}
-                    </p>
-                  </div>
-                  <div className="buyer-card__select">
-                    <Button
-                      variant={selectedId === product.id ? "primary" : "secondary"}
-                      mono
-                      onClick={() => {
-                        setSelectedId(product.id);
-                        setSession(null);
-                        setOutcome(null);
-                      }}
-                      disabled={
-                        !product.active ||
-                        product.stock_quantity <= 0 ||
-                        !(Number(product.price) > 0) // a ₹0 product can never be ordered
-                      }
-                      style={{ width: "100%" }}
-                    >
-                      {selectedId === product.id ? "Selected ✓" : "Select product"}
-                    </Button>
-                  </div>
-                </article>
-              ))}
-            </div>
+                  <IconGrid /> All Products <span className="rgco-cat__n">{totalCount}</span>
+                </button>
+                {categories.map(([c, n]) => (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`rgco-cat${cat === c ? " is-on" : ""}`}
+                    onClick={() => setCat(c)}
+                    aria-pressed={cat === c}
+                  >
+                    {catIcon(c)} {c.charAt(0).toUpperCase() + c.slice(1)} <span className="rgco-cat__n">{n}</span>
+                  </button>
+                ))}
+              </div>
+
+              {visible.length === 0 ? (
+                <div className="rgco-state" role="status">
+                  <strong>No matches</strong>
+                  No products match the current search and filter. Clear the search or choose another category.
+                </div>
+              ) : (
+                <div className="rgco-grid">
+                  {visible.map((p) => {
+                    const img = imageForProduct(p);
+                    const sel = selectedId === p.id;
+                    const ok = isPurchasable(p);
+                    return (
+                      <article key={p.id} className={`rgco-card${sel ? " is-sel" : ""}`} aria-label={p.name}>
+                        <div className="rgco-card__top">
+                          <span className={`rgco-card__cat ${catTone(p.category)}`} title={p.category ?? "product"}>
+                            {(p.category ?? "product").toUpperCase()}
+                          </span>
+                          {p.stock_quantity > 0 && (
+                            <span className="rgco-card__stock"><i />{p.stock_quantity} IN STOCK</span>
+                          )}
+                        </div>
+                        <ProductMedia images={img} name={p.name} />
+                        <h3 className="rgco-card__name" title={p.name}>{p.name}</h3>
+                        <p className="rgco-card__desc">{p.description ?? "No description was provided for this product."}</p>
+                        <p className="rgco-card__price">{inr(p.price)}</p>
+                        <button
+                          type="button"
+                          className={`rgco-card__btn${sel ? " is-sel" : ""}`}
+                          disabled={!ok}
+                          onClick={() => pick(p.id)}
+                          title={ok ? `Select ${p.name}` : "Not purchasable"}
+                        >
+                          {sel ? "Selected ✓" : "Select Product →"}
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="rgco-count">
+                Showing {visible.length} of {totalCount} products
+                {cat !== "all" ? ` · ${cat}` : ""}
+              </p>
+            </>
           )}
-        </main>
+        </section>
 
-        {/* Purchase panel */}
-        <aside className="buyer-panel" aria-label="AI buyer purchase">
-          <div className="buyer-panel__bar">
-            <span>AI BUYER · PURCHASE</span>
-            <span>TEST MODE</span>
-          </div>
-          <div className="buyer-panel__body">
-            {!selected && (
-              <>
-                <div className="buyer-panel__section">
-                  <p className="buyer-panel__label">SELECTED PRODUCT</p>
-                  <p className="buyer-panel__value buyer-panel__value--muted">
-                    No product selected yet. Choose one from the catalog.
-                  </p>
+        {/* ── RIGHT COLUMN ── */}
+        <div className="rgco-side">
+          <section className="rgco-buy" aria-label="AI buyer purchase">
+            <div className="rgco-buy__head">
+              <span>AI BUYER · PURCHASE</span>
+              <span className="rgco-buy__test">TEST MODE</span>
+            </div>
+            <div className="rgco-preview">
+              {!selected ? (
+                <div className="rgco-preview__empty">
+                  <IconBag />
+                  <p className="rgco-preview__t">No product selected</p>
+                  <p className="rgco-preview__s">Choose a product from the catalog to continue.</p>
                 </div>
-              </>
-            )}
-
-            {selected && (
-              <>
-                <div className="buyer-panel__section">
-                  <p className="buyer-panel__label">SELECTED PRODUCT</p>
-                  <p className="buyer-panel__value">{selected.name}</p>
-                  <p className="buyer-panel__value buyer-panel__value--muted">
-                    {selected.description ?? "No description provided."}
-                  </p>
-                </div>
-
-                <div className="buyer-panel__section">
-                  <p className="buyer-panel__label">PRICE</p>
-                  <p className="buyer-panel__value buyer-panel__value--price">
-                    ₹{Number(selected.price).toFixed(2)}
-                  </p>
-                  <p className="buyer-panel__value buyer-panel__value--muted">
-                    The real catalog price — taken directly from this merchant's product data.
-                  </p>
-                </div>
-
-                <div className="buyer-panel__section">
-                  <p className="buyer-panel__label">ORDER</p>
-                  {session ? (
-                    <p className="buyer-panel__value">
-                      Order created{session.razorpay_order_id ? ` · reference ${session.razorpay_order_id}` : ""}.
-                      Ready for Razorpay TEST checkout.
-                    </p>
-                  ) : (
-                    <p className="buyer-panel__value buyer-panel__value--muted">
-                      No order yet — create one to continue.
-                    </p>
-                  )}
-                </div>
-
-                <div className="buyer-panel__section">
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {!session && (
-                      <Button
-                        variant="primary"
-                        mono
-                        onClick={startCheckout}
-                        disabled={stage === "creating"}
-                        style={{ width: "100%" }}
-                      >
-                        {stage === "creating" ? "Creating order…" : "Create order"}
-                      </Button>
-                    )}
-                    {session && (
-                      <Button
-                        variant="primary"
-                        mono
-                        onClick={openRazorpay}
-                        disabled={!razorpayLoaded}
-                        style={{ width: "100%" }}
-                      >
-                        {razorpayLoaded ? "Open Razorpay TEST checkout" : "Loading checkout…"}
-                      </Button>
-                    )}
-                    {(session || outcome) && (
-                      <Button
-                        variant="ghost-dark"
-                        mono
-                        onClick={() => {
-                          setSession(null);
-                          setOutcome(null);
+              ) : (
+                <div className="rgco-preview__sel">
+                  <span className="rgco-preview__thumb" aria-hidden="true">
+                    {imageForProduct(selected) ? (
+                      <img
+                        src={imageForProduct(selected)!}
+                        alt=""
+                        onError={(e) => {
+                          const t = e.currentTarget as HTMLImageElement;
+                          t.style.display = "none";
+                          const fb = t.nextElementSibling as HTMLElement | null;
+                          if (fb) fb.style.display = "inline";
                         }}
-                        style={{ width: "100%" }}
-                      >
-                        Start over
-                      </Button>
-                    )}
-                  </div>
+                      />
+                    ) : null}
+                    <span style={{ display: imageForProduct(selected) ? "none" : "inline" }}>
+                      {initialsOf(selected.name)}
+                    </span>
+                  </span>
+                  <span style={{ minWidth: 0 }}>
+                    <p className="rgco-preview__name">{selected.name}</p>
+                    <p className="rgco-preview__price">{inr(selected.price)}</p>
+                  </span>
                 </div>
-              </>
-            )}
-
-            {error && (
-              <div className="buyer-outcome buyer-outcome--failed">
-                <p className="buyer-outcome__title">NOTE</p>
-                <p>{error}</p>
+              )}
+            </div>
+            <div className="rgco-summary">
+              <h3 className="rgco-summary__h">ORDER SUMMARY</h3>
+              <div className="rgco-summary__row">
+                <span>Product</span>
+                <span title={selected?.name ?? ""}>{selected ? selected.name : "—"}</span>
               </div>
-            )}
-
-            {/* Success outcome */}
-            {outcome?.kind === "success" && (
-              <div className="buyer-outcome">
-                <p className="buyer-outcome__title">PAYMENT COMPLETED</p>
-                <p>
-                  The TEST payment for {selected ? `“${selected.name}”` : "the selected product"} was
-                  completed and verified by the system.
-                </p>
-                {outcome.paymentId && (
-                  <p>Payment reference: {outcome.paymentId}</p>
-                )}
-                <p>No real money moved — this was a Razorpay TEST transaction.</p>
+              <div className="rgco-summary__row">
+                <span>Price</span>
+                <span>{selected ? inr(selected.price) : "—"}</span>
               </div>
-            )}
-
-            {/* Failure outcome — graceful, honest, safe */}
-            {outcome?.kind === "failed" && (
-              <div className="buyer-outcome buyer-outcome--failed">
-                <p className="buyer-outcome__title">PAYMENT COULD NOT BE COMPLETED</p>
-                <p>
-                  <strong>What happened:</strong> {outcome.reason}
-                </p>
-                <p>
-                  <strong>Money status:</strong> No successful capture occurred — no money moved.
-                </p>
-                <p>
-                  <strong>What the system did:</strong> The attempt was recorded as a failed payment and
-                  the order was left unpaid. No automatic retry was made.
-                </p>
-                <p>
-                  <strong>Recommended next step:</strong> Try the payment again — in TEST mode you can
-                  use the successful test card, or deliberately use the declined test card
-                  (4100 2800 0000 1007 with any future expiry and CVV) to see this safe failure state.
-                </p>
+              <div className="rgco-summary__row">
+                <span>Test Mode</span>
+                <span><span className="rgco-summary__testdot" />Razorpay TEST</span>
               </div>
-            )}
+              <div className="rgco-total">
+                <span>Total</span>
+                <span>{selected ? inr(selected.price) : "₹0.00"}</span>
+              </div>
 
-            <p className="buyer-hint">
-              TEST MODE — use card 4100 2800 0000 1007 with any future expiry and any CVV to simulate
-              success. No real money is ever charged.
-            </p>
-          </div>
-        </aside>
+              {!selected && (
+                <button type="button" className="rgco-orderbtn" disabled>
+                  Create Order
+                </button>
+              )}
+              {selected && !session && (
+                <button
+                  type="button"
+                  className="rgco-orderbtn"
+                  onClick={startCheckout}
+                  disabled={stage === "creating"}
+                >
+                  {stage === "creating" ? "Creating order…" : "Create Order"}
+                </button>
+              )}
+              {selected && session && (
+                <>
+                  <p className="rgco-orderref">
+                    Order created{session.razorpay_order_id ? ` · ref ${session.razorpay_order_id}` : ""}. Ready for Razorpay TEST checkout.
+                  </p>
+                  <button
+                    type="button"
+                    className="rgco-paybtn"
+                    onClick={openRazorpay}
+                    disabled={!razorpayLoaded}
+                  >
+                    {razorpayLoaded ? "Open Razorpay TEST checkout" : "Loading checkout…"}
+                  </button>
+                  <button
+                    type="button"
+                    className="rgco-startover"
+                    onClick={() => { setSession(null); setOutcome(null); }}
+                  >
+                    Start over
+                  </button>
+                </>
+              )}
+
+              {error && (
+                <div className="rgco-err" role="alert">{error}</div>
+              )}
+
+              {outcome?.kind === "success" && (
+                <div className="rgco-outcome" role="status">
+                  <strong>Payment completed</strong>
+                  <p>
+                    The TEST payment for {selected ? `“${selected.name}”` : "the selected product"} was
+                    completed and verified by the system.
+                  </p>
+                  {outcome.paymentId && <p>Payment reference: {outcome.paymentId}</p>}
+                  <p>No real money moved — this was a Razorpay TEST transaction.</p>
+                </div>
+              )}
+              {outcome?.kind === "failed" && (
+                <div className="rgco-outcome rgco-outcome--fail" role="alert">
+                  <strong>Payment could not be completed</strong>
+                  <p><b>What happened:</b> {outcome.reason}</p>
+                  <p><b>Money status:</b> No successful capture occurred — no money moved.</p>
+                  <p><b>Recommended next step:</b> Try again — in TEST mode you can use the successful
+                    test card, or the declined test card (4100 2800 0000 1007) to see this safe state.</p>
+                </div>
+              )}
+            </div>
+            <div className="rgco-testbox">
+              <span className="rgco-testbox__icon">i</span>
+              <span>
+                <strong>TEST MODE ACTIVE</strong>
+                <p>Use Razorpay test credentials to simulate a successful payment. No real money is charged.</p>
+              </span>
+            </div>
+          </section>
+
+          <section className="rgco-guide" aria-label="What happens next">
+            <h3 className="rgco-guide__h">WHAT HAPPENS NEXT?</h3>
+            {GUIDE.map((g, i) => (
+              <div className="rgco-guide__row" key={g.t}>
+                <span className="rgco-guide__n">{i + 1}</span>
+                <span className="rgco-guide__icon">{g.icon}</span>
+                <span>
+                  <p className="rgco-guide__t">{g.t}</p>
+                  <p className="rgco-guide__s">{g.s}</p>
+                </span>
+              </div>
+            ))}
+          </section>
+
+          <section className="rgco-brand" aria-label="Built with Razorpay">
+            <h3 className="rgco-brand__h">BUILT WITH</h3>
+            <div className="rgco-brand__row">
+              <img src={razorpayLogo} alt="Razorpay" />
+              <span className="rgco-brand__test">TEST MODE</span>
+            </div>
+            <p>Secure test payments powered by Razorpay.</p>
+            <a href="https://razorpay.com/docs/" target="_blank" rel="noreferrer">Learn more →</a>
+          </section>
+        </div>
       </div>
-    </section>
+
+      {/* ══ ILLUSTRATED FOOTER BAND ══ */}
+      <section className="rgco-foot" aria-label="AI buyer readiness">
+        <div className="rgco-foot__inner">
+          <div className="rgco-foot__copy">
+            <p className="rgco-foot__quote">
+              AI buyers test real purchase flows<br />so your store is always ready.
+            </p>
+            <div className="rgco-foot__feats">
+              <span className="rgco-foot__feat"><IconCube /><p>Real Products<span>from your catalog</span></p></span>
+              <span className="rgco-foot__feat"><IconPay /><p>Test Payments<span>via Razorpay</span></p></span>
+              <span className="rgco-foot__feat"><IconShieldCheck /><p>Complete Flow<span>order to confirmation</span></p></span>
+              <span className="rgco-foot__feat"><IconShieldCheck /><p>No Real Charges<span>safe test environment</span></p></span>
+            </div>
+          </div>
+          <div className="rgco-foot__art" aria-hidden="true">
+            <svg viewBox="0 0 460 172" preserveAspectRatio="xMidYMid slice">
+              <circle cx="380" cy="34" r="20" fill="#F5A25D" stroke="#24150F" strokeWidth="2.5" />
+              <g fill="#FFFDF4" stroke="#24150F" strokeWidth="2">
+                <ellipse cx="90" cy="30" rx="40" ry="11" />
+                <ellipse cx="230" cy="22" rx="30" ry="9" />
+              </g>
+              <g stroke="#24150F" strokeWidth="2.5">
+                <rect x="230" y="70" width="150" height="70" fill="#FFF6E3" />
+                <rect x="242" y="78" width="126" height="18" fill="#FFFDF4" stroke="#25835D" />
+                <text x="305" y="92" textAnchor="middle" fontFamily="IBM Plex Mono, monospace" fontSize="10" fontWeight="700" letterSpacing="1" fill="#24150F" stroke="none">RAZORGROWTH AI</text>
+                <rect x="230" y="100" width="150" height="18" fill="#DC6545" />
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <rect key={i} x={230 + i * 25} y={100} width={12} height={18} fill="#FFF3DF" stroke="none" />
+                ))}
+                <rect x="230" y="100" width="150" height="18" fill="none" />
+                <rect x="286" y="124" width="32" height="16" fill="none" strokeWidth="2" />
+                <circle cx="294" cy="132" r="5" fill="none" strokeWidth="1.6" />
+                <line x1="299" y1="132" x2="308" y2="132" strokeWidth="1.6" />
+                <line x1="305" y1="129" x2="305" y2="135" strokeWidth="1.6" />
+                <rect x="246" y="124" width="34" height="16" fill="#D8E8F2" />
+              </g>
+              <g stroke="#24150F" strokeWidth="2">
+                <rect x="120" y="104" width="74" height="30" fill="#E9B44C" />
+                <rect x="120" y="96" width="74" height="10" fill="#DC6545" />
+                <circle cx="140" cy="138" r="8" fill="#29170F" />
+                <circle cx="174" cy="138" r="8" fill="#29170F" />
+                <rect x="200" y="112" width="26" height="22" fill="#FFF6E3" />
+              </g>
+              <g stroke="#24150F" strokeWidth="2">
+                <circle cx="60" cy="118" r="18" fill="#7FA88D" />
+                <rect x="57" y="130" width="7" height="14" fill="#8A6A54" />
+                <circle cx="410" cy="122" r="15" fill="#9DBE9B" />
+                <rect x="407" y="132" width="7" height="12" fill="#8A6A54" />
+              </g>
+              <g stroke="#24150F" strokeWidth="2">
+                <ellipse cx="110" cy="152" rx="120" ry="20" fill="#9DBE9B" />
+                <ellipse cx="360" cy="154" rx="130" ry="22" fill="#7FA88D" />
+                <ellipse cx="230" cy="160" rx="150" ry="16" fill="#F9EBD7" />
+              </g>
+              <g stroke="#5E8F6E" strokeWidth="1.6">
+                <line x1="80" y1="150" x2="80" y2="142" />
+                <line x1="150" y1="154" x2="150" y2="146" />
+                <line x1="330" y1="152" x2="330" y2="144" />
+              </g>
+            </svg>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }

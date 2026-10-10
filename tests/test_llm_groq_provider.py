@@ -192,6 +192,52 @@ class TestGroqRequestHandling:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Structured-generation token floor (MIN_STRUCTURED_TOKENS)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestStructuredTokenFloor:
+    """Why the floor exists (documented, re-verified by live probe).
+
+    ``openai/gpt-oss-120b`` is a reasoning model: it spends deliberation
+    tokens BEFORE emitting the JSON body. A caller budget that only covers
+    the answer runs out mid-deliberation and the truncated output fails
+    JSON validation — the agent then silently loses that decision. The
+    floor raises small caller budgets to a safe floor inside
+    ``generate_structured`` only; it costs nothing when the answer is
+    short (a cap, not a charge). A live floor-off probe on 2026-10-08 was
+    blocked by the Groq daily rate limit, so this behaviour is pinned here
+    at the SDK boundary instead.
+    """
+
+    def test_small_caller_budget_is_floored_for_structured_calls(self):
+        p = _groq_provider(max_tokens=64)
+        payload = GrowthAnalysisResult().model_dump_json()
+        with patch.object(p._client.chat.completions, "create",
+                          return_value=_completion(payload)) as mock_create:
+            p.generate_structured(
+                "sys", "usr", GrowthAnalysisResult, max_tokens=60
+            )
+        assert mock_create.call_args.kwargs["max_tokens"] >= 900
+
+    def test_large_caller_budget_is_preserved(self):
+        p = _groq_provider()
+        payload = GrowthAnalysisResult().model_dump_json()
+        with patch.object(p._client.chat.completions, "create",
+                          return_value=_completion(payload)) as mock_create:
+            p.generate_structured(
+                "sys", "usr", GrowthAnalysisResult, max_tokens=1400
+            )
+        assert mock_create.call_args.kwargs["max_tokens"] == 1400
+
+    def test_plain_generate_budget_is_untouched_by_the_floor(self):
+        p = _groq_provider(max_tokens=777)
+        with patch.object(p._client.chat.completions, "create",
+                          return_value=_completion("hi")) as mock_create:
+            p.generate("sys", "usr")
+        assert mock_create.call_args.kwargs["max_tokens"] == 777
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Secret hygiene
 # ─────────────────────────────────────────────────────────────────────────────
 

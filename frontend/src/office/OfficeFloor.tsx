@@ -9,7 +9,9 @@ import { hexToNumber, DEFAULT_CHARACTER } from "./cast";
 import { pickSoloLine, pickExchange, type BreakSpot } from "./cafeteriaLines";
 import { colors } from "./tokens";
 import { loadTheme, resolveThemeMap, themeTilesetUrls } from "./themeLoader";
-import { installContextLossRecovery, planInitFailure, DEFAULT_MAX_INIT_RETRIES } from "./glRecovery";
+import { installContextLossRecovery, planInitFailure, DEFAULT_MAX_INIT_RETRIES 
+} from "./glRecovery";
+import { resolveBubblePlacements, type BubbleItem } from "./bubbleLayout";
 import type { Tile, Facing, ErrandKind, ErrandSpot } from "./themeRegistry";
 import "./office.css";
 
@@ -78,6 +80,17 @@ function liveActivity(agent: OfficeAgent, fallback = ""): string {
   const action = (agent.action || "").trim();
   if (action) return action;
   return agent.lastPrompt ? firstWords(agent.lastPrompt) : fallback;
+}
+
+/**
+ * Does this agent's bubble carry state an operator must not miss?
+ *
+ * Approval gates and blocked runs are decisions waiting on a human, so they
+ * are placed first when the floor is crowded and stacked above ordinary
+ * chatter. Everything else is informational.
+ */
+function isCriticalStatus(agent: OfficeAgent): boolean {
+  return agent.status === "waiting" || agent.status === "blocked";
 }
 function firstWords(prompt: string | undefined, maxWords = 6, maxChars = 42): string {
   if (!prompt) return "";
@@ -531,8 +544,13 @@ export function OfficeFloor({ agents, selectedId, onSelectAgent, paused = false 
       };
       const drawTaskBoardStatic = (): void => {
         boardG.clear();
-        const todoNotes: string[] = ["todo","todo","todo","todo"]; const blocked: string[] = Math.random() > 0.5 ? ["blocked"] : [];
-        drawCork(0, NOTE_COLORS.blocked, blocked); drawCork(34, NOTE_COLORS.todo, todoNotes);
+        // Pure scenery. This cork board is never fed by backend state, so it
+        // must not IMPLY any: a `Math.random()` "blocked" sticky used to make
+        // the office look like something was blocked on every mount, which
+        // is indistinguishable from a real blocked operation. The blocked /
+        // approval truth is carried by the agent bubbles, which ARE real.
+        const todoNotes: string[] = ["todo","todo","todo","todo"];
+        drawCork(0, NOTE_COLORS.todo, todoNotes); drawCork(34, NOTE_COLORS.todo, todoNotes);
         boardG.rect(68, 6, 14, 4).fill(0xb08d5e); boardG.rect(68, 10, 14, 4).fill(0x8a6f4d); boardG.rect(69, 14, 2, 2).fill(0x6e5639); boardG.rect(79, 14, 2, 2).fill(0x6e5639);
         for (let i = 0; i < 2; i++) boardG.rect(71 + (i % 2), 4 - i * 2, 8, 2).fill({ color: NOTE_COLORS.done, alpha: 1 }).stroke({ color: 0x6e8f6e, width: 0.5 });
       }; drawTaskBoardStatic();
@@ -610,9 +628,9 @@ export function OfficeFloor({ agents, selectedId, onSelectAgent, paused = false 
           releaseRun(rt);
         }
         switch (agent.status) {
-          case "working": case "thinking": c.setStatusGlyph("none"); c.sitAtDesk(true); c.showThought(liveActivity(agent), agent.carrying); break;
-          case "waiting": c.setStatusGlyph("none"); c.sitAtDesk(false); c.showThought(liveActivity(agent, t("office.activity.waiting")), agent.carrying); break;
-          case "blocked": c.setStatusGlyph("blocked"); c.showThought(liveActivity(agent, t("office.activity.needsYou"))); c.walkToTile(rt.waitTile); break;
+          case "working": case "thinking": c.setStatusGlyph("none"); c.sitAtDesk(true); c.showThought(liveActivity(agent), agent.carrying, isCriticalStatus(agent)); break;
+          case "waiting": c.setStatusGlyph("none"); c.sitAtDesk(false); c.showThought(liveActivity(agent, t("office.activity.waiting")), agent.carrying, isCriticalStatus(agent)); break;
+          case "blocked": c.setStatusGlyph("blocked"); c.showThought(liveActivity(agent, t("office.activity.needsYou")), undefined, true); c.walkToTile(rt.waitTile); break;
           case "compacting": c.setStatusGlyph("compacting"); c.sitAtDesk(true); c.showThought(liveActivity(agent, t("office.activity.compacting"))); break;
           case "looping": c.setStatusGlyph("looping"); c.sitAtDesk(false); c.showThought(liveActivity(agent, t("office.activity.looping"))); break;
           case "success": c.setStatusGlyph("success"); if (agent.isGod) { c.hideThought(); c.sitAtDesk(true); break; } c.startWandering(); if (finishedWork) { c.cheer(); c.showThought(CHEER_KEYS[Math.floor(Math.random() * CHEER_KEYS.length)]); } else c.hideThought(); break;
@@ -653,19 +671,32 @@ export function OfficeFloor({ agents, selectedId, onSelectAgent, paused = false 
       const envelopeTimer = setInterval(spawnRandomEnvelope, 2400);
 
       const resolveBubbleOverlaps = () => {
-        const items: Array<{ rt: Runtime; x: number; y: number; w: number; h: number }> = [];
-        for (const rt of runtimes.values()) { const lay = rt.character.getThoughtLayout(); if (lay) items.push({ rt, ...lay }); }
-        if (items.length < 2) { for (const it of items) it.rt.character.setThoughtLift(0); return; }
-        items.sort((a, b) => (b.y + b.h) - (a.y + a.h) || a.x - b.x);
-        const placed: Array<{ x: number; y: number; w: number; h: number }> = [];
-        const pad = 2;
-        for (const it of items) {
-          let y = it.y; let moved = true, guard = 0;
-          while (moved && guard++ < 12) {
-            moved = false;
-            for (const p of placed) { const overlapX = it.x < p.x + p.w + pad && it.x + it.w + pad > p.x; const overlapY = y < p.y + p.h + pad && y + it.h + pad > p.y; if (overlapX && overlapY) { y = p.y - it.h - pad; moved = true; } }
-          }
-          placed.push({ x: it.x, y, w: it.w, h: it.h }); it.rt.character.setThoughtLift(it.y - y);
+        const items: BubbleItem[] = [];
+        const owners = new Map<string, Character>();
+        let worldW = 0, worldH = 0;
+        for (const [id, rt] of runtimes) {
+          // A cloud that is hidden or fully faded no longer occupies space.
+          if (rt.character.getThoughtOffStage()) continue;
+          const lay = rt.character.getThoughtLayout();
+          if (!lay) continue;
+          const b = rt.character.getThoughtBounds();
+          if (b.w > 0 && worldW === 0) { worldW = b.w; worldH = b.h; }
+          items.push({
+            id,
+            base: lay,
+            critical: rt.character.getThoughtCritical(),
+          });
+          owners.set(id, rt.character);
+        }
+        const placements = resolveBubblePlacements(items, { w: worldW, h: worldH });
+        for (const { id, rect } of placements) {
+          const character = owners.get(id);
+          if (!character) continue;
+          // null → no collision-free slot this frame. Suppress the cloud
+          // rather than draw it over a neighbour; it comes straight back when
+          // the floor frees up.
+          character.setThoughtPlacement(rect);
+          character.setThoughtSuppressed(rect === null);
         }
       };
 

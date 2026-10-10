@@ -6,15 +6,15 @@
    WindowPanel browser windows on top of the world. Warm cream paper, thin
    dark borders, terracotta primary actions, dark green for growth/completion.
 
-   Grid (12 cols, 1200px shell):
-     hero:            copy (7) + illustration (5)
-     row 1:           agent.status (8) + business.snapshot (4)
-     row 2:           agent.progress (12)
-     row 3:           approval.required (5, right-aligned)
-     row 4:           what.i.found (4) + my.recommendations (4) + product.preview (4)
-     row 5:           product.channels (12)
-     row 6:           recent.work (6) + agent.activity (6)
-     row 7:           what.im.learning (12)
+    Grid (12 cols, shared Radar container):
+      hero:            copy (7) + illustration (5)
+      row 1:           agent.status (8) + business.snapshot (4)
+      row 2:           agent.progress (12)
+      row 3:           product.performance (7) + approval.required (5)
+      row 4:           what.i.found (4) + my.recommendations (4) + product.preview (4)
+      row 5:           product.channels (12)
+      row 6:           recent.work (6) + agent.activity (6)
+      row 7:           what.im.learning (12)
 
    Every color / shadow / border / font comes from tokens.css.
    No backend calls, no glassmorphism, no gradients, no neon.
@@ -27,20 +27,28 @@
 .prod-shell {
   position: relative;
   z-index: 1;
-  width: 100%;
-  max-width: var(--shell-max);
+  /* Shared Radar container: same width, centering and gutters as
+   * .rg-page--wide in GrowthRadar.css (min(1920px, 100% - 80px)).
+   * The previous max-width: var(--shell-max) (1200px) compressed the whole
+   * dashboard; the horizontal gutter is dropped because the container width
+   * already carries the 40px outer margins. */
+  width: min(1920px, calc(100% - 80px));
+  max-width: none;
   margin-inline: auto;
-  padding: clamp(28px, 5vw, 56px) var(--gutter) 8px;
+  padding: clamp(28px, 5vw, 56px) 0 8px;
   display: flex;
   flex-direction: column;
   gap: clamp(16px, 2.4vw, 24px);
 }
-
-/* While mounted, hide the shared tall SiteFooter (other routes unaffected).
-   The compact .prod-signoff strip acts as this page's finishing footer. */
-body.prod-hide-site-footer .site-footer {
-  display: none;
+@media (max-width: 1100px) {
+  .prod-shell {
+    width: min(1920px, calc(100% - 48px));
+  }
 }
+
+/* The shared global SiteFooter stays visible on this page (like every
+ * other route). The compact .prod-signoff strip is page content,
+ * not site chrome. */
 
 .prod-signoff {
   display: flex;
@@ -191,6 +199,7 @@ body.prod-hide-site-footer .site-footer {
 .prod-span-full     { grid-column: span 12; }
 .prod-span-third    { grid-column: span 4; }
 .prod-span-half     { grid-column: span 6; }
+.prod-span-perf     { grid-column: 1 / 8; }
 
 .prod-span-approval {
   grid-column: 8 / 13;
@@ -477,6 +486,52 @@ body.prod-hide-site-footer .site-footer {
   font-size: 11px;
   letter-spacing: 0.04em;
   color: var(--ink-faint);
+}
+
+/* ── PERFORMANCE SNAPSHOT (fills the row-3 space beside approval) ──── */
+
+.prod-perf {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.prod-perf__cell {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.prod-perf__value {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.98rem;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.prod-perf__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.prod-perf__insight {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-soft);
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
 }
 
 /* ── APPROVAL ───────────────────────────────────────────────────────── */
@@ -777,6 +832,14 @@ body.prod-hide-site-footer .site-footer {
   white-space: nowrap;
 }
 
+.prod-table tbody tr {
+  transition: background-color 120ms ease;
+}
+
+.prod-table tbody tr:hover {
+  background: var(--paper-deep);
+}
+
 .prod-table tbody td {
   padding: 10px 12px;
   border-bottom: 1px solid var(--line-soft);
@@ -796,10 +859,31 @@ body.prod-hide-site-footer .site-footer {
   font-weight: 600;
 }
 
+.prod-table__name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.prod-table__cat {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* Fixed 48px photo tile: reserves layout space (no shift on load),
+   product photography rendered with object-fit: contain. The two-letter
+   monogram sits behind the photo as a graceful fallback. */
 .prod-thumb {
-  width: 32px;
-  height: 32px;
+  position: relative;
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 1px;
   display: inline-flex;
@@ -808,7 +892,18 @@ body.prod-hide-site-footer .site-footer {
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
-  color: var(--paper-bright);
+  color: var(--ink-soft);
+  background: var(--paper-deep);
+}
+
+.prod-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--paper-bright);
+  display: block;
 }
 
 .prod-trend--up {
@@ -859,7 +954,9 @@ body.prod-hide-site-footer .site-footer {
 .prod-channel__logo {
   height: 36px;
   width: auto;
+  max-width: 72px;
   display: block;
+  object-fit: contain;
 }
 
 .prod-channel__name {
@@ -1040,6 +1137,18 @@ body.prod-hide-site-footer .site-footer {
   animation: prod-pulse 2.4s ease-in-out infinite;
 }
 
+/* A failed event is its own visual state. It used to borrow the "active"
+   (pulsing green) class, which made a real failure read as live progress. */
+.prod-activity__row--failed .prod-activity__dot {
+  background: var(--coral-strong);
+  border-color: var(--coral-deep);
+}
+
+.prod-activity__row--pending .prod-activity__dot {
+  background: var(--act-amber);
+  border-color: var(--act-amber-deep);
+}
+
 .prod-activity__title {
   display: flex;
   align-items: center;
@@ -1139,6 +1248,137 @@ body.prod-hide-site-footer .site-footer {
   50% { box-shadow: 0 0 0 6px rgba(112, 184, 138, 0.08); }
 }
 
+/* ── status model states (lib/productAgentStatus is the single source) ── */
+
+/* Pill indicator: one colour + motion per run state. */
+.prod-live--waiting { color: var(--coral-deep); }
+.prod-live--approved { color: var(--coral-deep); }
+.prod-live--done { color: var(--green-deep); }
+.prod-live--failed { color: var(--coral-strong); }
+.prod-live--idle { color: var(--ink-faint); }
+
+.prod-live__dot--idle {
+  background: var(--ink-faint);
+  animation: none;
+}
+.prod-live__dot--live {
+  background: var(--green);
+}
+.prod-live__dot--waiting {
+  background: var(--coral);
+  animation: prod-pulse 1.6s ease-in-out infinite;
+}
+.prod-live__dot--approved {
+  background: var(--coral-strong);
+  animation: prod-pulse 2s ease-in-out infinite;
+}
+.prod-live__dot--done {
+  background: var(--green-deep);
+  animation: none;
+}
+.prod-live__dot--failed {
+  background: var(--ink);
+  animation: none;
+}
+
+/* Checklist inside the status card: a stopped step is never "done". */
+.prod-checklist li.is-stopped {
+  color: var(--coral-strong);
+  font-weight: 700;
+}
+.prod-checklist li.is-stopped span {
+  color: var(--coral-strong);
+}
+
+/* Tracker: the step a failed / blocked / cancelled run stopped at. */
+.prod-steps__step.is-stopped .prod-steps__node {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper-bright);
+}
+.prod-steps__step.is-stopped .prod-steps__words {
+  color: var(--coral-strong);
+  font-weight: 700;
+}
+.prod-steps__step.is-stopped::before {
+  background: var(--line-soft);
+}
+
+/* Run-summary rows: the pill reflects the canonical action state. */
+.prod-work__state--approved {
+  color: var(--coral-deep);
+  font-weight: 700;
+}
+.prod-work__state--failed {
+  color: var(--coral-strong);
+  font-weight: 700;
+}
+.prod-work__state--rejected {
+  color: var(--ink-faint);
+  font-weight: 700;
+}
+.prod-work__state--done {
+  color: var(--green-deep);
+}
+
+/* Recommendation status chip. */
+.prod-rec__state {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.prod-rec__state--pending {
+  color: var(--coral-deep);
+}
+.prod-rec__state--positive {
+  color: var(--green-deep);
+}
+.prod-rec__state--negative {
+  color: var(--coral-strong);
+}
+.prod-rec__state--neutral {
+  color: var(--ink-faint);
+}
+
+/* Refresh / self-check banners. */
+.prod-banner__inner {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.prod-banner__copy {
+  flex: 1;
+  min-width: 0;
+}
+.prod-banner__icon {
+  display: inline-flex;
+  margin-top: 2px;
+  color: var(--coral-deep);
+}
+.prod-banner__list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+}
+.prod-banner__list code {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink);
+}
+.prod-banner--warn {
+  border-color: var(--coral-deep);
+}
+
+@media (max-width: 640px) {
+  .prod-banner__inner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 /* ── responsive ─────────────────────────────────────────────────────── */
 
 @media (max-width: 1080px) {
@@ -1148,7 +1388,10 @@ body.prod-hide-site-footer .site-footer {
     grid-template-columns: repeat(4, 1fr);
   }
   .prod-span-approval {
-    grid-column: 6 / 13;
+    grid-column: 7 / 13;
+  }
+  .prod-span-perf {
+    grid-column: 1 / 7;
   }
   .prod-span-third {
     grid-column: span 6;
@@ -1175,6 +1418,7 @@ body.prod-hide-site-footer .site-footer {
 
 @media (max-width: 640px) {
   .prod-shell {
+    width: min(1920px, calc(100% - 32px));
     padding-top: 20px;
   }
   .prod-span-third {
@@ -1182,6 +1426,12 @@ body.prod-hide-site-footer .site-footer {
   }
   .prod-span-approval {
     grid-column: span 12;
+  }
+  .prod-span-perf {
+    grid-column: span 12;
+  }
+  .prod-perf {
+    grid-template-columns: 1fr 1fr;
   }
   .prod-snap {
     grid-template-columns: 1fr 1fr;
@@ -1215,4 +1465,56 @@ body.prod-hide-site-footer .site-footer {
     min-height: 0;
     gap: 4px;
   }
+}
+
+/* ?? Evidence + run-state additions (Product Agent backend integration) ?? */
+
+.prod-evidence {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+}
+
+.prod-evidence__tool {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--coral-deep);
+}
+
+.prod-rec details > summary,
+.prod-learnempty details > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.prod-rec details > summary::-webkit-details-marker,
+.prod-learnempty details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.prod-rec details > summary::before,
+.prod-learnempty details > summary::before {
+  content: "+ ";
+  color: var(--coral-deep);
+}
+
+.prod-rec details[open] > summary::before,
+.prod-learnempty details[open] > summary::before {
+  content: "\2212  ";
+}
+
+.prod-span-status .prod-sec__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.prod-status__check .prod-panel__sub {
+  margin-top: 8px;
 }

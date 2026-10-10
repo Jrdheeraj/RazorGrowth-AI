@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -54,6 +57,20 @@ class Customer(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     total_spend: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), nullable=False, default=Decimal("0.00"), server_default="0.00"
+    )
+    #: Marketing consent. ``True`` means this person asked NOT to receive
+    #: marketing email. The campaign executor filters these recipients out
+    #: before a provider is ever contacted, so a suppression cannot be
+    #: bypassed by approving an action.
+    #: Opt-out by default would silently stop all existing campaigns, so the
+    #: column is nullable: NULL = consent not recorded (still sendable,
+    #: matching the platform's pre-existing behaviour), True = opted out.
+    email_opt_out: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=False, server_default="false", index=True
+    )
+    #: When the opt-out was recorded (audit trail for a consent decision).
+    email_opt_out_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     # ------------------------------------------------------------------ #

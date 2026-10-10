@@ -236,10 +236,22 @@ def start_run_row(db_session: Session, merchant: Merchant, objective: str = "Fin
     return row
 
 
-def run_agent(db_session: Session, merchant: Merchant, objective: str = "Find marketing work", **kw) -> MarketingAGIRun:
+def run_agent(
+    db_session: Session,
+    merchant: Merchant,
+    objective: str = "Find marketing work",
+    *,
+    agent: MarketingAGI | None = None,
+    **kw,
+) -> MarketingAGIRun:
+    """Run the agent on a fresh queued row.
+
+    ``agent`` may be passed to inspect the SAME instance afterwards (e.g.
+    its MCP tool-call records); the run always gets its own row.
+    """
     row = start_run_row(db_session, merchant, objective)
-    agent = MarketingAGI(db_session, merchant.id, **kw)
-    return agent.run(row, objective)
+    runner = agent or MarketingAGI(db_session, merchant.id, **kw)
+    return runner.run(row, objective)
 
 
 def run_events(db_session: Session, run: MarketingAGIRun) -> list[MarketingAGIEvent]:

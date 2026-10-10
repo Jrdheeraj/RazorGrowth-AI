@@ -6,8 +6,13 @@
  *
  * Section links that have no `route` smooth-scroll on the home page;
  * those with a `route` navigate directly.
+ *
+ * Below the desktop breakpoint the nav collapses into a hamburger panel
+ * (`#mobile-menu`). The panel is driven by the `hidden` attribute, closes on
+ * navigation / Escape / outside click / close button, traps the page scroll
+ * while open and returns focus to the toggle when dismissed with Escape.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { scrollToSection, scrollToTop } from "../lib/scroll";
 import { useAuth } from "../lib/AuthContext";
@@ -30,14 +35,64 @@ const SECTION_LINKS: readonly SectionLink[] = [
   { id: "checkout",     label: "Checkout",     route: "/checkout" },
 ] as const;
 
+/** Must match the CSS breakpoint that swaps `.site-nav` for `.nav-toggle`. */
+const DESKTOP_NAV_QUERY = "(min-width: 1200px)";
+
 export function SiteHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
   const navigate  = useNavigate();
   const location  = useLocation();
   const { user }  = useAuth();
+  const headerRef = useRef<HTMLElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const menuRef   = useRef<HTMLDivElement>(null);
 
   // Close mobile menu on route change
   useEffect(() => { setMenuOpen(false); }, [location.pathname]);
+
+  // Escape closes the panel and restores focus to the toggle.
+  // While open, the page behind must not scroll (modal-style panel).
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        toggleRef.current?.focus();
+      }
+    };
+    const onPointerDown = (event: MouseEvent) => {
+      if (!headerRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("mousedown", onPointerDown);
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("mousedown", onPointerDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [menuOpen]);
+
+  // Move focus into the panel once it opens.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const first = menuRef.current?.querySelector<HTMLElement>("a, button");
+    first?.focus();
+  }, [menuOpen]);
+
+  // Drop the open state when the viewport grows back to the desktop nav so a
+  // stale `hidden=false` never leaves an invisible panel behind.
+  useEffect(() => {
+    const mq = window.matchMedia(DESKTOP_NAV_QUERY);
+    const onChange = () => { if (mq.matches) setMenuOpen(false); };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
 
   const goToSection = (item: SectionLink) => {
     setMenuOpen(false);
@@ -51,7 +106,7 @@ export function SiteHeader() {
   };
 
   return (
-    <header className="site-header">
+    <header className="site-header" ref={headerRef}>
       <div className="shell site-header__inner">
         {/* Wordmark */}
         <Link
@@ -71,7 +126,12 @@ export function SiteHeader() {
               <Link
                 key={item.id}
                 to={item.route}
-                className="site-nav__link"
+                className={
+                  location.pathname === item.route
+                    ? "site-nav__link is-active"
+                    : "site-nav__link"
+                }
+                aria-current={location.pathname === item.route ? "page" : undefined}
                 onClick={() => goToSection(item)}
               >
                 {item.label}
@@ -105,6 +165,7 @@ export function SiteHeader() {
         <button
           type="button"
           className="nav-toggle"
+          ref={toggleRef}
           aria-expanded={menuOpen}
           aria-controls="mobile-menu"
           aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
@@ -116,15 +177,20 @@ export function SiteHeader() {
         </button>
       </div>
 
-      {/* Mobile menu */}
-      <div id="mobile-menu" className="mobile-menu" hidden={!menuOpen}>
+      {/* Mobile menu — `hidden` is the single source of truth for visibility */}
+      <div id="mobile-menu" className="mobile-menu" ref={menuRef} hidden={!menuOpen}>
         <nav className="shell mobile-menu__list" aria-label="Mobile">
           {SECTION_LINKS.map((item) =>
             item.route ? (
               <Link
                 key={item.id}
                 to={item.route}
-                className="mobile-menu__item"
+                className={
+                  location.pathname === item.route
+                    ? "mobile-menu__item is-active"
+                    : "mobile-menu__item"
+                }
+                aria-current={location.pathname === item.route ? "page" : undefined}
                 onClick={() => goToSection(item)}
               >
                 {item.label}

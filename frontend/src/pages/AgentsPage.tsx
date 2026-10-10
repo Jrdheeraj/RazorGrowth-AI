@@ -9,6 +9,7 @@ import {
   startAiTeamWork,
   fetchMarketingAGIRuns,
   fetchMarketingAGICampaigns,
+  fetchProductAgentRuns,
 } from "../lib/api";
 import type {
   ActionPlan,
@@ -21,6 +22,7 @@ import type {
   MarketingAGIRun,
   OrchestratorRunResponse,
   OrchestrationAgentOutput,
+  ProductAgentRun,
   RankedOpportunity,
 } from "../types/api";
 import { WindowPanel } from "../components/WindowPanel";
@@ -307,7 +309,17 @@ function hashCode(s: string): number {
 /* ── types ──────────────────────────────────────────────────────────────── */
 
 type CmdTab = "ACTIVITY" | "MONITOR" | "TASKS" | "MEMORY" | "GRAPH" | "TERMINAL" | "COMMANDS" | "WORKERS";
-type AgentLiveStatus = "IDLE" | "WAITING" | "WORKING" | "THINKING" | "TOOL_CALL" | "ANALYZING" | "COMMUNICATING" | "COMPLETED" | "BLOCKED" | "ERROR" | "NEEDS_APPROVAL";
+import type { AgentLiveStatus } from "./agentsShared";
+import {
+  productAgentOfficeSlot,
+  marketingAgentOfficeSlot,
+  isProductAgentActive,
+  PRODUCT_AGENT_STAGE_LABELS,
+} from "./agentStatusMapping";
+
+function countOrZero(v: number | null | undefined): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
 
 interface AgentLiveInfo {
   key: string;
@@ -352,7 +364,11 @@ function deriveLiveStatus(name: string, run: AgentRunRow | undefined, out: Orche
   const hasTools = Array.isArray(run?.tools_used) && (run.tools_used as unknown[]).length > 0;
   if (run) {
     if (run.status === "running") {
-      if (hasTools && Math.random() > 0.45) return { live: "TOOL_CALL", chip: "USING TOOL", tone: "accent", anim: "pulse" };
+      // Derived from the run's own record, not a coin flip. The previous
+      // `Math.random() > 0.45` re-rolled TOOL_CALL vs WORKING on every
+      // re-render, so the office flickered between states and presented a
+      // fabricated "live" status.
+      if (hasTools) return { live: "TOOL_CALL", chip: "USING TOOL", tone: "accent", anim: "pulse" };
       // 12% chance to show communicating while running (inter-agent walk)
       if (hashCode(name + String(run.started_at)) % 11 === 0) return { live: "COMMUNICATING", chip: "COMMUNICATING", tone: "accent", anim: "pulse" };
       if (hashCode(name) % 7 === 0) return { live: "ANALYZING", chip: "ANALYZING", tone: "accent", anim: "pulse" };
@@ -420,108 +436,6 @@ function commTargetFor(key: string): string | null {
    here touches the legacy Marketing Analyst backend; only this page's
    display of that slot changes. */
 
-const MAGI_PHASE_LABELS: Record<string, string> = {
-  load_context: "LOADING CONTEXT",
-  observe: "OBSERVING",
-  investigate: "RESEARCHING",
-  plan: "PLANNING",
-  create: "CREATING",
-  verify: "VERIFYING",
-  prepare: "PREPARING",
-  awaiting_approval: "AWAITING APPROVAL",
-  complete: "COMPLETE",
-};
-
-interface MagiSlot {
-  live: AgentLiveStatus;
-  chip: string;
-  tone: "neutral" | "ok" | "accent";
-  anim: "pulse" | "none";
-  monitor: string;
-  sub: string;
-  progress: number | null;
-  tools: string[];
-}
-
-function marketingAgentSlot(
-  magiRun: MarketingAGIRun | null,
-  magiCampaigns: MarketingAGICampaign[],
-): MagiSlot {
-  const tools: string[] = magiRun
-    ? Array.from(new Set((magiRun.state?.tool_calls ?? []).map((c) => c.tool)))
-    : [];
-  const latestCampaign = magiCampaigns[0] ?? null;
-  if (!magiRun) {
-    return {
-      live: "IDLE",
-      chip: "IDLE",
-      tone: "neutral",
-      anim: "none",
-      monitor: "Ready — autonomous marketing employee",
-      sub: "Researches data · builds campaigns · verifies · learns",
-      progress: null,
-      tools: [],
-    };
-  }
-  const st = magiRun.state;
-  const evidenceCount = st?.evidence.length ?? 0;
-  const toolCount = st?.tool_calls.length ?? 0;
-  const llmCount = st?.llm_decisions.length ?? 0;
-  const engine = magiRun.llm_provider ?? "Groq";
-  const sub = `${evidenceCount} evidence · ${toolCount} tools used · ${llmCount} LLM decisions`;
-  if (magiRun.status === "queued" || magiRun.status === "cancelled") {
-    return { live: "IDLE", chip: "IDLE", tone: "neutral", anim: "none", monitor: "Ready — autonomous marketing employee", sub, progress: null, tools };
-  }
-  if (magiRun.status === "running") {
-    const phase = MAGI_PHASE_LABELS[magiRun.phase] ?? "WORKING";
-    return {
-      live: "WORKING",
-      chip: phase,
-      tone: "accent",
-      anim: "pulse",
-      monitor: `${phase} — ${magiRun.objective}`.slice(0, 90),
-      sub: `${engine} reasoning + tools · ${sub}`,
-      progress: null,
-      tools,
-    };
-  }
-  if (magiRun.status === "waiting_approval") {
-    return {
-      live: "NEEDS_APPROVAL",
-      chip: "READY FOR APPROVAL",
-      tone: "accent",
-      anim: "none",
-      monitor: `Ready for approval — ${latestCampaign?.name ?? magiRun.objective}`.slice(0, 90),
-      sub: `Marketing work prepared / approval required · ${sub}`,
-      progress: 100,
-      tools,
-    };
-  }
-  if (magiRun.status === "completed") {
-    const head = st?.observations[0] ?? magiRun.objective;
-    return {
-      live: "COMPLETED",
-      chip: "COMPLETED",
-      tone: "ok",
-      anim: "none",
-      monitor: head.slice(0, 90),
-      sub: `Marketing work prepared · ${sub}`,
-      progress: 100,
-      tools,
-    };
-  }
-  return {
-    live: "BLOCKED",
-    chip: "BLOCKED",
-    tone: "neutral",
-    anim: "none",
-    monitor: `Blocked — ${(st?.errors[0] ?? magiRun.objective)}`.slice(0, 90),
-    sub: `DEGRADED / FAILED — LLM unavailable · ${sub}`,
-    progress: null,
-    tools,
-  };
-}
-
 interface MagiFinding {
   finding: string;
   why: string | null;
@@ -573,6 +487,39 @@ function marketingAgentFinding(
     action,
     confidence: confidenceWord(topConf),
   };
+}
+
+/** One honest sentence about what the Product Agent actually produced.
+ *  Composed from persisted run values only — never a plausible-sounding
+ *  placeholder, and never an optimistic "working on it". */
+function productAgentFinding(productRun: ProductAgentRun | null): string {
+  if (!productRun) {
+    return "No Product Agent run yet — Start Analysis on this page starts it together with the Marketing Agent.";
+  }
+  const m = productRun.metrics ?? {};
+  const products = countOrZero(m.product_count ?? productRun.products_analyzed);
+  const findings = countOrZero(m.finding_count);
+  const recs = countOrZero(m.recommendation_count ?? productRun.recommendations_created);
+  const parts = [
+    `${products} product(s) analysed`,
+    `${findings} finding(s)`,
+    `${recs} recommendation(s)`,
+  ];
+  const base = parts.join(" · ");
+  if (productRun.status === "waiting_approval") {
+    return `${base} — awaiting your approval; nothing has been executed.`;
+  }
+  if (productRun.status === "failed") {
+    return `${base} — run failed: ${productRun.errors?.[0] ?? "the run did not complete"}.`;
+  }
+  if (productRun.status === "blocked") {
+    return `${base} — blocked by safety verification.`;
+  }
+  if (productRun.status === "running" || productRun.status === "queued") {
+    const stage = PRODUCT_AGENT_STAGE_LABELS[productRun.stage] ?? "in progress";
+    return `${base} — currently ${stage.toLowerCase()}.`;
+  }
+  return productRun.summary ? `${base} — ${productRun.summary}` : base;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1047,7 +994,7 @@ function AgentDetailPanel({
                 <span className="meta-label">DATA ANALYZED</span>
                 <p>
                   {agentKey === "PaymentRecoveryAgent"
-                    ? `14 payment attempts inspected — 11 successful, 3 unsuccessful — ₹${failed ? Math.round(failed * (m?.average_order_value ?? 0)).toLocaleString("en-IN") : "1,999"} failed-payment value`
+                    ? `${totalOrders} payment attempts inspected — ${m?.successful_payments ?? 0} successful, ${failed} unsuccessful${failed ? ` — ₹${Math.round(failed * (m?.average_order_value ?? 0)).toLocaleString("en-IN")} failed-payment value` : ""}`
                     : agentKey === "CustomerIntelligenceAgent"
                       ? `${totalCustomers} customers · ${m?.repeat_customers ?? 0} repeat · ${totalOrders} orders · ₹${revenue} revenue`
                       : `${totalOrders} orders · ${totalCustomers} customers · ₹${revenue} captured across last 30 days`}
@@ -1154,6 +1101,9 @@ export function AgentsPage() {
   // NEW Marketing Agent state (powers the MarketingAgent roster slot only)
   const [magiRun, setMagiRun] = useState<MarketingAGIRun | null>(null);
   const [magiCampaigns, setMagiCampaigns] = useState<MarketingAGICampaign[]>([]);
+  // NEW Product Agent state (powers the ProductAgent roster slot only).
+  // Read-only: dispatched by the same shared cycle, never by this page.
+  const [productRun, setProductRun] = useState<ProductAgentRun | null>(null);
 
   const pollIntervalRef = useRef<number | null>(null);
   // Backend-owned cycle currently observed by this page (survives polling,
@@ -1184,6 +1134,8 @@ export function AgentsPage() {
     // NEW Marketing Agent — latest run + campaigns for the MarketingAgent slot
     fetchMarketingAGIRuns().then((r) => setMagiRun(r.runs?.[0] ?? null)).catch(() => undefined);
     fetchMarketingAGICampaigns().then((c) => setMagiCampaigns(c.campaigns ?? [])).catch(() => undefined);
+    // NEW Product Agent — latest run for the ProductAgent slot (read-only)
+    fetchProductAgentRuns().then((r) => setProductRun(r.runs?.[0] ?? null)).catch(() => undefined);
   }, [windowDays]);
 
   useEffect(() => {
@@ -1203,13 +1155,15 @@ export function AgentsPage() {
     let cancelled = false;
     (async () => {
       try {
-        const [runsResp, magi] = await Promise.all([
+        const [runsResp, magi, product] = await Promise.all([
           fetchAgentRuns(50).catch(() => ({ runs: [] as AgentRunRow[] })),
           fetchMarketingAGIRuns().catch(() => ({ runs: [] })),
+          fetchProductAgentRuns().catch(() => ({ runs: [] })),
         ]);
         if (cancelled) return;
         const runs = runsResp.runs ?? [];
         if (magi.runs?.length) setMagiRun(magi.runs[0]);
+        if (product.runs?.length) setProductRun(product.runs[0]);
         if (!runs.length) return;
         const cycleId = runs[0].orchestrator_run_id ?? null;
         const cycleRuns = cycleId
@@ -1219,8 +1173,11 @@ export function AgentsPage() {
         const magiActive = magi.runs?.[0]
           ? magi.runs[0].status === "queued" || magi.runs[0].status === "running"
           : false;
+        // The Product Agent is part of the same cycle: a live Product run
+        // keeps the page in monitoring mode exactly like the Marketing Agent.
+        const productActive = isProductAgentActive(product.runs?.[0]?.status);
         const teamActive = cycleRuns.some((r) => r.status === "running");
-        if ((teamActive || magiActive) && cycleId) {
+        if ((teamActive || magiActive || productActive) && cycleId) {
           // An analysis is still running server-side: resume observing it.
           activeCycleIdRef.current = cycleId;
           setIsWorking(true);
@@ -1302,8 +1259,16 @@ export function AgentsPage() {
         const magiActive = magi.runs?.[0]
           ? magi.runs[0].status === "queued" || magi.runs[0].status === "running"
           : false;
+        // Same shared cycle — the Product Agent is polled alongside the
+        // Marketing Agent and never gates on it.
+        let productActive = false;
+        try {
+          const product = await fetchProductAgentRuns(cycleId);
+          if (product.runs?.length) setProductRun(product.runs[0]);
+          productActive = isProductAgentActive(product.runs?.[0]?.status);
+        } catch { /* transient */ }
         const teamActive = (runsResp.runs ?? []).some((r) => r.status === "running");
-        return teamActive || magiActive;
+        return teamActive || magiActive || productActive;
       } catch {
         return (runsResp.runs ?? []).some((r) => r.status === "running");
       }
@@ -1324,6 +1289,10 @@ export function AgentsPage() {
     try {
       const magi = await fetchMarketingAGIRuns();
       setMagiRun(magi.runs?.[0] ?? null);
+    } catch {}
+    try {
+      const product = await fetchProductAgentRuns(cycleId);
+      setProductRun(product.runs?.[0] ?? null);
     } catch {}
     try {
       const mc = await fetchMarketingAGICampaigns();
@@ -1455,13 +1424,16 @@ export function AgentsPage() {
     const out = agentOutputMap.get(name);
     const vis = AVATAR_BASE[name] ?? { zone: "SPECIALISTS" };
     // NEW Marketing Agent slot: real status from /api/marketing-agi (same position)
-    const magi = name === "MarketingAgent" ? marketingAgentSlot(magiRun, magiCampaigns) : null;
-    const derived = magi ?? deriveLiveStatus(name, run, out, isWorking, Boolean(insufficient && !isWorking && executedAgentNames.length === 0));
-    const progress = magi?.progress ?? deriveAgentProgress(run, out, isWorking, idx, run?.started_at ? new Date(run.started_at).getTime() : workingSinceRef.current);
+    const magi = name === "MarketingAgent" ? marketingAgentOfficeSlot(magiRun, magiCampaigns) : null;
+    // NEW Product Agent slot: real status from /api/product-agi (same position)
+    const product = name === "ProductAgent" ? productAgentOfficeSlot(productRun) : null;
+    const derived = magi ?? product ?? deriveLiveStatus(name, run, out, isWorking, Boolean(insufficient && !isWorking && executedAgentNames.length === 0));
+    const progress = magi?.progress ?? product?.progress ?? deriveAgentProgress(run, out, isWorking, idx, run?.started_at ? new Date(run.started_at).getTime() : workingSinceRef.current);
     const toolDetail = toolDetailForAgent(name, metrics, run);
     const commTarget = derived.live === "COMMUNICATING" ? commTargetFor(name) : null;
     const monitorLine =
       magi?.monitor ??
+      product?.monitor ??
       (derived.live === "WORKING"
         ? EXECUTION_PHASES[name] ?? `Analyzing ${LIVE_TASKS[name] ?? "business data"}…`
         : derived.live === "TOOL_CALL"
@@ -1489,6 +1461,7 @@ export function AgentsPage() {
                           : `Queued — ${LIVE_TASKS[name] ?? prof.looksAt}`);
     const subLine =
       magi?.sub ??
+      product?.sub ??
       (derived.live === "TOOL_CALL"
         ? `${toolDetail?.input ?? "input"} → ${toolDetail?.result ?? "running"}`
         : derived.live === "WORKING"
@@ -1636,10 +1609,12 @@ export function AgentsPage() {
     })
     .filter((f): f is NonNullable<typeof f> => f !== null);
 
-  // Displayed findings exclude the Marketing Agent: its live state already
-  // renders in the autonomous-employees card below, so listing it here too
-  // would duplicate the old Marketing finding card on the page.
-  const visibleFindings = findings.filter((f) => f.name !== "MarketingAgent");
+  // Displayed findings exclude the Marketing Agent and the Product Agent:
+  // their live state already renders in the autonomous-employees cards
+  // below, so listing them here too would duplicate those cards.
+  const visibleFindings = findings.filter(
+    (f) => f.name !== "MarketingAgent" && f.name !== "ProductAgent",
+  );
 
   // opportunities unified
   const runOpps = lastRunResult?.ranked_opportunities ?? [];
@@ -2354,22 +2329,30 @@ export function AgentsPage() {
               />
             );
           })()}
-          <AgentCard
-            accent="product"
-            label="PRODUCT AGENT"
-            statusText="WORKING ON YOUR PRODUCTS"
-            statusTone="accent"
-            role="AUTONOMOUS PRODUCT GROWTH EMPLOYEE"
-            description="Analyzes products, finds catalog opportunities, recommends pricing and merchandising improvements, and prepares actions for approval."
-            findingLabel="CURRENT WORK"
-            finding="Found 3 product opportunities worth ₹12,450/month potential impact."
-            support="Frontend preview · human approval required"
-            actionLabel="OPEN PRODUCT AGENT →"
-            onOpen={() => navigate("/product-agent")}
-          />
+          {(() => {
+            // Real Product Agent state from the shared cycle — no simulated
+            // progress and no invented completion.
+            const product = liveInfos.find((a) => a.key === "ProductAgent") ?? null;
+            return (
+              <AgentCard
+                accent="product"
+                label="PRODUCT AGENT"
+                statusText={product?.chipLabel ?? "IDLE"}
+                statusTone={product?.chipTone ?? "neutral"}
+                role="AUTONOMOUS PRODUCT GROWTH EMPLOYEE"
+                description="Analyzes products, finds catalog opportunities, recommends pricing and merchandising improvements, and prepares actions for approval."
+                findingLabel="LATEST FINDING"
+                finding={productAgentFinding(productRun)}
+                support={product?.monitorLine ?? "Part of the shared AI Team analysis"}
+                actionLabel="OPEN PRODUCT AGENT →"
+                onOpen={() => navigate("/product-agent")}
+              />
+            );
+          })()}
         </div>
         <p className="agents-cc__employeesHint">
-          MARKETING AGENT ↓ PRODUCT AGENT — two specialists, one AI Growth Team.
+          Both agents start from one shared analysis cycle — Start Analysis on
+          this page runs them concurrently.
         </p>
       </WindowPanel>
 

@@ -311,14 +311,15 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  height: var(--header-height);
+  gap: clamp(10px, 2vw, 16px);
+  min-height: var(--header-height);
 }
 
 .wordmark {
   display: inline-flex;
   align-items: baseline;
   gap: 8px;
+  flex-shrink: 0;              /* never collide with the nav / toggle */
   font-family: var(--font-display);
   font-weight: 850;
   font-size: 1.06rem;
@@ -385,7 +386,15 @@
 }
 
 .site-nav__link.is-active {
-  color: var(--ink);
+  color: var(--coral-deep);
+  background: var(--paper-bright);
+  border: 1px solid var(--coral-deep);
+  border-radius: var(--radius-control);
+  padding: 5px 9px;
+}
+
+.site-nav__link.is-active::after {
+  display: none;
 }
 
 .site-nav__cta {
@@ -395,12 +404,13 @@
 /* Mobile menu toggle */
 .nav-toggle {
   display: none;
+  flex: 0 0 auto;
   flex-direction: column;
   justify-content: center;
   gap: 5px;
-  width: 40px;
-  height: 40px;
-  padding: 8px;
+  width: 44px;
+  height: 44px;
+  padding: 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   background: var(--paper-bright);
@@ -427,11 +437,16 @@
   transform: translateY(-7px) rotate(-45deg);
 }
 
+/* Collapsed by default. The panel is only rendered while `hidden` is absent —
+   never style `.mobile-menu { display: block }` unconditionally, because an
+   author rule beats the UA `[hidden]` rule and the menu would stay open. */
 .mobile-menu {
   display: none;
 }
 
-@media (max-width: 1100px) {
+/* Breakpoint is set where the desktop row actually stops fitting
+   (measured: the 8 links + auth actions need ≈1200px of header width). */
+@media (max-width: 1199px) {
   .site-nav {
     display: none;
   }
@@ -440,13 +455,18 @@
     display: flex;
   }
 
-  .mobile-menu {
+  .mobile-menu:not([hidden]) {
     display: block;
     position: absolute;
-    top: var(--header-height);
+    top: 100%;
     left: 0;
     right: 0;
     z-index: var(--z-mobile-menu);
+    /* Viewport-aware panel: never taller than the screen, scrolls inside. */
+    max-height: calc(100vh - var(--header-height));
+    max-height: calc(100dvh - var(--header-height));
+    overflow-y: auto;
+    overscroll-behavior: contain;
     background: var(--paper);
     border-bottom: 1px solid var(--line);
     box-shadow: var(--shadow-window);
@@ -455,17 +475,19 @@
   .mobile-menu__list {
     display: flex;
     flex-direction: column;
-    padding: 10px var(--gutter) 18px;
+    padding: 6px var(--gutter) 16px;
   }
 
   .mobile-menu__item {
-    display: block;
+    display: flex;
+    align-items: center;
     width: 100%;
+    min-height: 44px;          /* comfortable touch target */
     text-align: left;
-    padding: 13px 4px;
+    padding: 10px 2px;
     border-bottom: 1px solid var(--line-soft);
     font-family: var(--font-mono);
-    font-size: 0.82rem;
+    font-size: 0.8rem;
     letter-spacing: var(--tracking-meta);
     text-transform: uppercase;
     color: var(--ink-soft);
@@ -483,110 +505,233 @@
 
   .mobile-menu__actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
-    padding-top: 16px;
+    padding-top: 14px;
+  }
+
+  .mobile-menu__actions .btn {
+    min-height: 44px;          /* same touch-target size as the links */
   }
 }
 
-@media (min-width: 1101px) {
+@media (min-width: 1200px) {
   .mobile-menu {
     display: none !important;
   }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   FOOTER — deep chocolate, editorial columns, mono metadata.
+   GLOBAL FOOTER — compact dark-chocolate system bar (~66px, one row on
+   wide screens, gracefully wrapped below). Rendered once by PublicLayout
+   for EVERY route. No page may add its own site-footer variant.
    ═══════════════════════════════════════════════════════════════════════ */
+
+.public-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.public-shell main {
+  flex: 1 0 auto;
+  min-width: 0;
+}
 
 .site-footer {
   position: relative;
   z-index: 1; /* keep the chocolate footer above the fixed living-world layer */
-  margin-top: var(--section-gap);
-  background: var(--choc-900);
-  color: var(--cream-muted);
-  border-top: 1px solid var(--line-strong);
+  width: 100%;
+  background: #24140D;
+  color: #F7EBDD;
+  flex-shrink: 0;
 }
 
-.site-footer__inner {
-  display: grid;
-  grid-template-columns: 1.6fr repeat(3, 1fr);
-  gap: clamp(24px, 5vw, 64px);
-  padding-block: clamp(40px, 6vw, 72px) 28px;
-}
-
-.site-footer__brand p {
-  margin-top: 14px;
-  max-width: 34ch;
-  font-size: var(--text-small);
-  line-height: 1.66;
-}
-
-.site-footer__heading {
-  font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  font-weight: 500;
-  letter-spacing: var(--tracking-meta);
-  text-transform: uppercase;
-  color: var(--cream-muted);
-  margin-bottom: 14px;
-}
-
-.site-footer__links {
+.site-footer__bar {
+  max-width: 1900px;
+  width: calc(100% - 80px);
+  margin: 0 auto;
+  min-height: 66px;
   display: flex;
-  flex-direction: column;
-  gap: 9px;
+  align-items: center;
+  flex-wrap: wrap;             /* never force a row wider than the viewport */
+  gap: 10px 20px;
+  padding-block: 10px;
 }
 
-.site-footer__links a,
-.site-footer__link-btn {
-  font-size: var(--text-small);
-  color: var(--cream-muted);
-  width: fit-content;
-  border-bottom: 1px solid transparent;
-  transition: color var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out);
+/* 1 — Brand */
+.site-footer__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  flex-shrink: 0;
+}
+
+.site-footer__wordmark {
+  font-family: var(--font-display);
+  font-weight: 850;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+  color: #F7EBDD;
+  white-space: nowrap;
+}
+
+.site-footer__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 77px;
+  height: 27px;
+  padding: 0 8px;
+  border: 1px solid #E46D46;
+  border-radius: 3px;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #E46D46;
+  white-space: nowrap;
+}
+
+/* Vertical separators between the five groups */
+.site-footer__sep {
+  width: 1px;
+  height: 36px;
+  background: rgba(240, 210, 190, 0.20);
+  flex-shrink: 0;
+}
+
+/* 2 — Navigation */
+.site-footer__nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 29px;
+  min-width: 0;                /* may shrink and re-wrap instead of overflow */
+}
+
+.site-footer__link {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #F6EBDD;
+  white-space: nowrap;
+  line-height: 1;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.site-footer__link--btn {
   background: none;
   border: none;
   padding: 0;
   cursor: pointer;
   font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
 }
 
-.site-footer__links a:hover,
-.site-footer__link-btn:hover {
-  color: var(--cream-text);
-  border-bottom-color: var(--coral);
+.site-footer__link:hover {
+  color: #E46D46;
 }
 
-.site-footer__bottom {
-  display: flex;
+.site-footer__link.is-active {
+  color: #E46D46;
+}
+
+/* 3 — System status */
+.site-footer__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 22px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #F6EBDD;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.site-footer__dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #35C982;
+  flex-shrink: 0;
+}
+
+/* 4 — Social icons (no URLs configured: visual boxes, no fake links) */
+.site-footer__social {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.site-footer__icon {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(240, 210, 190, 0.28);
+  border-radius: 4px;
+  background: transparent;
+  color: #F7EBDD;
+}
+
+/* 5 — Copyright / legal (no legal routes exist: plain text) */
+.site-footer__legal {
+  display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding-block: 18px;
-  border-top: 1px solid var(--line-on-dark-soft);
+  gap: 6px 10px;
+  margin-left: auto;
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  letter-spacing: var(--tracking-meta);
-  text-transform: uppercase;
-  color: var(--cream-muted);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: #D7C1AF;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
-.site-footer__bottom .status-dot {
-  margin-right: 8px;
+.site-footer__pipe {
+  color: rgba(240, 210, 190, 0.35);
 }
 
-@media (max-width: 860px) {
-  .site-footer__inner {
-    grid-template-columns: 1fr 1fr;
+/* Mid widths: tighten rhythm, drop the separators, let the row wrap */
+@media (max-width: 1660px) {
+  .site-footer__bar {
+    gap: 8px 16px;
+  }
+  .site-footer__nav {
+    gap: 8px 18px;
+  }
+  .site-footer__status {
+    padding: 0 8px;
+  }
+  .site-footer__sep {
+    display: none;
   }
 }
 
-@media (max-width: 520px) {
-  .site-footer__inner {
-    grid-template-columns: 1fr;
-    gap: 28px;
+/* Narrow: compact wrapped rows, never horizontal overflow */
+@media (max-width: 1100px) {
+  .site-footer__bar {
+    width: calc(100% - 32px);
+    row-gap: 10px;
+    padding-block: 14px;
+  }
+  .site-footer__legal {
+    margin-left: 0;
   }
 }
 

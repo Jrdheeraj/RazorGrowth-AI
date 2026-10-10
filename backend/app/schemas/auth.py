@@ -63,6 +63,9 @@ class MeResponse(BaseModel):
     full_name: str | None = None
     status: str
     memberships: list[MembershipOut]
+    # Account creation timestamp (users.created_at). Optional so older
+    # clients / cached payloads without the field still validate.
+    member_since: str | None = None
 
 
 class MerchantSummary(BaseModel):

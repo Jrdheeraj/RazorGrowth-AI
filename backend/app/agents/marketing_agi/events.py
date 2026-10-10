@@ -35,6 +35,11 @@ class EventRecorder:
         )
         self._seq = int(max_seq or 0)
 
+    @property
+    def run(self) -> MarketingAGIRun:
+        """The run row this recorder writes against (read-only use)."""
+        return self._run
+
     def emit(
         self,
         *,

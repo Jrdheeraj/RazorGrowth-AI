@@ -82,6 +82,8 @@ export interface TokenResponse {
 
 export interface MeResponse extends UserOut {
   memberships: MembershipOut[];
+  /** Account creation timestamp (ISO) — absent on older backend payloads. */
+  member_since?: string | null;
 }
 
 export interface MerchantSummary {
@@ -426,26 +428,64 @@ export interface CatalogOrderListResponse {
   total: number;
 }
 
-/* ── Product Agent (GET /api/product-agi/status) ────────────────────────────
- * Planned backend contract for the /product-agent workstation. Until the
- * endpoint ships, the page renders labelled preview state built from the
- * same shape (see lib/productAgent.ts) — never unlabelled fake data. */
-
-export type ProductAgentSource = "live" | "preview";
+/* ── Product Agent (real backend, GET /api/product-agi/*) ───────────────────
+ * Every field below is produced by the Product Agent backend from measured
+ * data. `null` always means "not computable from the available data" — it
+ * is never a placeholder zero and never a frontend substitute.
+ */
 
 export interface ProductAgentInsight {
   id: string;
-  icon: "chart" | "alert" | "doc" | "search-check" | "git-branch" | "target";
+  icon: "chart" | "alert" | "doc" | "search-check" | "git-branch" | "target" | "box" | "branch";
   value: string;
   detail: string;
 }
 
+export interface ProductAgentRecommendationEvidence {
+  source: string;
+  source_kind: string;
+  statement: string;
+  tool: string | null;
+}
+
 export interface ProductAgentRecommendation {
   id: string;
-  label: string;
-  text: string;
-  potential: string;
-  confidence: string;
+  run_id: string;
+  type: string;
+  title: string;
+  problem: string;
+  recommendation: string;
+  why_now: string;
+  confidence: number;
+  evidence: ProductAgentRecommendationEvidence[];
+  /** `status: "unavailable"` means the impact genuinely could not be computed. */
+  expected_impact: { status: "available" | "unavailable"; text: string; basis?: string } | null;
+  risk: string | null;
+  affected_products: string[];
+  basis: string | null;
+  action_required: boolean;
+  approval_required: boolean;
+  status: string;
+  /** Canonical agent_actions state: REQUIRED | APPROVED | EXECUTING | ... */
+  approval_state: string | null;
+  executed: boolean;
+  action_id: string | null;
+  data: Record<string, unknown> | null;
+  created_at: string | null;
+}
+
+export interface ProductAgentFinding {
+  id: string;
+  run_id: string;
+  type: string;
+  title: string;
+  description: string;
+  severity: "info" | "low" | "medium" | "high";
+  confidence: number | null;
+  evidence: ProductAgentRecommendationEvidence[];
+  product_ids: string[];
+  data: Record<string, unknown> | null;
+  created_at: string | null;
 }
 
 export interface ProductAgentWorkItem {
@@ -458,30 +498,187 @@ export interface ProductAgentWorkItem {
 export interface ProductAgentActivityItem {
   id: string;
   title: string;
-  time: string;
+  time: string | null;
   state: "active" | "completed" | "failed";
+  stage: string;
+  event_type: string;
+  seq: number;
 }
 
 export interface ProductAgentPlatform {
   key: string;
   name: string;
-  blurb: string;
   status: "connected" | "not_connected";
+  blurb: string;
+  meta: string;
+  /** False means this platform has no integration in the codebase at all. */
+  integration_implemented: boolean;
+}
+
+export interface ProductAgentWorkflowStep {
+  top: string;
+  bottom: string;
+}
+
+export interface ProductAgentProductRow {
+  product_id: string;
+  name: string;
+  sku: string | null;
+  category: string;
+  price_inr: number;
+  stock_quantity: number;
+  units_sold: number;
+  revenue_inr: number;
+  orders: number;
+  /** Recent vs prior half-window unit change, or null when no baseline exists. */
+  trend_pct: number | null;
+  revenue_share_pct: number | null;
+  status: string;
+  low_stock: boolean;
+}
+
+export interface ProductAgentCatalogSummary {
+  window_days: number;
+  generated_at: string | null;
+  product_count: number;
+  total_units: number;
+  in_stock_count: number;
+  out_of_stock_count: number;
+  category_count: number;
+  categories: string[];
+  catalog_value_inr: number;
+  low_stock_threshold: number;
+  low_stock_count: number;
+  total_units_sold: number;
+  total_revenue_inr: number;
+  settled_orders: number;
+  average_order_value_inr: number | null;
+  never_sold_count: number;
+  multi_item_order_count: number;
+  data_completeness: "full" | "no_data";
+}
+
+export interface ProductAgentCatalog {
+  window_days: number;
+  generated_at: string | null;
+  summary: ProductAgentCatalogSummary;
+  catalog_health: {
+    status: string;
+    score: number | null;
+    grade: string;
+    components?: Record<string, number>;
+    reason?: string;
+  };
+  products: ProductAgentProductRow[];
+  segments: Record<string, ProductAgentProductRow[]>;
+  segment_status: Record<string, string | undefined>;
 }
 
 export interface ProductAgentStatusResponse {
-  headline: string;
-  support: string;
+  has_run: boolean;
+  run_id: string | null;
+  /** Shared AI Team analysis cycle the displayed run belongs to. */
+  analysis_cycle_id?: string | null;
+  /** Always true: the Product Agent is dispatched by the AI Team cycle,
+   *  never by this dashboard. */
+  managed_by_ai_team?: boolean;
+  status: string | null;
+  stage: string | null;
+  /** 0-based index into workflow_steps, or -1 before the first run. */
+  step_index: number;
   status_label: string;
   needs_approval: boolean;
-  /** 0-based index into the eight-step product workflow (5 = waiting for approval). */
-  step_index: number;
+  approval_status?: string | null;
+  headline: string;
+  support: string;
+  llm?: { provider: string | null; model: string | null; degraded: boolean };
   insights: ProductAgentInsight[];
   recommendations: ProductAgentRecommendation[];
   work: ProductAgentWorkItem[];
   activity: ProductAgentActivityItem[];
   learning_insight: string;
   platforms: ProductAgentPlatform[];
+  metrics: Record<string, number | null>;
+  catalog: ProductAgentCatalog;
+  workflow_steps: ProductAgentWorkflowStep[];
+  verification?: Record<string, unknown> | null;
+  knowledge_gaps?: string[];
+  started_at?: string | null;
+  completed_at?: string | null;
+  duration_seconds?: number | null;
+  result?: Record<string, unknown> | null;
+  errors?: string[];
+}
+
+export interface ProductAgentCatalogResponse extends ProductAgentCatalog {}
+
+export interface ProductAgentStartResponse {
+  run_id: string;
+  status: string;
+  stage: string;
+  objective: string;
+  /** True when the request joined an already in-flight run rather than
+   *  creating a second one. */
+  already_running?: boolean;
+  analysis_cycle_id?: string | null;
+  llm_configured: boolean;
+  llm_provider: string | null;
+  llm_model: string | null;
+}
+
+export interface ProductAgentRun {
+  id: string;
+  merchant_id: string;
+  objective: string;
+  status: string;
+  stage: string;
+  /** Shared AI Team analysis cycle this run belongs to, when dispatched
+   *  by Start Analysis. Null for a run with no cycle link. */
+  analysis_cycle_id?: string | null;
+  approval_status: string | null;
+  summary: string | null;
+  metrics: Record<string, number | null>;
+  products_analyzed: number;
+  opportunities_found: number;
+  recommendations_created: number;
+  llm_provider: string | null;
+  llm_model: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_seconds: number | null;
+  state: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  errors: string[];
+}
+
+export interface ProductAgentRunListResponse {
+  runs: ProductAgentRun[];
+}
+
+export interface ProductAgentFindingListResponse {
+  run_id: string;
+  findings: ProductAgentFinding[];
+}
+
+export interface ProductAgentRecommendationListResponse {
+  run_id: string;
+  recommendations: ProductAgentRecommendation[];
+}
+
+export interface ProductAgentActivityResponse {
+  run_id: string;
+  status: string;
+  stage: string;
+  events: {
+    id: string;
+    run_id: string;
+    seq: number;
+    stage: string;
+    event_type: string;
+    message: string;
+    data: Record<string, unknown>;
+    created_at: string;
+  }[];
 }
 
 export interface CustomerRow {
@@ -918,6 +1115,36 @@ export interface MarketingAGIStatus {
   marketing_stack?: MarketingStackEntry[];
   tools_available: number;
   workflows_available: number;
+  /** MCP tool-connectivity layer summary (counts + servers only). */
+  mcp?: {
+    enabled?: boolean;
+    tools?: number;
+    read_tools?: number;
+    write_tools?: number;
+    approval_required_tools?: number;
+    internal_tools?: number;
+    external_tools?: number;
+    servers?: string[];
+  };
+}
+
+/** One MCP tool invocation, as the backend recorded it for this run. */
+export interface MarketingAGIMCPToolCall {
+  tool: string;
+  server: string;
+  provider: string;
+  status: "success" | "error" | "denied" | string;
+  read_only: boolean;
+  requires_approval: boolean;
+  risk_level: string;
+  duration_ms?: number;
+  error_code?: string | null;
+  error_message?: string | null;
+  cached?: boolean;
+  retries?: number;
+  summary?: string;
+  args?: Record<string, unknown>;
+  ts?: string | null;
 }
 
 export interface MarketingAGIRunEvent {
@@ -955,6 +1182,8 @@ export interface MarketingAGIStateSummary {
     retrievals: Array<{ query: string; tool: string; item_count: number; statements: string[] }>;
   }>;
   tool_calls: Array<{ tool: string; params: Record<string, unknown>; ok: boolean; latency_ms?: number; ts?: string; summary?: string }>;
+  /** MCP tool calls for this run. Safe metadata only. */
+  mcp_calls?: MarketingAGIMCPToolCall[];
   workflow: string | null;
   plan: Array<{ step: string; tool: string; status: string }>;
   campaign_draft: Record<string, unknown> | null;
@@ -1091,4 +1320,36 @@ export interface MarketingAGIToolCatalogResponse {
     capabilities: string[];
     integration_status: string;
   }>;
+  /** Normalized MCP catalog with each tool's guardrail declaration. */
+  mcp_tools?: Array<{
+    name: string;
+    description: string;
+    provider: string;
+    phase: string;
+    read_only: boolean;
+    requires_approval: boolean;
+    requires_integration: string | null;
+    risk_level: string;
+    input_schema: Record<string, unknown>;
+    integration_status?: string;
+  }>;
+  mcp_policies?: Array<{
+    name: string;
+    provider: string;
+    read_only: boolean;
+    external_write: boolean;
+    requires_approval: boolean;
+    requires_execution_enabled: boolean;
+    requires_integration: string | null;
+    risk_level: string;
+    tenant_scoped: boolean;
+    phase: string;
+  }>;
+  mcp_allowlists?: {
+    read?: string[];
+    write?: string[];
+    approval_required?: string[];
+    internal?: string[];
+    external?: string[];
+  };
 }

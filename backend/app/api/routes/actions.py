@@ -300,7 +300,33 @@ def execute_action_route(
         raise HTTPException(status_code=404, detail="ACTION_NOT_FOUND")
     _verify_tenant_access(action, ctx)
 
-    result = execute_action(db, aid, actor=_actor_label(ctx))
+    # External marketing writes are dispatched THROUGH the MCP tool layer,
+    # so MCP genuinely sits below the approval boundary rather than beside
+    # it. The approval itself already happened (status == approved, a human
+    # set approved_by) and MCP policy re-verifies tenant ownership plus
+    # EXECUTION_ENABLED before the existing executor runs. ``None`` means
+    # "not an MCP-backed write" - that action type keeps its existing path.
+    mcp_result = None
+    try:
+        from backend.app.integrations.mcp.execution import execute_approved_action
+
+        mcp_result = execute_approved_action(
+            db, action.merchant_id, aid, actor=_actor_label(ctx)
+        )
+    except Exception as exc:  # noqa: BLE001 - never lose an approved action
+        log.warning(
+            "MCP dispatch for action %s failed (%s); falling back to the "
+            "existing execution path",
+            aid,
+            type(exc).__name__,
+        )
+        mcp_result = None
+
+    result = (
+        mcp_result
+        if mcp_result is not None
+        else execute_action(db, aid, actor=_actor_label(ctx))
+    )
 
     # Persist the terminal transition (completed/failed/idempotent-skip)
     # and its audit events before responding.

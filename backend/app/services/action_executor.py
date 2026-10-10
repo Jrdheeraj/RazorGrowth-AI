@@ -19,11 +19,16 @@ CRITICAL REQUIREMENTS:
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from backend.app.core.config import get_settings
+from backend.app.core.execution_policy import (
+    describe_blocking_reason,
+    external_execution_state,
+)
 from backend.app.guardrails.policy import GuardrailResult
 from backend.app.schemas.action import (
     SendCampaignPayload,
@@ -85,12 +90,18 @@ class BaseActionExecutor:
 
 
 class SendCampaignExecutor(BaseActionExecutor):
-    """Executor for send_campaign actions.
+    """Executor for send_campaign actions (email channel).
 
-    Email channel with a reachable Resend key (merchant connection first,
-    platform default second) + EXECUTION_ENABLED sends for REAL through
-    Resend AFTER a live key verification. Every other case returns the
-    honest test-mode result (sent=False) — never a fake delivery.
+    Email with a reachable Resend key (merchant connection first, platform
+    default second) AND external execution enabled sends for REAL through
+    Resend AFTER a live key verification.
+
+    Every other case returns an explicit PREVIEW: ``success=True`` with
+    ``sent=False`` and a ``delivery_status``/``blocking_reason`` that names
+    exactly what prevented sending. A preview is never presented as a
+    delivery, and it never marks the action completed (see
+    ``action_service.execute_action``), so an unsent campaign cannot be
+    mistaken for one that reached a mailbox.
     """
 
     action_type = "send_campaign"
@@ -114,11 +125,11 @@ class SendCampaignExecutor(BaseActionExecutor):
         if campaign_type != "email":
             return self._test_mode(campaign_type, target_count)
 
-        # If no db session, we can't look up connections — honest test mode.
+        # If no db session, we can't look up connections — honest preview.
         if db is None:
             return self._test_mode(campaign_type, target_count, note=(
                 "No database session available — test preview only"
-            ))
+            ), blocking_reason="NO_SESSION")
 
         from backend.app.integrations.marketing.resend_email import ResendProvider
         from backend.app.services import integration_service as svc
@@ -134,10 +145,34 @@ class SendCampaignExecutor(BaseActionExecutor):
             from_email = settings.RESEND_FROM_EMAIL
             from_name = settings.RESEND_FROM_NAME
         if not api_key or not from_email:
-            # No sending capability at all — honest test-mode, nothing sent.
+            # No sending capability at all — explicit preview naming the cause.
             return self._test_mode(campaign_type, target_count, note=(
                 "No Resend key / sender identity available — no external message sent"
-            ))
+            ), blocking_reason="PROVIDER_CONFIG_MISSING")
+
+        # ── Authoritative execution gate ────────────────────────────────
+        # One policy module, one meaning, in every environment. The executor
+        # passes the settings object it already resolved rather than letting
+        # the policy re-read global state, so there is a single source of
+        # truth per request.
+        #
+        # This runs BEFORE any network call on purpose. When external
+        # execution is off the provider must not be contacted at all — not
+        # even for a credential probe — so a disabled deployment makes zero
+        # outbound requests. Credentials are still reported when they are
+        # missing, because that is knowable locally and is usually the more
+        # actionable thing to fix.
+        if not external_execution_state(enabled=settings.EXECUTION_ENABLED).enabled:
+            return self._test_mode(
+                campaign_type, target_count,
+                note="external execution disabled — no provider call, nothing sent",
+                extra={"provider": "resend",
+                       "credentials_present": bool(api_key and from_email)},
+                blocking_reason="EXECUTION_DISABLED",
+                remediation=describe_blocking_reason(
+                    enabled=settings.EXECUTION_ENABLED
+                ),
+            )
 
         # Live-verify the key before touching the network for a send.
         # "CONNECTED because the key exists" is forbidden: test the provider.
@@ -148,25 +183,20 @@ class SendCampaignExecutor(BaseActionExecutor):
                 {"error_code": verify.error_code, "message": verify.message,
                  "stage": "pre_send_verify"},
             )
+            self._mark_campaign_failed(db, action, verify.error_code or "PROVIDER_ERROR")
             return ExecutorResult(
                 success=False,
                 error=f"{verify.error_code}: {verify.message}",
-            )
-
-        if not settings.EXECUTION_ENABLED:
-            return self._test_mode(
-                campaign_type, target_count,
-                note=("EXECUTION_ENABLED=false — verified Resend key, send withheld (test preview)"),
-                extra={"provider": "resend", "verified": True, "from": from_email},
             )
 
         resolved = self._resolve_email_content(db, action)
         if resolved is None:
             return ExecutorResult(
                 success=False,
-                error="UNRESOLVABLE_AUDIENCE: no recipient emails found for this campaign",
+                error="UNRESOLVABLE_AUDIENCE: no sendable recipients found for this campaign",
             )
-        to_addrs, subject, html, text = resolved
+        to_addrs, subject, html, text, skipped = resolved
+
         result = ResendProvider().send_email(
             api_key=api_key,
             from_email=f"{from_name} <{from_email}>" if from_name else from_email,
@@ -180,6 +210,7 @@ class SendCampaignExecutor(BaseActionExecutor):
                 db, action, "resend", False,
                 {"error_code": result.error_code, "message": result.message},
             )
+            self._mark_campaign_failed(db, action, result.error_code or "PROVIDER_ERROR")
             return ExecutorResult(
                 success=False,
                 error=f"{result.error_code}: {result.message}",
@@ -198,10 +229,20 @@ class SendCampaignExecutor(BaseActionExecutor):
                 "mode": "live",
                 "sent": True,
                 "executed": True,
+                # The provider confirms ACCEPTANCE for sending. Delivery to
+                # an inbox is never claimed: this API returns no such signal.
+                "delivery_status": "accepted_by_provider",
                 "provider": "resend",
                 "email_id": result.data.get("email_id"),
+                "provider_request_id": result.provider_request_id,
                 "from": from_email,
                 "subject": subject,
+                "skipped_recipients": (
+                    skipped.get("skipped_unsubscribed", 0)
+                    + skipped.get("skipped_invalid", 0)
+                    + skipped.get("skipped_duplicates", 0)
+                ),
+                **skipped,
             },
         )
 
@@ -209,19 +250,25 @@ class SendCampaignExecutor(BaseActionExecutor):
     def _test_mode(
         campaign_type: str, target_count: int, note: str | None = None,
         extra: dict | None = None,
+        blocking_reason: str = "EXECUTION_DISABLED",
+        remediation: str | None = None,
     ) -> ExecutorResult:
-        # TEST MODE ONLY — no external message is ever sent from here.
-        # The result metadata states this explicitly so nothing upstream can
-        # mistake it for a real delivery.
+        # PREVIEW ONLY — no external message is ever sent from here. The
+        # result states that explicitly, and names the reason, so nothing
+        # upstream can mistake it for a delivery or retry it blindly.
         meta: dict[str, Any] = {
             "campaign_type": campaign_type,
             "target_count": target_count,
             "mode": "test",
             "sent": False,
             "executed": False,
-            "execution": f"test_campaign_{campaign_type}",
-            "note": note or "Development/test mode — no external message sent",
+            "delivery_status": "preview_only",
+            "blocking_reason": blocking_reason,
+            "execution": f"preview_{campaign_type}",
+            "note": note or "External execution disabled — no message sent",
         }
+        if remediation:
+            meta["remediation"] = remediation
         if extra:
             meta.update(extra)
         return ExecutorResult(success=True, result_metadata=meta)
@@ -250,15 +297,26 @@ class SendCampaignExecutor(BaseActionExecutor):
             entity_id=str(action.id),
         )
 
-    @staticmethod
-    def _resolve_email_content(
-        db: Any, action: Any
-    ) -> tuple[list[str], str, str | None, str | None] | None:
-        """Resolve (recipients, subject, html, text) from the linked draft.
+    # RFC-5322-lite: one "@", a non-empty local part, and a dotted domain.
+    # Deliberately permissive about exotic-but-legal addresses, strict enough
+    # to keep obvious junk out of a paid provider call.
+    _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$")
 
-        Recipients come from live Customer rows (merchant-scoped, must have
-        an email address). Subject/body come from the verified draft content.
-        Returns None when there is nobody to send to.
+    @classmethod
+    def _resolve_email_content(
+        cls, db: Any, action: Any
+    ) -> tuple[list[str], str, str | None, str | None, dict[str, Any]] | None:
+        """Resolve (recipients, subject, html, text, skipped) from the draft.
+
+        Recipients come from live Customer rows, merchant-scoped. Two filters
+        run BEFORE any provider call:
+
+          * consent — a customer flagged ``email_opt_out`` is a suppression
+            and is never mailed;
+          * format — an address that is not a usable email is dropped rather
+            than handed to a paid provider that will reject the whole batch.
+
+        Returns None when nobody is left to send to.
         """
         import uuid as _uuid
 
@@ -266,6 +324,12 @@ class SendCampaignExecutor(BaseActionExecutor):
 
         from backend.app.models.customer import Customer
         from backend.app.models.marketing_agi import MarketingAGICampaign
+
+        skipped: dict[str, Any] = {
+            "skipped_unsubscribed": 0,
+            "skipped_invalid": 0,
+            "skipped_duplicates": 0,
+        }
 
         payload = dict(action.input_payload or {})
         target = payload.get("target") or {}
@@ -294,9 +358,21 @@ class SendCampaignExecutor(BaseActionExecutor):
                 ).all()
             )
             for c in rows:
-                email = (getattr(c, "email", None) or "").strip()
-                if email and email not in to_addrs:
-                    to_addrs.append(email)
+                # Consent suppression — checked first and unconditionally.
+                if getattr(c, "email_opt_out", False):
+                    skipped["skipped_unsubscribed"] += 1
+                    continue
+                email = (getattr(c, "email", None) or "").strip().lower()
+                if not email:
+                    skipped["skipped_invalid"] += 1
+                    continue
+                if not cls._EMAIL_RE.match(email):
+                    skipped["skipped_invalid"] += 1
+                    continue
+                if email in to_addrs:
+                    skipped["skipped_duplicates"] += 1
+                    continue
+                to_addrs.append(email)
         if not to_addrs:
             return None
 
@@ -311,7 +387,7 @@ class SendCampaignExecutor(BaseActionExecutor):
         html = (
             "".join(f"<p>{p}</p>" for p in paragraphs) if paragraphs else None
         )
-        return to_addrs, subject, html, text
+        return to_addrs, subject, html, text, skipped
 
     @staticmethod
     def _mark_campaign_sent(db: Any, action: Any) -> None:
@@ -332,6 +408,37 @@ class SendCampaignExecutor(BaseActionExecutor):
             return
         draft.lifecycle = "completed"
         draft.integration_status = "sent"
+        db.flush()
+
+    @staticmethod
+    def _mark_campaign_failed(db: Any, action: Any, reason: str) -> None:
+        """Record a real failure on the draft.
+
+        Without this a campaign that the provider rejected kept advertising
+        itself as ``draft_only`` / ready, so the merchant saw a sendable
+        campaign that had already been refused.
+        """
+        import uuid as _uuid
+
+        from backend.app.models.marketing_agi import MarketingAGICampaign
+
+        payload = dict(action.input_payload or {})
+        campaign_id = (payload.get("target") or {}).get("marketing_agi_campaign_id")
+        if not campaign_id:
+            return
+        try:
+            draft = db.get(MarketingAGICampaign, _uuid.UUID(str(campaign_id)))
+        except (ValueError, AttributeError):
+            return
+        if draft is None or draft.merchant_id != action.merchant_id:
+            return
+        # Never overwrite a real delivery with a later failure.
+        if draft.integration_status == "sent":
+            return
+        draft.integration_status = "failed"
+        content = dict(draft.content or {})
+        content["last_send_error"] = reason
+        draft.content = content
         db.flush()
 
 

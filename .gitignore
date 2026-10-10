@@ -120,3 +120,5 @@ tsconfig.tsbuildinfo
 frontend/.edge-hiw-profile/
 
 munder-difflin-main
+# guildly agent workspace (linked project) — unstaged by default
+.guildly/

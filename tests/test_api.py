@@ -340,7 +340,12 @@ class TestActions:
         db_session.add(m)
         db_session.commit()
 
-        action = self._action(db_session, m, "send_campaign", "requested")
+        # create_discount: these assert the ACTION STATE MACHINE (approve ->
+        # execute -> idempotent no-op), which is action-type agnostic.
+        # send_campaign is a marketing external write and now enters through
+        # MCP, which refuses it without a connected integration - covered in
+        # tests/test_mcp_write_routing.py.
+        action = self._action(db_session, m, "create_discount", "requested")
         db_session.commit()
 
         # Try to execute a requested action - should fail
@@ -364,7 +369,7 @@ class TestActions:
         db_session.add(m)
         db_session.commit()
 
-        action = self._action(db_session, m, "send_campaign", "approved")
+        action = self._action(db_session, m, "create_discount", "approved")
         db_session.commit()
 
         # First execution

@@ -341,9 +341,11 @@ export class Character {
   }
 
   /** Show what the agent is doing right now in the thought cloud above its head.
-   *  Empty text renders an animated "…" (thinking); `tool` adds a small glyph. */
-  showThought(text: string, tool?: string): void {
-    this.thoughtBubble.show(text, tool);
+   *  Empty text renders an animated "…" (thinking); `tool` adds a small glyph;
+   *  `critical` marks state an operator must not miss (approval gate, blocked
+   *  operation) so it wins placement when the scene is crowded. */
+  showThought(text: string, tool?: string, critical = false): void {
+    this.thoughtBubble.show(text, tool, critical);
   }
 
   /** Fade the thought cloud out after a short linger — the agent went quiet. */
@@ -360,6 +362,34 @@ export class Character {
   /** Shift this avatar's thought cloud up by `px` so it clears a nearby one. */
   setThoughtLift(px: number): void {
     this.thoughtBubble.setLift(px);
+  }
+
+  /** Absolute rect chosen by the scene's overlap resolver; null restores the
+   *  avatar-anchored default. */
+  setThoughtPlacement(rect: { x: number; y: number } | null): void {
+    this.thoughtBubble.setPlacement(rect);
+  }
+
+  /** Hide the cloud while the scene has no collision-free slot for it, so a
+   *  crowded floor never draws two bubbles on top of each other. */
+  setThoughtSuppressed(suppressed: boolean): void {
+    this.thoughtBubble.setSuppressed(suppressed);
+  }
+
+  /** True when the cloud is off screen or fully faded, so it should stop
+   *  reserving space in the scene's layout pass. */
+  getThoughtOffStage(): boolean {
+    return this.thoughtBubble.isOffStage();
+  }
+
+  /** Operator-critical bubbles (approval gate, blocked run) take priority. */
+  getThoughtCritical(): boolean {
+    return this.thoughtBubble.isCritical();
+  }
+
+  /** World size the cloud must stay inside. */
+  getThoughtBounds(): { w: number; h: number } {
+    return this.thoughtBubble.getBounds();
   }
 
   /** Forward the camera zoom so the thought cloud can counter-scale and keep
