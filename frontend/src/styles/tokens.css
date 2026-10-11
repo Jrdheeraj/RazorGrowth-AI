@@ -81,8 +81,11 @@
   --shell-max: 1200px;
   --gutter: clamp(16px, 4vw, 40px);
   --section-gap: clamp(56px, 9vw, 120px);
-  /* Navbar is a floating rounded bar (~88px) inside a padded sticky shell. */
-  --header-height: 108px;
+  /* Navbar is a floating rounded bar (~80px) inside a padded sticky shell
+     (8px shell padding + 80px bar + 8px). Sticky offsets and scroll margins
+     are derived from this, so it must track `.site-header` padding and
+     `.site-header__inner` min-height in styles/components.css. */
+  --header-height: 96px;
 
   /* ── Motion ─────────────────────────────────────────────────────────── */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);

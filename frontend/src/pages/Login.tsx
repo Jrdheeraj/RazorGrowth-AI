@@ -60,14 +60,6 @@ const IconUser = () => (
   </FieldIcon>
 );
 
-const IconUserPlus = () => (
-  <FieldIcon>
-    <circle cx="10" cy="8" r="3.6" />
-    <path d="M3.5 20c0-3.6 2.9-5.8 6.5-5.8 1.4 0 2.7.3 3.7 1" />
-    <path d="M18.5 14.5v6M15.5 17.5h6" />
-  </FieldIcon>
-);
-
 const IconMail = () => (
   <FieldIcon>
     <rect x="3" y="5" width="18" height="14" rx="2" />
@@ -97,12 +89,20 @@ const IconEyeOff = () => (
   </FieldIcon>
 );
 
-const IconChart = () => (
-  <FieldIcon>
-    <path d="M4 20V4" />
-    <path d="M4 20h16" />
-    <path d="M8.5 16v-5M13 16V7.5M17.5 16v-3" />
-  </FieldIcon>
+/* Solid user for the "Log in" tab (reference shows a filled glyph) */
+
+const IconUserSolid = () => (
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <circle cx="12" cy="8" r="4" />
+    <path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5v.5H4V21z" />
+  </svg>
 );
 
 const IconUsers = () => (
@@ -114,10 +114,45 @@ const IconUsers = () => (
   </FieldIcon>
 );
 
-const IconZap = () => (
-  <FieldIcon>
-    <path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12L13 2z" />
-  </FieldIcon>
+/* Official multicolor "G" for the Google button (inline SVG, no new dep) */
+
+const IconGoogle = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path
+      fill="#4285F4"
+      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"
+    />
+    <path
+      fill="#34A853"
+      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+    />
+    <path
+      fill="#FBBC05"
+      d="M5.84 14.1a7.16 7.16 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z"
+    />
+    <path
+      fill="#EA4335"
+      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+    />
+  </svg>
+);
+
+/* Terracotta spark strokes after "starts here." (reference detail) */
+
+const SparkMarks = () => (
+  <svg
+    className="rg-login__spark"
+    width="30"
+    height="30"
+    viewBox="0 0 30 30"
+    fill="none"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path d="M11 4.5 8.5 12" stroke="#D94B2F" strokeWidth="3" strokeLinecap="round" />
+    <path d="M21 8.5 15.5 15" stroke="#D94B2F" strokeWidth="3" strokeLinecap="round" />
+    <path d="M22 19.5h-6" stroke="#D94B2F" strokeWidth="3" strokeLinecap="round" />
+  </svg>
 );
 
 export function Login() {
@@ -186,12 +221,19 @@ export function Login() {
 
   return (
     <section className="rg-login" aria-labelledby="login-heading">
+      {/* Layer 1 — the single continuous illustrated scene: `position: fixed`
+          at `inset: 0`, so it starts at the very top of the viewport and runs
+          behind the navbar AND the whole composition, with no seam. It is
+          decorative only (`pointer-events: none`) and sits at z-index 0,
+          below the shared navbar (z 40) and below `.rg-login__wrap` (z 1).
+          The navbar component itself is untouched. */}
+      <div className="rg-login__bg" aria-hidden="true" />
       <div className="rg-login__wrap">
         <div className="rg-login__panel">
           {/* ── LEFT: brand story + illustration ─────────────────────── */}
           <div className="rg-login__brand">
             <p className="rg-login__eyebrow">
-              <span>Razorgrowth AI</span>
+              <span>RAZORGROWTH AI</span>
               <span className="rg-login__eyebrow-rule" aria-hidden="true" />
             </p>
 
@@ -200,43 +242,11 @@ export function Login() {
               <span className="rg-login__line">
                 of <em className="rg-login__growth">growth</em>
               </span>
-              <span className="rg-login__line">starts here.</span>
+              <span className="rg-login__line">
+                starts here.
+                <SparkMarks />
+              </span>
             </h1>
-
-            <p className="rg-login__sub">
-              One workspace for AI-powered commerce, products, marketing and
-              real business growth.
-            </p>
-
-            <ul className="rg-login__features">
-              <li className="rg-login__feature">
-                <span className="rg-login__feature-icon" aria-hidden="true">
-                  <IconChart />
-                </span>
-                <span className="rg-login__feature-text">
-                  <strong>Boost Revenue</strong>
-                  <span>Turn insights into sales.</span>
-                </span>
-              </li>
-              <li className="rg-login__feature">
-                <span className="rg-login__feature-icon" aria-hidden="true">
-                  <IconUsers />
-                </span>
-                <span className="rg-login__feature-text">
-                  <strong>Smarter Customers</strong>
-                  <span>AI agents find real opportunities.</span>
-                </span>
-              </li>
-              <li className="rg-login__feature">
-                <span className="rg-login__feature-icon" aria-hidden="true">
-                  <IconZap />
-                </span>
-                <span className="rg-login__feature-text">
-                  <strong>Autonomous Growth</strong>
-                  <span>Plan, execute and scale.</span>
-                </span>
-              </li>
-            </ul>
 
             <div className="rg-login__art">
               <img
@@ -250,9 +260,7 @@ export function Login() {
           {/* ── RIGHT: authentication card ───────────────────────────── */}
           <div className="rg-login__auth">
             <div className="rg-login__titlebar">
-              <span className="rg-login__titlebar-name">
-                {mode === "login" ? "login.app" : "register.app"}
-              </span>
+              <span className="rg-login__titlebar-name">login.app</span>
               <span className="rg-login__dots" aria-hidden="true">
                 <span className="rg-login__dot rg-login__dot--terra" />
                 <span className="rg-login__dot rg-login__dot--warm" />
@@ -282,7 +290,7 @@ export function Login() {
                   }
                   onClick={() => switchMode("login")}
                 >
-                  <IconUser />
+                  <IconUserSolid />
                   <span>Log in</span>
                 </button>
                 <button
@@ -294,7 +302,7 @@ export function Login() {
                   }
                   onClick={() => switchMode("signup")}
                 >
-                  <IconUserPlus />
+                  <IconUsers />
                   <span>Create account</span>
                 </button>
               </div>
@@ -364,7 +372,7 @@ export function Login() {
                       aria-pressed={showPw}
                       onClick={() => setShowPw((v) => !v)}
                     >
-                      {showPw ? <IconEyeOff /> : <IconEye />}
+                      {showPw ? <IconEye /> : <IconEyeOff />}
                     </button>
                   </span>
                   {mode === "signup" && (
@@ -373,6 +381,26 @@ export function Login() {
                     </span>
                   )}
                 </label>
+
+                {/* Forgot password — login mode only (no recovery endpoint
+                    exists in the API, so this surfaces an honest notice
+                    instead of a fake flow) */}
+                {mode === "login" && (
+                  <div className="rg-login__forgot-row">
+                    <button
+                      type="button"
+                      className="rg-login__forgot"
+                      onClick={() => {
+                        setError(null);
+                        setInfo(
+                          "Password reset isn't available for this workspace yet — please sign in with your current password."
+                        );
+                      }}
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                )}
 
                 <button
                   type="submit"
@@ -396,6 +424,31 @@ export function Login() {
                   <div role="status" className="rg-login__alert rg-login__alert--info">
                     {info}
                   </div>
+                )}
+
+                {/* Alternative sign-in — login mode only, per the reference.
+                    No user-level Google OAuth exists in the API (repo OAuth
+                    covers Google Ads integrations only), so this surfaces an
+                    honest notice instead of a fake flow. */}
+                {mode === "login" && (
+                  <>
+                    <div className="rg-login__or" aria-hidden="true">
+                      <span>OR CONTINUE WITH</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="rg-login__google"
+                      onClick={() => {
+                        setError(null);
+                        setInfo(
+                          "Google sign-in isn't connected — continue with email and password."
+                        );
+                      }}
+                    >
+                      <IconGoogle />
+                      <span>Sign in with Google</span>
+                    </button>
+                  </>
                 )}
               </form>
 
@@ -421,7 +474,7 @@ export function Login() {
         </div>
 
         <p className="rg-login__back">
-          <Link to="/">← Razorgrowth AI</Link>
+          <Link to="/">← RAZORGROWTH AI</Link>
         </p>
       </div>
     </section>

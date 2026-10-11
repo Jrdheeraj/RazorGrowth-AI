@@ -295,25 +295,30 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   PUBLIC HEADER / NAVIGATION — premium cream navbar.
+   PUBLIC HEADER / NAVIGATION — premium dark-brown navbar.
    Floating rounded bar: brand + badge | divider | icon nav | profile.
-   Palette is scoped to `.site-header` (spec §2); global tokens untouched.
+   Palette is scoped to `.site-header`; global tokens untouched.
+   Default surface is dark brown on EVERY route (including "/").
    ═══════════════════════════════════════════════════════════════════════ */
 
 .site-header {
-  --rg-nav-bg: #FFF4E2;
-  --rg-nav-bg2: #F9EBD5;
-  --rg-panel: #FFF8EC;
-  --rg-ink: #2B190F;
-  --rg-terra: #C94B2B;
-  --rg-peach: #FCE4C8;
+  --rg-nav-bg: #2B190F;
+  --rg-nav-bg2: #3A2418;
+  --rg-nav-hover: rgba(255, 243, 225, 0.08);
+  --rg-panel: #2B190F;
+  --rg-ink: #FFF3E1;
+  --rg-ink-soft: #E5D1B8;
+  --rg-terra: #D65A38;
+  --rg-peach: rgba(255, 243, 225, 0.08);
   --rg-green: #347A57;
-  --rg-border: #D8C2A4;
+  --rg-border: #4B3427;
   position: sticky;
   top: 0;
   z-index: var(--z-header);
-  background: var(--paper);
-  padding: 10px clamp(12px, 2vw, 28px);
+  background: transparent;
+  /* Vertical padding only — horizontal gutter is unchanged. The block value is
+     half of `--header-height` (8 + 80px bar + 8); keep the three in sync. */
+  padding: 8px clamp(12px, 2vw, 28px);
 }
 
 .site-header .site-header__inner {
@@ -325,15 +330,25 @@
   display: flex;
   align-items: center;
   gap: clamp(10px, 1.4vw, 22px);
-  min-height: 88px;
+  /* Bar height. Content box = 80 - 2*8 (padding) - 2 (border) = 62px, and the
+     tallest child (`.rg-profile__trigger`: 44px avatar + 6px padding + 1px
+     border = 58px) still fits with room to spare, so every item stays centred
+     by `align-items: center` without clipping. */
+  min-height: 80px;
   background: var(--rg-nav-bg);
   border: 1px solid var(--rg-border);
   border-radius: 18px;
   box-shadow:
-    0 14px 34px rgba(43, 25, 15, 0.10),
-    0 2px 8px rgba(43, 25, 15, 0.06);
-  padding: 10px 20px;
+    0 14px 34px rgba(0, 0, 0, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.25);
+  /* Vertical padding reduced 10px → 8px; horizontal padding unchanged. */
+  padding: 8px 20px;
 }
+
+/* `navbar--home` is still applied by SiteHeader on "/" but intentionally
+   renders the identical dark-brown container — no transparent override.
+   The solid brown bar stays visually distinct from the illustrated
+   homepage background. Dimensions, alignment, and content are unchanged. */
 
 /* ── Brand ──────────────────────────────────────────────────────────── */
 
@@ -373,7 +388,7 @@
   letter-spacing: var(--tracking-meta);
   text-transform: uppercase;
   color: var(--rg-terra);
-  background: rgba(201, 75, 43, 0.06);
+  background: rgba(214, 90, 56, 0.14);
   border: 1px solid var(--rg-terra);
   border-radius: 6px;
   padding: 3px 7px;
@@ -442,12 +457,16 @@
 
 .site-nav__link:hover {
   color: var(--rg-ink);
-  background: rgba(201, 75, 43, 0.08);
+  background: var(--rg-nav-hover);
+}
+
+.site-nav__link:focus-visible {
+  background: var(--rg-nav-hover);
 }
 
 .site-nav__link.is-active {
   color: var(--rg-terra);
-  background: rgba(201, 75, 43, 0.10);
+  background: rgba(214, 90, 56, 0.16);
 }
 
 .site-nav__link.is-active::after {
@@ -478,7 +497,7 @@
 }
 
 .site-nav__split-toggle:hover {
-  background: rgba(201, 75, 43, 0.12);
+  background: rgba(255, 243, 225, 0.12);
 }
 
 .site-nav__chevron {
@@ -502,8 +521,8 @@
   border: 1px solid var(--rg-border);
   border-radius: 16px;
   box-shadow:
-    0 18px 44px rgba(43, 25, 15, 0.14),
-    0 3px 10px rgba(43, 25, 15, 0.08);
+    0 18px 44px rgba(0, 0, 0, 0.45),
+    0 3px 10px rgba(0, 0, 0, 0.30);
   padding: 8px;
   z-index: 200;
 }
@@ -523,7 +542,7 @@
 }
 
 .ai-menu__item.is-active {
-  background: rgba(201, 75, 43, 0.10);
+  background: rgba(214, 90, 56, 0.16);
   color: var(--rg-terra);
 }
 
@@ -556,7 +575,7 @@
   padding-left: 12px;
   font-size: 0.75rem;
   font-weight: 500;
-  color: var(--ink-faint);
+  color: var(--rg-ink-soft);
   white-space: nowrap;
 }
 
@@ -596,7 +615,7 @@
 
 .rg-profile__trigger:hover {
   background: var(--rg-peach);
-  border-color: #c9a97f;
+  border-color: rgba(255, 243, 225, 0.22);
 }
 
 .rg-profile__name {
@@ -630,8 +649,8 @@
   border: 1px solid var(--rg-border);
   border-radius: 16px;
   box-shadow:
-    0 18px 44px rgba(43, 25, 15, 0.14),
-    0 3px 10px rgba(43, 25, 15, 0.08);
+    0 18px 44px rgba(0, 0, 0, 0.45),
+    0 3px 10px rgba(0, 0, 0, 0.30);
   z-index: 200;
   overflow: hidden;
 }
@@ -660,7 +679,7 @@
 .rg-profile__identity-email {
   font-family: var(--font-mono);
   font-size: var(--text-meta);
-  color: var(--ink-faint);
+  color: var(--rg-ink-soft);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -706,7 +725,7 @@
 }
 
 .rg-profile__logout:hover {
-  background: rgba(201, 75, 43, 0.10);
+  background: rgba(214, 90, 56, 0.16);
 }
 
 .site-header :focus-visible {
@@ -761,7 +780,7 @@
 @media (max-width: 1500px) and (min-width: 1200px) {
   .site-header__inner {
     gap: 12px;
-    padding: 10px 14px;
+    padding: 8px 14px;          /* same reduced vertical padding as the base rule */
   }
 
   .site-nav__link {
@@ -849,12 +868,12 @@
     max-height: calc(100dvh - var(--header-height));
     overflow-y: auto;
     overscroll-behavior: contain;
-    background: var(--rg-nav-bg, var(--paper));
-    border: 1px solid var(--rg-border, var(--line));
+    background: var(--rg-nav-bg, #2B190F);
+    border: 1px solid var(--rg-border, #4B3427);
     border-radius: 16px;
     box-shadow:
-      0 18px 44px rgba(43, 25, 15, 0.14),
-      0 3px 10px rgba(43, 25, 15, 0.08);
+      0 18px 44px rgba(0, 0, 0, 0.45),
+      0 3px 10px rgba(0, 0, 0, 0.30);
   }
 
   .mobile-menu__list {
@@ -872,11 +891,11 @@
     min-height: 44px;          /* comfortable touch target */
     text-align: left;
     padding: 10px 8px;
-    border-bottom: 1px solid rgba(216, 194, 164, 0.55);
+    border-bottom: 1px solid rgba(255, 243, 225, 0.12);
     border-radius: 10px;
     font-size: 0.875rem;
     font-weight: 600;
-    color: var(--rg-ink, var(--ink-soft));
+    color: var(--rg-ink, #FFF3E1);
     transition:
       color var(--dur-fast) var(--ease-out),
       background-color var(--dur-fast) var(--ease-out);
@@ -906,8 +925,8 @@
 
   a.mobile-menu__item.is-active,
   button.mobile-menu__item.is-active {
-    color: var(--rg-terra, var(--coral-deep));
-    background: rgba(201, 75, 43, 0.10);
+    color: var(--rg-terra, #D65A38);
+    background: rgba(214, 90, 56, 0.16);
   }
 
   .mobile-menu__item--sub {
@@ -923,7 +942,7 @@
     font-weight: 500;
     letter-spacing: var(--tracking-meta);
     text-transform: uppercase;
-    color: var(--ink-faint);
+    color: var(--rg-ink-soft, #E5D1B8);
   }
 
   .mobile-menu__sep {

@@ -5,7 +5,7 @@
  * Closes on outside click and on route change.
  *
  * Premium styling (scoped classes in styles/components.css):
- * green square avatar, cream trigger, beige border, rounded corners.
+ * green square avatar, dark-brown trigger, brown border, rounded corners.
  * All account entries, auth logic and logout behavior are unchanged —
  * only the visual treatment was updated for the navbar redesign.
  */

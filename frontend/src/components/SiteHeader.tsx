@@ -1,5 +1,5 @@
 /**
- * SiteHeader — sticky top navigation (premium cream navbar).
+ * SiteHeader — sticky top navigation (premium dark-brown navbar).
  *
  * Unauthenticated: shows Login + Get Started buttons.
  * Authenticated:   shows NavUserMenu (avatar + dropdown) instead.
@@ -321,9 +321,10 @@ export function SiteHeader() {
 
   const isRouteActive = (route: string) => location.pathname === route;
   const isAiActive = AI_TEAM_ROUTES.has(location.pathname);
+  const isHome = location.pathname === "/";
 
   return (
-    <header className="site-header" ref={headerRef}>
+    <header className={isHome ? "site-header navbar--home" : "site-header"} ref={headerRef}>
       <div className="shell site-header__inner">
         {/* Brand */}
         <Link
