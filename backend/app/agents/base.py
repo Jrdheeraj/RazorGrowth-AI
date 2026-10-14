@@ -116,7 +116,11 @@ class BaseGrowthAgent(ABC):
                 result.output["recommendation"] = None
             else:
                 self._run(ctx, result)
-            result.status = "completed"
+            # Never launder a recorded failure into a success. An agent that
+            # detected its own failure inside `_run` (e.g. the Designer Agent
+            # when the LLM provider refused) must keep the honest status.
+            if result.status != "failed":
+                result.status = "completed"
         except AgentPermissionError as exc:
             log.error("Permission violation in %s: %s", self.NAME, exc)
             result.status = "failed"
@@ -226,5 +230,5 @@ class BaseGrowthAgent(ABC):
         result.llm_ms += llm_ms
         content = generated.strip()
         if not content:
-            raise RuntimeError("GROQ_ANALYSIS_EMPTY")
+            raise RuntimeError("LLM_ANALYSIS_EMPTY")
         return content

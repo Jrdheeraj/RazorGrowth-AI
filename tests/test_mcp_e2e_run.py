@@ -6,7 +6,7 @@ autonomous Marketing Agent must
     observe business data
       → use MCP tools
       → retrieve evidence (agentic RAG)
-      → reason (Groq when configured, bounded deterministic loop otherwise)
+      → reason (LLM when configured, bounded deterministic loop otherwise)
       → identify an opportunity
       → prepare an action
       → verify it
@@ -18,9 +18,10 @@ the data is a real seeded commerce history, the verification and the
 approval row are real rows. Only the LLM is optionally absent — and when
 absent the agent says so rather than fabricating reasoning.
 
-Run it with a real key to exercise Groq:
+Run it with a real key to exercise the LLM:
 
-    LLM_PROVIDER=groq GROQ_API_KEY=... python -m tests.test_mcp_e2e_run
+    LLM_PROVIDER=cloudflare CLOUDFLARE_API_TOKEN=... \
+        CLOUDFLARE_ACCOUNT_ID=... python -m tests.test_mcp_e2e_run
 """
 from __future__ import annotations
 
@@ -191,7 +192,7 @@ def run_agent_cycle(verbose: bool = True) -> dict:
 
             llm = build_marketing_llm()
         except Exception as exc:  # pragma: no cover - key problems
-            print(f"! Groq setup failed ({type(exc).__name__}) — running the "
+            print(f"! LLM setup failed ({type(exc).__name__}) — running the "
                   "bounded deterministic loop instead")
     run_row = MarketingAGIRun(
         merchant_id=merchant.id,

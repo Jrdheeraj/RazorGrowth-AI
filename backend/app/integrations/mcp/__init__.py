@@ -1,10 +1,10 @@
 """MCP — standardized tool connectivity underneath the Marketing Agent.
 
-The Marketing Agent stays the agent: Groq reasons, Agentic RAG retrieves,
+The Marketing Agent stays the agent: the LLM reasons, Agentic RAG retrieves,
 the approval/verification/audit pipeline governs. MCP is only the
 standardized way tools are exposed and invoked:
 
-    MarketingAGI → Groq reasoning → Agentic RAG → MCP tool layer
+    MarketingAGI → LLM reasoning → Agentic RAG → MCP tool layer
                  → internal tools / Resend / Google Ads / Meta Ads / Instagram
 
 Guarantees this package upholds:

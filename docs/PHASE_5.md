@@ -30,7 +30,7 @@ end to end.
                 │ deterministic services                    │ LLM (optional)
                 ▼                                           ▼
      scoring.py · radar.py · customer_intelligence.py   reasoning/copy only
-     simulation.py · experiment_service.py · memory.py  (Groq/OpenAI provider)
+     simulation.py · experiment_service.py · memory.py  (shared LLM provider)
      explainability.py · brief.py · opportunity_upsert.py
                 │
                 ▼
@@ -142,7 +142,7 @@ No new required variables. Optional:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LLM_PROVIDER` / `GROQ_API_KEY` / `GROQ_MODEL` | existing | deep-mode interpretation/copy |
+| `LLM_PROVIDER` / `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_TEXT_MODEL` | existing | deep-mode interpretation/copy |
 | `EXECUTION_ENABLED` | `false` | global execution switch |
 | `RAZORPAY_ENABLED` | `false` | real Razorpay execution switch |
 

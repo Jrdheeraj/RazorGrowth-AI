@@ -1326,6 +1326,17 @@
   border-left-color: var(--green-deep);
 }
 
+/* Designer Agent — third identity colour. Warm amber sits between the
+   terracotta (marketing) and the muted green (product) of the same warm
+   family, so the three cards stay one visual system. */
+.employee-card--designer {
+  border-left-color: #9a6a2f;
+}
+
+.employee-card--designer .employee-card__finding {
+  border-left-color: #9a6a2f;
+}
+
 .employee-card:hover {
   border-color: var(--line-strong);
   box-shadow: var(--shadow-window);

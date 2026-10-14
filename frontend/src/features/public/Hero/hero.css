@@ -14,6 +14,7 @@
 .hero__stage {
   position: relative;
   z-index: 1;
+  --hero-lift: clamp(24px, 4vh, 48px);
   min-height: clamp(620px, 92svh, 880px);
   display: flex;
   align-items: center;
@@ -117,6 +118,14 @@
 }
 
 /* Entrance: single soft reveal, staggered once. */
+.hero__stage.reveal {
+  transform: translateY(calc(14px - var(--hero-lift)));
+}
+
+.hero__stage.reveal.is-visible {
+  transform: translateY(calc(-1 * var(--hero-lift)));
+}
+
 .hero__stage.reveal .hfloat {
   opacity: 0;
   transform: translateY(10px);

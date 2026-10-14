@@ -1353,3 +1353,300 @@ export interface MarketingAGIToolCatalogResponse {
     external?: string[];
   };
 }
+
+/* -- Designer Agent workspace (/api/designer/*) ---------------------------
+ *
+ * These mirror the backend's Designer contracts. Three distinctions matter and
+ * are deliberately preserved here rather than collapsed:
+ *
+ *   DesignAssetKind      brief | specification | variant | rendered_image.
+ *                        A structured brief is NOT a rendered image, and the
+ *                        dashboard must never present one as the other.
+ *   image_generation     the REAL provider state. `unavailable` means no
+ *                        provider is configured; it never carries an asset
+ *                        reference, so a placeholder cannot masquerade as a
+ *                        generated creative.
+ *   review_status        a HUMAN decision. The agent may move work INTO
+ *                        `pending_review`; it can never move it out.
+ */
+
+export type DesignProjectStatus = "active" | "archived";
+
+export type DesignAssetKind =
+  | "brief"
+  | "specification"
+  | "variant"
+  | "rendered_image";
+
+export type DesignAssetStatus = "draft" | "ready_for_review" | "archived";
+
+export type DesignReviewStatus =
+  | "draft"
+  | "pending_review"
+  | "in_review"
+  | "approved"
+  | "changes_requested"
+  | "rejected";
+
+export type ImageGenerationState =
+  | "unavailable"
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed";
+
+export interface DesignerImageGeneration {
+  /** `available` means configured and ready; `completed` means a REAL,
+   * validated, durably stored image exists. Never conflated. */
+  status: ImageGenerationState | "available";
+  provider: string | null;
+  reason: string | null;
+  asset_reference: string | null;
+  /** Provider model label, e.g. cloudflare-flux-1-schnell. */
+  model?: string;
+  /** Present only on a real success. */
+  rendered_asset_id?: string;
+  content_type?: string;
+  byte_size?: number;
+  width?: number;
+  height?: number;
+  sha256?: string;
+  version_id?: string;
+  steps?: number | null;
+  /** Stable failure code, e.g. PROVIDER_TIMEOUT. Never contains provider text. */
+  code?: string;
+  detail?: string;
+}
+
+/** Metadata for one stored image. Never carries the bytes themselves. */
+export interface RenderedAsset {
+  id: string;
+  asset_id: string;
+  version_id: string;
+  content_type: string;
+  byte_size: number;
+  sha256: string;
+  width: number;
+  height: number;
+  provider: string;
+  model: string;
+  steps: number | null;
+  created_at: string | null;
+}
+
+export interface RenderedAssetList {
+  assets: RenderedAsset[];
+  total: number;
+  usage_today: { images: number; bytes: number };
+}
+
+export interface DesignProject {
+  id: string;
+  merchant_id: string;
+  title: string;
+  objective: string;
+  project_type: string;
+  status: DesignProjectStatus;
+  analysis_cycle_id: string | null;
+  debate_id: string | null;
+  source_signal_type: string | null;
+  source_signal_id: string | null;
+  source_opportunity_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DesignProjectList {
+  projects: DesignProject[];
+  total: number;
+}
+
+/** One provenance-tagged claim. `basis` is what separates fact from guess. */
+export interface DesignerEvidence {
+  statement: string;
+  basis: "observed" | "derived" | "hypothesis" | "unknown";
+  source?: string | null;
+  value?: number | null;
+}
+
+export interface DesignerVariant {
+  variant_key: string;
+  title: string;
+  objective: string;
+  differences: string[];
+  intended_audience?: string | null;
+  channel?: string | null;
+  rationale: string;
+  trade_offs: string[];
+  evaluation_method: string;
+  confidence?: number | null;
+  evidence_refs: number[];
+}
+
+export interface CreativeBrief {
+  id: string;
+  project_id: string;
+  version: number;
+  is_current: number;
+  title: string;
+  objective: string;
+  audience: string | null;
+  channel: string | null;
+  format_spec: string | null;
+  brand_constraints: string[] | null;
+  content_requirements: string[] | null;
+  layout_direction: string | null;
+  color_guidance: string | null;
+  typography_guidance: string | null;
+  accessibility_considerations: string[] | null;
+  dependencies: string[] | null;
+  open_questions: string[] | null;
+  assumptions: string[] | null;
+  evidence: DesignerEvidence[] | null;
+  radar_references: Array<Record<string, unknown>> | null;
+  variants: DesignerVariant[] | null;
+  review_status: DesignReviewStatus;
+  review_notes: string | null;
+  confidence: number | null;
+  validation: Record<string, unknown> | null;
+  llm_provider: string | null;
+  llm_model: string | null;
+  analysis_cycle_id: string | null;
+  agent_run_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreativeBriefList {
+  briefs: CreativeBrief[];
+  total: number;
+}
+
+export interface DesignAsset {
+  id: string;
+  merchant_id: string;
+  project_id: string;
+  brief_id: string | null;
+  kind: DesignAssetKind;
+  title: string;
+  variant_key: string | null;
+  status: DesignAssetStatus;
+  review_status: DesignReviewStatus;
+  current_version_id: string | null;
+  version_count: number;
+  image_generation: DesignerImageGeneration | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DesignAssetList {
+  assets: DesignAsset[];
+  total: number;
+}
+
+export interface DesignAssetVersion {
+  id: string;
+  asset_id: string;
+  version: number;
+  content: Record<string, unknown>;
+  rationale: string | null;
+  change_summary: string | null;
+  evidence: unknown[] | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface DesignAssetVersionList {
+  asset: DesignAsset;
+  versions: DesignAssetVersion[];
+}
+
+/**
+ * External provider state. A provider is `connected` ONLY when the backend
+ * found a real IntegrationConnection row for this workspace; a card existing
+ * is never evidence of a connection.
+ */
+export interface DesignerIntegration {
+  provider: string;
+  label: string;
+  purpose: string;
+  status: "connected" | "setup_required" | "unsupported";
+  supported: boolean;
+  detail: string;
+}
+
+export interface DesignerCapability {
+  key: string;
+  label: string;
+  status: string;
+  detail: string;
+}
+
+export interface DesignerStatusMetric {
+  key: string;
+  label: string;
+  value: number;
+  hint: string;
+}
+
+export interface DesignerStatus {
+  agent_registered: boolean;
+  agent_description: string | null;
+  capabilities: DesignerCapability[];
+  integrations: DesignerIntegration[];
+  image_generation: DesignerImageGeneration;
+  latest_project: DesignProject | null;
+  latest_brief: CreativeBrief | null;
+  metrics: DesignerStatusMetric[];
+  counts: Record<string, number>;
+  last_updated: string;
+}
+
+export interface DesignerActivityEntry {
+  id: string;
+  kind: "project" | "brief" | "asset" | "run" | "review";
+  title: string;
+  detail: string | null;
+  status: string | null;
+  at: string | null;
+}
+
+export interface DesignerActivityList {
+  items: DesignerActivityEntry[];
+}
+
+export interface DesignerUxFinding {
+  title: string;
+  observed_issue: string;
+  affected_experience: string;
+  user_impact_hypothesis: string;
+  proposed_improvement: string;
+  expected_impact_direction: "helps" | "hurts" | "neutral";
+  expected_impact_magnitude: "low" | "medium" | "high";
+  confidence: number | null;
+  evidence_refs: number[];
+  validation_recommendation: string | null;
+  product_handoff: string | null;
+}
+
+export interface DesignerUxAuditResult {
+  findings: DesignerUxFinding[];
+  evidence: DesignerEvidence[];
+  radar_references: Array<Record<string, unknown>>;
+  /** True only when real authorized observations backed the findings. */
+  sufficient_context: boolean;
+  /** Why an audit could not run, when it could not. Null = it ran. */
+  unavailable_reason: string | null;
+  data_sufficiency: Record<string, unknown> | null;
+}
+
+export interface DesignerHandoff {
+  handoff_id: string;
+  target: string;
+  status: string;
+  brief_id: string;
+  created_at: string;
+  /** Present only when the handoff proposed an existing action type. The
+   *  action still faces the full human approval + EXECUTION_ENABLED gate. */
+  action_id: string | null;
+}

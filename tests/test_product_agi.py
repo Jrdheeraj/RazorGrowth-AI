@@ -806,7 +806,7 @@ def test_every_llm_schema_is_a_valid_structured_output_contract():
     """The provider calls ``schema.model_json_schema()``.
 
     A bare ``list[...]`` has no such method, so every schema the agent hands
-    to Groq must be a real pydantic model. This locks that in: passing
+    to the LLM must be a real pydantic model. This locks that in: passing
     ``list[ResearchQuestion]`` once silently broke retrieval-question
     proposal with an AttributeError.
     """

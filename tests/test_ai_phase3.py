@@ -1285,17 +1285,53 @@ class TestAIAnalysisEndpoint:
         assert "sk-" not in r.text
 
     def test_503_when_llm_api_key_is_empty(self):
-        """_get_llm() must raise HTTPException(503) when LLM_API_KEY is empty."""
+        """_get_llm() must raise HTTPException(503) when no key is configured.
+
+        "Unconfigured" means *no* credential at all: LLM_API_KEY is empty AND
+        both Cloudflare variables are empty. Supplying only some of a
+        Cloudflare config is not a working configuration — see
+        test_cloudflare_key_is_used_when_the_named_provider_has_none.
+        """
+        from types import SimpleNamespace
+
         from fastapi import HTTPException
         from backend.app.api.routes.ai import _get_llm
 
+        unconfigured = SimpleNamespace(
+            LLM_PROVIDER="cloudflare",
+            LLM_API_KEY="",
+            LLM_MODEL="gpt-4o-mini",
+            CLOUDFLARE_API_TOKEN="",
+            CLOUDFLARE_ACCOUNT_ID="",
+            CLOUDFLARE_TEXT_MODEL="@cf/zai-org/glm-4.7-flash",
+        )
         with patch("backend.app.api.routes.ai.get_settings") as mock_cfg:
-            mock_cfg.return_value.LLM_API_KEY = ""
-            mock_cfg.return_value.LLM_PROVIDER = "openai"
-            mock_cfg.return_value.LLM_MODEL = "gpt-4o-mini"
+            mock_cfg.return_value = unconfigured
             with pytest.raises(HTTPException) as exc_info:
                 _get_llm()
             assert exc_info.value.status_code == 503
+
+    def test_cloudflare_key_is_used_when_the_named_provider_has_none(self):
+        """A deployment whose only credential is Cloudflare must not 503."""
+        from types import SimpleNamespace
+
+        from backend.app.ai.llm.provider import CloudflareProvider
+        from backend.app.api.routes.ai import _get_llm
+
+        cf_only = SimpleNamespace(
+            LLM_PROVIDER="openrouter",  # stale name the factory cannot build
+            LLM_API_KEY="",
+            LLM_MODEL="",
+            CLOUDFLARE_API_TOKEN="cf_test_token_1234567890",
+            CLOUDFLARE_ACCOUNT_ID="0123456789abcdef0123456789abcdef",
+            CLOUDFLARE_TEXT_MODEL="@cf/zai-org/glm-4.7-flash",
+            LLM_REQUEST_TIMEOUT=5,
+            LLM_MAX_RETRIES=0,
+            LLM_MAX_TOKENS=64,
+        )
+        with patch("backend.app.api.routes.ai.get_settings") as mock_cfg:
+            mock_cfg.return_value = cf_only
+            assert isinstance(_get_llm(), CloudflareProvider)
 
     def test_no_merchant_in_db_returns_404(self, client):
         """When no merchants exist and merchant_id is omitted → 404."""

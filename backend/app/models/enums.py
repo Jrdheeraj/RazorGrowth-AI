@@ -329,3 +329,72 @@ class UserRole(str, enum.Enum):
 class MembershipStatus(str, enum.Enum):
     active = "active"
     disabled = "disabled"
+
+
+# ── Designer Agent ───────────────────────────────────────────────────────
+#
+# These describe the lifecycle of DESIGN WORK, not of an executable action.
+# A design output never becomes executable on its own: it either stays a
+# reviewable artefact, or it is turned into work through the existing
+# ``agent_actions`` pipeline, which keeps its own approval lifecycle.
+
+
+class DesignProjectStatus(str, enum.Enum):
+    """Lifecycle of a design project container."""
+
+    active = "active"
+    archived = "archived"
+
+
+class DesignAssetKind(str, enum.Enum):
+    """What a design asset actually IS.
+
+    The kinds are deliberately distinct. A structured brief is NOT a
+    specification and NEITHER is a rendered image; conflating them is how a
+    dashboard ends up showing a placeholder plate as if it were a generated
+    creative.
+    """
+
+    brief = "brief"
+    specification = "specification"
+    variant = "variant"
+    rendered_image = "rendered_image"
+
+
+class DesignAssetStatus(str, enum.Enum):
+    """Production state of an asset (not its review state)."""
+
+    draft = "draft"
+    ready_for_review = "ready_for_review"
+    archived = "archived"
+
+
+class DesignReviewStatus(str, enum.Enum):
+    """Human review state.
+
+    ``pending_review`` is the only state in which the agent claims its output
+    is ready. The agent may move work INTO review; it can never move it out —
+    approval belongs to a human through the existing approval conventions.
+    """
+
+    draft = "draft"
+    pending_review = "pending_review"
+    in_review = "in_review"
+    approved = "approved"
+    changes_requested = "changes_requested"
+    rejected = "rejected"
+
+
+class ImageGenerationStatus(str, enum.Enum):
+    """Honest state of an image-generation job.
+
+    ``unavailable`` is a first-class outcome meaning "no provider is
+    configured" — not "failed" and not "done". No code path may return it
+    together with an asset reference.
+    """
+
+    unavailable = "unavailable"
+    pending = "pending"
+    running = "running"
+    completed = "completed"
+    failed = "failed"

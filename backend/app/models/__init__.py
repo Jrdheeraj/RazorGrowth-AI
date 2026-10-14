@@ -16,6 +16,11 @@ from backend.app.models.enums import (  # noqa: F401
     CampaignType,
     Currency,
     CustomerSegment,
+    DesignAssetKind,
+    DesignAssetStatus,
+    DesignProjectStatus,
+    DesignReviewStatus,
+    ImageGenerationStatus,
     MembershipStatus,
     MerchantStatus,
     OpportunityStatus,
@@ -84,3 +89,18 @@ from backend.app.models.product_agi import (  # noqa: F401
     ProductAgentFinding,
     ProductAgentRecommendation,
 )
+
+# Designer Agent — the creative workspace. Imported AFTER agent_debates,
+# agent_runs, growth_opportunities and agent_actions because projects and
+# briefs reference all four by id.
+from backend.app.models.designer import (  # noqa: F401
+    CreativeBrief,
+    DesignAsset,
+    DesignAssetVersion,
+    DesignProject,
+)
+
+# Rendered creative assets — image BYTES for a design asset version.
+# Imported AFTER designer because every FK here targets design_assets or
+# design_asset_versions.
+from backend.app.models.rendered_asset import RenderedAsset  # noqa: F401

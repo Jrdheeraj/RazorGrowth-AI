@@ -102,6 +102,63 @@ def _create_test_schema():
     Base.metadata.drop_all(bind=_test_engine)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _no_live_llm():
+    """Never let the test suite reach a real LLM provider.
+
+    The repository ``.env`` carries real, working credentials. Without this
+    guard the suite silently resolved the configured provider and issued LIVE
+    chat-completion calls, so:
+
+      * test results depended on the developer's provider quota and on whether
+        a hosted model happened to be answering,
+      * every run burned real tokens, and
+      * a provider outage (or an exhausted daily allocation) turned into a
+        wall of unrelated red tests.
+
+    Only the CREDENTIAL variables are blanked. Provider and model *names* are
+    left alone so the Settings defaults stay observable to the tests that
+    assert them; with no credential present ``resolve_llm_provider()``
+    returns ``None`` and the agents take their documented deterministic path.
+
+    Session-scoped on purpose: this only needs to happen once, and adding a
+    per-test ``get_settings.cache_clear()`` changes the settings-caching
+    dynamics that unrelated tests depend on.
+
+    Tests that DO exercise a provider set the variable themselves via
+    ``monkeypatch`` and clear the settings cache, which overrides this for
+    that test only.
+
+    Image generation is deliberately NOT neutralised: the Designer FLUX path
+    is mocked at the httpx boundary in its own tests, and the flag stays on so
+    the "provider unavailable" branches stay reachable.
+    """
+    import os
+
+    from backend.app.core.config import get_settings
+
+    blanked = (
+        "LLM_API_KEY",
+        "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_ACCOUNT_ID",
+        "GROQ_API_KEY",
+        "OPENROUTER_API_KEY",
+    )
+    saved = {name: os.environ.get(name) for name in blanked}
+    for name in blanked:
+        os.environ[name] = ""
+    get_settings.cache_clear()
+    try:
+        yield
+    finally:
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+        get_settings.cache_clear()
+
+
 @pytest.fixture(scope="function")
 def db_session(_create_test_schema) -> Session:
     """

@@ -1194,7 +1194,7 @@ class TestExistingImplementationsReused:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Agent integration (agentic RAG + Groq untouched)
+# Agent integration (agentic RAG + LLM provider untouched)
 # ═══════════════════════════════════════════════════════════════════════
 
 

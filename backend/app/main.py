@@ -128,6 +128,7 @@ from backend.app.api.routes.marketing_agi import router as marketing_agi_router
 from backend.app.api.routes.marketing_integrations import router as marketing_integrations_router
 # Product AGI — autonomous product-growth employee (isolated module)
 from backend.app.api.routes.product_agi import router as product_agi_router
+from backend.app.api.routes.designer import router as designer_router
 
 app.include_router(health_router, prefix="/api")
 app.include_router(opportunities_router, prefix="/api")
@@ -161,6 +162,8 @@ app.include_router(marketing_agi_router, prefix="/api")
 app.include_router(marketing_integrations_router, prefix="/api")
 # Product AGI routes (isolated autonomous agent)
 app.include_router(product_agi_router, prefix="/api")
+# Designer Agent routes (creative workspace: projects, briefs, assets, review)
+app.include_router(designer_router, prefix="/api")
 
 
 @app.get("/")

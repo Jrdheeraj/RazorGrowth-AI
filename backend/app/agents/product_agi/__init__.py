@@ -13,7 +13,7 @@ Layout:
     tools.py      stage -> MCP phase/tool map, tool allowlist
     schemas.py    structured LLM output contracts
     prompts.py    the reasoning prompts
-    llm.py        Groq provider construction (reuses the shared provider)
+    llm.py        provider construction (reuses the shared provider)
     rag.py        research over the shared AgenticRAG loop
     agent.py      the cycle itself
     service.py    dashboard/read-model assembly

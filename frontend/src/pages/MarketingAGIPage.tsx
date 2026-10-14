@@ -2362,7 +2362,7 @@ export function MarketingAGIPage() {
                 <details className="magi-tech">
                   <summary>Technical details</summary>
                   <dl className="magi-rec">
-                    <div><dt>Reasoning engine</dt><dd>{run?.llm_provider ?? status?.llm_provider ?? "Groq"}</dd></div>
+                    <div><dt>Reasoning engine</dt><dd>{run?.llm_provider ?? status?.llm_provider ?? "Cloudflare Workers AI"}</dd></div>
                     <div><dt>Model</dt><dd>{run?.llm_model ?? status?.llm_model ?? "—"}</dd></div>
                     <div><dt>Reasoning status</dt><dd>{reasoningStatusLabel(state?.reasoning_status)}</dd></div>
                     <div><dt>Tools this run</dt><dd>{state?.tool_calls.length ?? 0}</dd></div>

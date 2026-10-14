@@ -166,7 +166,7 @@ def _build_marketing_stack(catalog: list[dict[str, Any]]) -> list[dict[str, Any]
 
 
 def _build_llm() -> BaseLLMProvider | None:
-    """Build the agent LLM (Groq-first); None when not configured (agent
+    """Build the agent LLM (shared provider); None when not configured (agent
     still runs deterministically — honest, not fake)."""
     from backend.app.agents.marketing_agi.llm import build_marketing_llm
 

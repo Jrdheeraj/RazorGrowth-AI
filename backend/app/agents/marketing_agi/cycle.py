@@ -9,12 +9,12 @@ loop. It provides:
       (the orchestrator_run_id shared with sibling agents). Calling it
       twice with the same cycle returns the existing row — exactly one
       Marketing Agent execution per analysis cycle. The LLM identity
-      (Groq-first, backend-only key) is stamped on the row.
+      (shared backend-only provider) is stamped on the row.
 
   run_cycle_worker(session_factory, run_id, merchant_id, objective,
                    cycle_id)
       Execute the bounded MarketingAGI loop on a worker session and close
-      out the AgentRun audit row. Never raises: Groq/loop failures mark
+      out the AgentRun audit row. Never raises: LLM/loop failures mark
       the run failed/degraded without touching sibling agents.
 
   trigger_marketing_agi_parallel(..., dispatch=...)
@@ -141,7 +141,7 @@ def run_cycle_worker(
         try:
             llm = build_marketing_llm()
         except Exception:
-            log.exception("MarketingAGI cycle worker: Groq setup failed")
+            log.exception("MarketingAGI cycle worker: LLM setup failed")
             llm = None
         embedder = None
         try:

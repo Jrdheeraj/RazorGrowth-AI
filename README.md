@@ -8,7 +8,7 @@
 ![React](https://img.shields.io/badge/frontend-React%2019%20%2B%20TypeScript-61dafb?style=flat-square&logo=react)
 ![PostgreSQL](https://img.shields.io/badge/db-PostgreSQL%2016%20%2B%20pgvector-336791?style=flat-square&logo=postgresql)
 ![Razorpay](https://img.shields.io/badge/payments-Razorpay%20TEST%20mode-0c2451?style=flat-square)
-![LLM](https://img.shields.io/badge/LLM-OpenRouter%20free%20%2B%20Groq%20%2B%20OpenAI-8b5cf6?style=flat-square)
+![LLM](https://img.shields.io/badge/LLM-Cloudflare%20Workers%20AI-8b5cf6?style=flat-square)
 ![Tests](https://img.shields.io/badge/tests-673%20passing-brightgreen?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 
@@ -45,7 +45,7 @@ A live business-health dashboard computed from real Razorpay TEST data — reven
 Thirteen specialised agents (see the [AI Team](#-the-ai-team) table) execute a collaborative pipeline over the merchant's data: retrieve evidence → analyse → produce findings → create ranked opportunities with confidence and expected revenue → prepare recommendations. Agents hold a **capability model** that structurally forbids them from approving actions, bypassing guardrails, or touching money — they can only *propose*.
 
 ### ⚖️ Agent Debates
-Specialist agents don't just report — they **cross-examine each other** across structured rounds (investigate → cross-examine → rebut → synthesise), with findings classified as *supporting / opposing / uncertainty* and the Growth Manager synthesising a final recommendation. A **Groq/LLM-powered chat assistant** on the debate page answers merchant questions ("why was this recommended?", "which agent contributed?") using only that debate's context.
+Specialist agents don't just report — they **cross-examine each other** across structured rounds (investigate → cross-examine → rebut → synthesise), with findings classified as *supporting / opposing / uncertainty* and the Growth Manager synthesising a final recommendation. An **LLM-powered chat assistant** on the debate page answers merchant questions ("why was this recommended?", "which agent contributed?") using only that debate's context.
 
 ### 🛡️ Actions & Human Approval
 Every money-touching action is **explainable** (why it was recommended, evidence, scope, amount, who/what is affected), **bounded** (an explicit will-do / will-not-do list, guardrail amount ceilings, campaign audience limits, discount percentage caps), and **gated** — agents propose, but only a merchant **owner/admin** can approve or reject. Approved actions execute behind double guardrails with idempotency, and an **immutable audit trail** records every step with AI / YOU / SYS actor markers.
@@ -60,7 +60,7 @@ JWT authentication with scrypt password hashing, merchant-scoped roles (`owner /
 Razorpay TEST ingestion (orders, payments, customers), a RAG knowledge store with pgvector embeddings, deterministic opportunity scoring (revenue potential × confidence × urgency × evidence strength), revenue-impact simulations with confidence bands, A/B experiment design, growth memory that learns from prior outcomes, and per-merchant customer intelligence (LTV, churn risk, payment success).
 
 ### 🔌 Multi-Provider LLM Layer
-One provider abstraction — **OpenRouter (free models only) · Groq · OpenAI** — selected by a single `LLM_PROVIDER` setting. Free-model enforcement is in code: the OpenRouter provider refuses to construct unless the model id ends with `:free`; there is no paid fallback and no silent provider switch.
+One provider abstraction — **Cloudflare Workers AI** (the platform default) · OpenAI — selected by a single `LLM_PROVIDER` setting. Every agent, route, worker and RAG path resolves its client through the shared `resolve_llm_provider()`, so the whole application can never disagree about which model is in use. There is **no fallback provider**: if nothing is configured the app reports an honest "provider not configured" state and agents run their bounded deterministic workflow rather than fabricating results or silently reaching another vendor.
 
 ---
 
@@ -176,7 +176,7 @@ flowchart LR
 │  │              + immutable audit events                           │  │
 │  └─────────────────────┬─────────────────────────────────────────┘  │
 │  ┌─────────────────────▼─────────────────────────────────────────┐  │
-│  │ LLM provider layer: OpenRouter (free-only) · Groq · OpenAI     │  │
+│  │ LLM provider layer: Cloudflare Workers AI · OpenAI        │  │
 │  └───────────────────────────────────────────────────────────────┘  │
 └────────┬───────────────────────────────────────────────┬────────────┘
          │                                               │
@@ -305,7 +305,7 @@ Workspaces connect **their own** accounts via the UI — these platform defaults
 | Database | PostgreSQL 16 + pgvector (Docker Compose) |
 | Auth | JWT (PyJWT), scrypt password hashing, role-based multi-tenancy |
 | Payments | Razorpay Python SDK (TEST mode, HMAC-SHA256 signed webhooks) |
-| LLM | OpenRouter (free-only) / Groq / OpenAI via one provider abstraction |
+| LLM | Cloudflare Workers AI (default) / OpenAI via one provider abstraction |
 | Frontend | React 19, TypeScript 5.7, Vite 6, custom editorial design system |
 
 ---
@@ -481,9 +481,10 @@ Keep `.env` private (`git` already ignores it); `EXECUTION_ENABLED` stays
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | Razorpay **TEST** credentials |
 | `RAZORPAY_ENABLED` / `RAZORPAY_TEST_MODE` / `REAL_TEST_INTEGRATION_ENABLED` | TEST-mode switches |
 | `RAZORPAY_WEBHOOK_SECRET` | Webhook signature validation |
-| `LLM_PROVIDER` | `openrouter` \| `groq` \| `openai` |
+| `LLM_PROVIDER` | `cloudflare` (default) \| `openai` |
 | `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | OpenRouter — model id **must** end in `:free` (enforced in code) |
-| `GROQ_API_KEY` / `GROQ_MODEL` | Groq configuration |
+| `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` | Cloudflare Workers AI credential (text + FLUX image; server-side only) |
+| `CLOUDFLARE_TEXT_MODEL` | Text model, e.g. `@cf/zai-org/glm-4.7-flash` |
 | `LLM_API_KEY` / `LLM_MODEL` | OpenAI configuration |
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` / `RESEND_FROM_NAME` | Email — Resend platform default (per-workspace keys via UI are preferred) |
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` / `GOOGLE_OAUTH_REDIRECT_URI` / `GOOGLE_ADS_DEVELOPER_TOKEN` / `GOOGLE_ADS_API_VERSION` | Google Ads platform OAuth + developer token |
@@ -520,7 +521,7 @@ Tests run against an isolated SQLite schema with JSONB-compatible DDL — they n
 RazorGrowth AI/
 ├── backend/app/
 │   ├── agents/              # 13 specialised agents + orchestrator + registry
-│   ├── ai/llm/              # provider layer: OpenRouter (free-only) · Groq · OpenAI
+│   ├── ai/llm/              # provider layer: Cloudflare Workers AI · OpenAI
 │   ├── api/routes/          # auth, radar, agents, debates, actions, payments, webhooks…
 │   ├── core/                # config, security, middleware, secret-redacting logs
 │   ├── data/                # deterministic seed, workspace bootstrap, admin tools

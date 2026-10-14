@@ -32,7 +32,9 @@ razorpay==2.0.1                   # Razorpay TEST-mode orders, payments, webhook
 
 # ── AI / LLM ────────────────────────────────────────────────────────────────
 openai==1.58.1                    # OpenAI SDK powering the provider layer
-                                  # (OpenRouter free-only / Groq / OpenAI — backend/app/ai/llm)
+                                  # (Cloudflare Workers AI / OpenAI — backend/app/ai/llm).
+                                   # Cloudflare is reached through its documented OpenAI-compatible endpoint,
+                                   # so one SDK serves both providers.
 
 # ── Testing ─────────────────────────────────────────────────────────────────
 pytest==9.1.1                     # backend test suite (673 tests, SQLite-compatible)

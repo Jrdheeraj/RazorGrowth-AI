@@ -50,8 +50,11 @@ def _run_debate_worker(debate_id: uuid.UUID, merchant_id: uuid.UUID, objective: 
     db = get_session_factory()()
     try:
         settings = get_settings()
-        if not settings.GROQ_API_KEY:
-            raise RuntimeError("GROQ_NOT_CONFIGURED")
+        from backend.app.ai.llm.provider import resolve_llm_provider
+
+        resolved = resolve_llm_provider(settings)
+        if resolved is None:
+            raise RuntimeError("LLM_PROVIDER_NOT_CONFIGURED")
         if not (
             settings.RAZORPAY_ENABLED
             and settings.RAZORPAY_TEST_MODE
@@ -79,12 +82,9 @@ def _run_debate_worker(debate_id: uuid.UUID, merchant_id: uuid.UUID, objective: 
             ingestion = RazorpayIngestionService(db, merchant_id).ingest_all()
             if ingestion.errors:
                 raise RuntimeError("RAZORPAY_TEST_INGESTION_FAILED")
-        from backend.app.ai.llm.provider import build_llm_provider
+        from backend.app.ai.llm.provider import resolve_llm_provider
 
-        llm = build_llm_provider(
-            provider="groq",
-            api_key=settings.GROQ_API_KEY,
-            model=settings.GROQ_MODEL,
+        llm = resolved.build(
             timeout=settings.LLM_REQUEST_TIMEOUT,
             max_retries=settings.LLM_MAX_RETRIES,
             max_tokens=settings.LLM_MAX_TOKENS,
@@ -117,7 +117,7 @@ def start_agent_debate(
     db: Session = Depends(get_db),
     ctx: MerchantContext = Depends(operator_ctx),
 ) -> Any:
-    """Create and immediately start a standalone, live Groq-powered debate."""
+    """Create and immediately start a standalone, live LLM-powered debate."""
     objective = "Find the strongest growth opportunity using the latest Razorpay TEST data"
     debate = AgentDebateService(db).create_debate(
         merchant_id=ctx.merchant_id,
@@ -568,7 +568,7 @@ def debate_chat(
     db: Session = Depends(get_db),
     ctx: MerchantContext = Depends(operator_ctx),
 ) -> Any:
-    """Answer a merchant question using the same debate and Groq context."""
+    """Answer a merchant question using the same debate and LLM context."""
     try:
         did = uuid.UUID(debate_id)
     except ValueError:
@@ -580,15 +580,13 @@ def debate_chat(
         raise HTTPException(status_code=404, detail="DEBATE_NOT_FOUND")
 
     settings = get_settings()
-    if not settings.GROQ_API_KEY:
-        raise HTTPException(status_code=503, detail="GROQ_NOT_CONFIGURED")
+    from backend.app.ai.llm.provider import resolve_llm_provider
 
-    from backend.app.ai.llm.provider import build_llm_provider
+    resolved = resolve_llm_provider(settings)
+    if resolved is None:
+        raise HTTPException(status_code=503, detail="LLM_PROVIDER_NOT_CONFIGURED")
 
-    llm = build_llm_provider(
-        provider="groq",
-        api_key=settings.GROQ_API_KEY,
-        model=settings.GROQ_MODEL,
+    llm = resolved.build(
         timeout=settings.LLM_REQUEST_TIMEOUT,
         max_retries=settings.LLM_MAX_RETRIES,
         max_tokens=settings.LLM_MAX_TOKENS,
@@ -612,7 +610,7 @@ def debate_chat(
         max_tokens=300,
     ).strip()
     if not answer:
-        raise HTTPException(status_code=502, detail="GROQ_EMPTY_RESPONSE")
+        raise HTTPException(status_code=502, detail="LLM_EMPTY_RESPONSE")
 
     message = svc.add_message(
         debate_id=did,

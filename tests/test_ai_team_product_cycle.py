@@ -76,7 +76,8 @@ FRONTEND = REPO_ROOT.joinpath("frontend", "src")
 
 
 def _clear_llm_env(monkeypatch) -> None:
-    monkeypatch.setenv("GROQ_API_KEY", "")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "")
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "")
     monkeypatch.setenv("LLM_API_KEY", "")
     get_settings.cache_clear()
 

@@ -62,9 +62,19 @@ const AI_TEAM_MENU = [
     label: "Marketing Agent",
     desc: "Campaigns and customer growth",
   },
+  {
+    to: "/designer-agent",
+    label: "Designer Agent",
+    desc: "Creative intelligence and automated design",
+  },
 ] as const;
 
-const AI_TEAM_ROUTES = new Set(["/agents", "/product-agent", "/marketing-agent"]);
+const AI_TEAM_ROUTES = new Set([
+  "/agents",
+  "/product-agent",
+  "/marketing-agent",
+  "/designer-agent",
+]);
 
 /** Must match the CSS breakpoint that swaps `.site-nav` for `.nav-toggle`. */
 const DESKTOP_NAV_QUERY = "(min-width: 1200px)";
@@ -157,6 +167,23 @@ const IconCart = () => (
     <path d="M2.5 3.5h2.5l2.6 12h10.9l2-8H6" />
   </NavIcon>
 );
+
+const IconPalette = () => (
+  <NavIcon>
+    <path d="M12 3a9 9 0 1 0 0 18c1.2 0 1.8-.9 1.8-1.8 0-1.6-1.4-1.7-1.4-2.9 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-3.9-4-6.7-9-6.7Z" />
+    <circle cx="7.8" cy="11.4" r="1" />
+    <circle cx="10.5" cy="7.8" r="1" />
+    <circle cx="15" cy="8.8" r="1" />
+  </NavIcon>
+);
+
+/** Per-destination icon for the AI Team dropdown. */
+function AiMenuIcon({ to }: { to: string }) {
+  if (to === "/product-agent") return <IconCart />;
+  if (to === "/marketing-agent") return <IconDebates />;
+  if (to === "/designer-agent") return <IconPalette />;
+  return <IconBot />;
+}
 
 function IconFor(id: string) {
   switch (id) {
@@ -387,7 +414,7 @@ export function SiteHeader() {
                           onClick={() => setAiOpen(false)}
                         >
                           <span className="ai-menu__icon" aria-hidden="true">
-                            {sub.to === "/product-agent" ? <IconCart /> : sub.to === "/marketing-agent" ? <IconDebates /> : <IconBot />}
+                            <AiMenuIcon to={sub.to} />
                           </span>
                           <span className="ai-menu__label">{sub.label}</span>
                           <span className="ai-menu__desc">{sub.desc}</span>
@@ -511,7 +538,7 @@ export function SiteHeader() {
               onClick={() => goToSection({ id: sub.to, label: sub.label, route: sub.to })}
             >
               <span className="mobile-menu__left">
-                {sub.to === "/product-agent" ? <IconCart /> : sub.to === "/marketing-agent" ? <IconDebates /> : <IconBot />}
+                <AiMenuIcon to={sub.to} />
                 <span>{sub.label}</span>
               </span>
               <ChevronRight />

@@ -340,7 +340,7 @@ class TestAgentRunAudit:
             assert run.total_latency_ms >= 0
             # provider NAME may be recorded (never the key itself)
             assert getattr(run.llm_provider, "value", run.llm_provider) in (
-                None, "openai", "groq", "openrouter",
+                None, "openai", "cloudflare", "openrouter",
             )
             assert isinstance(run.llm_model, str)
             assert "key" not in run.llm_model.lower()
@@ -373,7 +373,8 @@ class TestAgentRunAudit:
             str(r.input_summary) + str(r.output_summary) + str(r.tools_used)
             for r in runs
         ).lower()
-        for token in ("api_key", "apikey", "secret", "groq_api_key", "password"):
+        for token in ("api_key", "apikey", "secret", "password",
+                   "cloudflare_api_token", "cloudflare_account_id"):
             assert token not in blob, f"leaked {token} in agent_runs"
 
 

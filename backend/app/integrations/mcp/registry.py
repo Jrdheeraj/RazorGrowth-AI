@@ -244,6 +244,7 @@ def bootstrap_mcp_tools() -> MCPToolRegistry:
             return _REGISTRY
         from backend.app.integrations.mcp.servers import analytics_product as analytics_product_server
         from backend.app.integrations.mcp.servers import commerce as commerce_server
+        from backend.app.integrations.mcp.servers import design as design_server
         from backend.app.integrations.mcp.servers import email as email_server
         from backend.app.integrations.mcp.servers import google_ads as google_ads_server
         from backend.app.integrations.mcp.servers import instagram as instagram_server
@@ -260,6 +261,7 @@ def bootstrap_mcp_tools() -> MCPToolRegistry:
             commerce_server,
             analytics_product_server,
             product_intelligence_server,
+            design_server,
         ):
             _REGISTRY.register_all(module.TOOLS())
             # Only servers that re-expose a legacy MarketingAGI tool name

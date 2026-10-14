@@ -1,4 +1,4 @@
-"""AI Team + Marketing Agent shared-cycle + Groq reasoning tests.
+"""AI Team + Marketing Agent shared-cycle + LLM reasoning tests.
 
 Covers the connected improvements without touching the legacy
 MarketingAgent, integrations, or unrelated agents:
@@ -11,16 +11,16 @@ ORCHESTRATION
   - non-team modes do not trigger the Marketing Agent
   - read-only endpoints (list/get/events) never create runs
 
-LLM (Groq reasoning layer)
-  - Groq preferred whenever GROQ_API_KEY is set (backend-only)
+LLM (shared Cloudflare reasoning layer)
+  - Cloudflare Workers AI used whenever its credentials are set
   - generic provider fallback / None when unconfigured
-  - no frontend exposure of GROQ_API_KEY
+  - no frontend exposure of CLOUDFLARE_API_TOKEN
   - AgentDecision schema validation; invalid decisions rejected
   - unknown tools rejected and recorded, never executed
   - tenant-override args stripped before dispatch
   - tool results feed back into the loop; multi-iteration observability
   - retrieval bounded by max_retrieval_rounds
-  - Groq failure degrades gracefully (no crash, no fabricated reasoning)
+  - LLM failure degrades gracefully (no crash, no fabricated reasoning)
 
 SECURITY
   - tenant isolation of cycle runs
@@ -54,7 +54,7 @@ from backend.app.agents.marketing_agi.rag import AgenticRAG
 from backend.app.agents.marketing_agi.tools.bootstrap import register_all_tools
 from backend.app.agents.marketing_agi.tools.registry import ToolContext, get_registry
 from backend.app.ai.llm.base import BaseLLMProvider
-from backend.app.ai.llm.provider import GroqProvider, OpenAIProvider
+from backend.app.ai.llm.provider import CloudflareProvider, OpenAIProvider
 from backend.app.core.config import get_settings
 from backend.app.models.agent_action import AgentAction
 from backend.app.models.agent_run import AgentRun
@@ -81,7 +81,8 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
 def _clear_llm_env(monkeypatch) -> None:
-    monkeypatch.setenv("GROQ_API_KEY", "")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "")
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "")
     monkeypatch.setenv("LLM_API_KEY", "")
     get_settings.cache_clear()
 
@@ -159,13 +160,13 @@ class _FakeLLM(BaseLLMProvider):
     def generate(self, system_prompt, user_prompt, **kwargs) -> str:
         self.calls += 1
         if self.fail:
-            raise RuntimeError("groq unavailable")
+            raise RuntimeError("llm unavailable")
         return "ok"
 
     def generate_structured(self, system_prompt, user_prompt, schema, **kwargs):
         self.calls += 1
         if self.fail:
-            raise RuntimeError("groq unavailable")
+            raise RuntimeError("llm unavailable")
         queue = self._script.get(schema.__name__, [])
         if not queue:
             raise RuntimeError(f"script exhausted for {schema.__name__}")
@@ -339,7 +340,7 @@ class TestSharedCycle:
         import backend.app.api.routes.agents as agents_route
 
         def _boom(db, merchant_id, params, cycle_id):
-            raise RuntimeError("groq down")
+            raise RuntimeError("llm down")
 
         monkeypatch.setattr(agents_route, "_start_team_marketing_agent", _boom)
         # The server-owned orchestrator worker must still use a test session.
@@ -438,13 +439,13 @@ class TestSharedCycle:
         )
         db_session.commit()
 
-        # Groq setup blowing up must not hang or crash the worker: it falls
+        # LLM setup blowing up must not hang or crash the worker: it falls
         # back to the bounded deterministic loop and terminates.
         import backend.app.agents.marketing_agi.llm as llm_mod
 
         monkeypatch.setattr(
             llm_mod, "build_marketing_llm",
-            lambda: (_ for _ in ()).throw(RuntimeError("groq down")),
+            lambda: (_ for _ in ()).throw(RuntimeError("llm down")),
         )
         from tests.conftest import _TestSessionLocal
 
@@ -459,25 +460,42 @@ class TestSharedCycle:
 # ── LLM ──────────────────────────────────────────────────────────────────
 
 
-class TestGroqWiring:
-    def test_groq_preferred_when_key_set(self, monkeypatch):
-        monkeypatch.setenv("GROQ_API_KEY", "gsk_test_key_1234567890")
-        monkeypatch.setenv("GROQ_MODEL", "openai/gpt-oss-120b")
+class TestCloudflareWiring:
+    def test_cloudflare_used_when_its_credentials_are_set(self, monkeypatch):
+        monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "cf_test_token_1234567890")
+        monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "0" * 32)
+        monkeypatch.setenv("CLOUDFLARE_TEXT_MODEL", "@cf/zai-org/glm-4.7-flash")
+        monkeypatch.setenv("LLM_PROVIDER", "cloudflare")
+        get_settings.cache_clear()
+        try:
+            configured, provider, model = llm_identity()
+            assert configured is True
+            assert provider == "cloudflare"
+            assert model == "@cf/zai-org/glm-4.7-flash"
+            llm = build_marketing_llm()
+            assert isinstance(llm, CloudflareProvider)
+        finally:
+            monkeypatch.undo()
+            get_settings.cache_clear()
+
+    def test_cloudflare_used_even_when_provider_name_is_stale(self, monkeypatch):
+        """A stale LLM_PROVIDER must not cost us a working credential."""
+        monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "cf_test_token_1234567890")
+        monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "0" * 32)
         monkeypatch.setenv("LLM_PROVIDER", "openrouter")
         get_settings.cache_clear()
         try:
             configured, provider, model = llm_identity()
             assert configured is True
-            assert provider == "groq"
-            assert model == "openai/gpt-oss-120b"
-            llm = build_marketing_llm()
-            assert isinstance(llm, GroqProvider)
+            assert provider == "cloudflare"
+            assert isinstance(build_marketing_llm(), CloudflareProvider)
         finally:
             monkeypatch.undo()
             get_settings.cache_clear()
 
-    def test_generic_fallback_without_groq_key(self, monkeypatch):
-        monkeypatch.setenv("GROQ_API_KEY", "")
+    def test_generic_fallback_without_cloudflare_credentials(self, monkeypatch):
+        monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "")
+        monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "")
         monkeypatch.setenv("LLM_PROVIDER", "openai")
         monkeypatch.setenv("LLM_API_KEY", "sk-test-1234567890")
         monkeypatch.setenv("LLM_MODEL", "gpt-4o-mini")
@@ -499,22 +517,50 @@ class TestGroqWiring:
             monkeypatch.undo()
             get_settings.cache_clear()
 
-    def test_no_frontend_groq_key(self):
+    def test_no_frontend_llm_credential(self):
+        """The Cloudflare token must never reach the browser bundle."""
         hits = [
             p for p in REPO_ROOT.joinpath("frontend", "src").rglob("*")
             if p.is_file()
-            and ("GROQ_API_KEY" in p.read_text(errors="ignore")
-                 or "VITE_GROQ" in p.read_text(errors="ignore"))
+            and any(token in p.read_text(errors="ignore")
+                    for token in ("CLOUDFLARE_API_TOKEN",
+                                  "CLOUDFLARE_ACCOUNT_ID",
+                                  "VITE_CLOUDFLARE"))
         ]
         assert hits == []
 
+    def test_docker_compose_does_not_pass_the_token_to_the_frontend(self):
+        """Docker must hand the token to the backend only."""
+        import yaml
+
+        compose = yaml.safe_load(
+            REPO_ROOT.joinpath("docker-compose.yml")
+            .read_text(encoding="utf-8")
+        )
+        frontend_env = (
+            compose["services"]["frontend"].get("environment") or {}
+        )
+        assert frontend_env == {}, (
+            "the frontend service must not receive backend credentials: "
+            f"{sorted(frontend_env)}"
+        )
+        backend_env = (
+            compose["services"]["backend"].get("environment") or {}
+        )
+        assert "CLOUDFLARE_API_TOKEN" in backend_env
+        assert "CLOUDFLARE_ACCOUNT_ID" in backend_env
+        assert "LLM_PROVIDER" in backend_env
+        assert not any(k.startswith("GROQ") for k in backend_env)
+
     def test_configured_model_comes_from_settings(self, monkeypatch):
-        monkeypatch.setenv("GROQ_API_KEY", "gsk_test_key_1234567890")
-        monkeypatch.setenv("GROQ_MODEL", "openai/gpt-oss-120b")
+        monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "cf_test_token_1234567890")
+        monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "0" * 32)
+        monkeypatch.setenv("CLOUDFLARE_TEXT_MODEL", "@cf/zai-org/glm-4.7-flash")
         get_settings.cache_clear()
         try:
             llm = build_marketing_llm()
-            assert llm._model == "openai/gpt-oss-120b"
+            assert llm._model == "@cf/zai-org/glm-4.7-flash"
+            assert llm.provider_name == "cloudflare"
         finally:
             monkeypatch.undo()
             get_settings.cache_clear()
@@ -638,14 +684,14 @@ class TestAgentDecisions:
         # patch identity names for deterministic metadata
         run_row = _queued_run(db_session, m)
         agent = MarketingAGI(db_session, m.id, llm=llm)
-        agent._llm_provider_name = "groq"
+        agent._llm_provider_name = "cloudflare"
         agent._llm_model_name = "openai/gpt-oss-120b"
         agent.run(run_row, "obj")
         state = run_row.state
         assert state["llm_calls"] >= 2
         assert len(state["llm_decisions"]) >= 2
         for d in state["llm_decisions"]:
-            assert d["provider"] == "groq"
+            assert d["provider"] == "cloudflare"
             assert d["model"] == "openai/gpt-oss-120b"
             assert isinstance(d["latency_ms"], int)
             assert d["success"] is True
@@ -653,7 +699,7 @@ class TestAgentDecisions:
         assert state["reasoning_summary"]
         assert state["current_decision"]
 
-    def test_groq_failure_degrades_gracefully(self, db_session):
+    def test_llm_failure_degrades_gracefully(self, db_session):
         m = _seed_merchant(db_session, "deg")
         _add_customer(db_session, m, name="deg-a")
         llm = _FakeLLM([], fail=True)
@@ -666,7 +712,7 @@ class TestAgentDecisions:
         )
         # honest failure recorded, no fabricated LLM success
         assert not [d for d in state["llm_decisions"] if d.get("success")]
-        assert any("finish: " in e or "llm" in e.lower() or "groq" in e.lower()
+        assert any("finish: " in e or "llm" in e.lower()
                    or "LLM" in e or "unavailable" in e.lower()
                    for e in state["errors"]) or state["llm_degraded"]
 
@@ -827,16 +873,17 @@ class TestDashboardState:
 
     def test_status_reports_llm_identity(self, client, db_session, monkeypatch):
         m, u, _ = make_world(db_session, slug_hint="dash2")
-        monkeypatch.setenv("GROQ_API_KEY", "gsk_test_key_1234567890")
-        monkeypatch.setenv("GROQ_MODEL", "openai/gpt-oss-120b")
+        monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "cf_test_token_1234567890")
+        monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "0" * 32)
+        monkeypatch.setenv("CLOUDFLARE_TEXT_MODEL", "@cf/zai-org/glm-4.7-flash")
         get_settings.cache_clear()
         try:
             r = client.get("/api/marketing-agi/status", headers=bearer(u))
             assert r.status_code == 200
             body = r.json()
             assert body["llm_configured"] is True
-            assert body["llm_provider"] == "groq"
-            assert body["llm_model"] == "openai/gpt-oss-120b"
+            assert body["llm_provider"] == "cloudflare"
+            assert body["llm_model"] == "@cf/zai-org/glm-4.7-flash"
         finally:
             monkeypatch.undo()
             get_settings.cache_clear()
@@ -1063,14 +1110,14 @@ class TestIntermediatePersistence:
                     "retry_count", "tool_calls", "rag_rounds"):
             assert key in timing, key
         blob = str(timing) + str(run_row.state.get("llm_decisions", []))
-        for secret_word in ("gsk_", "sk-or-", "Bearer ", "api_key"):
+        for secret_word in ("gsk_", "sk-or-", "Bearer ", "api_key", "cf_test_token"):
             assert secret_word not in blob
 
 
-# ── GROQ 429 / RETRY-AFTER (Phase 14F) ─────────────────────────────────
+# ── PROVIDER 429 / RETRY-AFTER (Phase 14F) ──────────────────────────────────
 
 
-class TestGroqRetryAfter:
+class TestProviderRetryAfter:
     def _rate_limit_error(self, retry_after=None):
         import httpx
         import openai
@@ -1079,7 +1126,9 @@ class TestGroqRetryAfter:
         if retry_after is not None:
             headers["retry-after"] = str(retry_after)
         request = httpx.Request(
-            "POST", "https://api.groq.com/openai/v1/chat/completions"
+            "POST",
+            "https://api.cloudflare.com/client/v4/accounts/"
+            "0123456789abcdef0123456789abcdef/ai/v1/chat/completions",
         )
         response = httpx.Response(429, request=request, headers=headers)
         return openai.RateLimitError("rate limited", response=response, body=None)
@@ -1089,13 +1138,26 @@ class TestGroqRetryAfter:
 
         assert _retry_after_seconds(self._rate_limit_error("7"), 1.0) == 7.0
 
-    def test_retry_after_capped(self):
+    def test_retry_after_within_ceiling_is_honoured_exactly(self):
+        """A short hint is a contract with the provider: use it verbatim."""
         from backend.app.ai.llm.provider import (
             _retry_after_seconds, MAX_RETRY_DELAY_SECONDS,
         )
 
-        assert _retry_after_seconds(self._rate_limit_error("120"), 1.0) == \
-            MAX_RETRY_DELAY_SECONDS
+        hint = str(int(MAX_RETRY_DELAY_SECONDS - 5))
+        assert _retry_after_seconds(self._rate_limit_error(hint), 1.0) == float(hint)
+
+    def test_long_retry_after_is_surfaced_not_shortened(self):
+        """A hint longer than a request should block must not be slept through.
+
+        Previously this was silently shortened to MAX_RETRY_DELAY_SECONDS and
+        then slept — guaranteeing a second identical failure after a pointless
+        wait. The hint is now reported on the error so the caller can decide,
+        and the retry loop ends instead of stalling.
+        """
+        from backend.app.ai.llm.provider import _retry_after_seconds
+
+        assert _retry_after_seconds(self._rate_limit_error("120"), 1.0) == 120.0
 
     def test_retry_after_missing_falls_back(self):
         from backend.app.ai.llm.provider import _retry_after_seconds
@@ -1103,10 +1165,11 @@ class TestGroqRetryAfter:
         assert _retry_after_seconds(self._rate_limit_error(None), 2.0) == 2.0
 
     def test_retry_respects_hint_and_records_stats(self, monkeypatch):
-        from backend.app.ai.llm.provider import GroqProvider
+        from backend.app.ai.llm.provider import CloudflareProvider
 
-        p = GroqProvider(api_key="gsk_test_key_1234567890", timeout=5,
-                         max_retries=1, max_tokens=50)
+        p = CloudflareProvider(api_key="cf_test_token_1234567890",
+                                account_id="0123456789abcdef0123456789abcdef",
+                                timeout=5, max_retries=1, max_tokens=50)
         calls = {"n": 0}
         sleeps: list[float] = []
 
@@ -1129,11 +1192,12 @@ class TestGroqRetryAfter:
 
     def test_capped_hint_never_stalls(self, monkeypatch):
         from backend.app.ai.llm.provider import (
-            GroqProvider, MAX_RETRY_DELAY_SECONDS,
+            CloudflareProvider, MAX_RETRY_DELAY_SECONDS,
         )
 
-        p = GroqProvider(api_key="gsk_test_key_1234567890", timeout=5,
-                         max_retries=1, max_tokens=50)
+        p = CloudflareProvider(api_key="cf_test_token_1234567890",
+                                account_id="0123456789abcdef0123456789abcdef",
+                                timeout=5, max_retries=1, max_tokens=50)
         sleeps: list[float] = []
 
         def _always_429(**kwargs):
@@ -1147,8 +1211,12 @@ class TestGroqRetryAfter:
         )
         with pytest.raises(prov.LLMError):
             p._call_with_retry(_always_429)
+        # Invariant: a 300s hint must never stall the agent, and the loop must
+        # stay bounded. The hint is now reported on the error rather than
+        # shortened into a doomed sleep, so nothing is slept at all.
         assert sum(sleeps) <= 2 * MAX_RETRY_DELAY_SECONDS
-        assert p.last_call_stats["attempts"] == 2  # bounded, never infinite
+        assert p.last_call_stats["attempts"] <= 2  # bounded, never infinite
+        assert p.last_call_stats["attempts"] >= 1
 
 
 # ── TOOL CATALOG FILTERING (Phase 14G) ─────────────────────────────────

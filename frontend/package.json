@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test:activity": "tsc src/lib/activityStatus.ts src/lib/__tests__/activityStatus.test.ts --outDir .test-dist --rootDir src --module nodenext --moduleResolution nodenext --target es2021 --strict --skipLibCheck && node .test-dist/lib/__tests__/activityStatus.test.js",
+    "test:designer": "tsc src/lib/designerAgent.ts src/lib/__tests__/designerAgent.test.ts --outDir .test-dist --rootDir src --module nodenext --moduleResolution nodenext --target es2021 --strict --skipLibCheck && node .test-dist/lib/__tests__/designerAgent.test.js",
+    "test:designer-workspace": "tsc src/lib/designerWorkspace.ts src/lib/__tests__/designerWorkspace.test.ts --outDir .test-dist --rootDir src --module nodenext --moduleResolution nodenext --target es2021 --strict --skipLibCheck && node .test-dist/lib/__tests__/designerWorkspace.test.js",
     "test:oauth": "tsc src/lib/integrationOauth.ts src/lib/__tests__/integrationOauth.test.ts --outDir .test-dist --rootDir src --module nodenext --moduleResolution nodenext --target es2021 --strict --skipLibCheck && node .test-dist/lib/__tests__/integrationOauth.test.js",
     "test:responsive": "node scripts/responsiveCss.contract.mjs",
     "test:product": "tsc src/lib/productAgentStatus.ts src/lib/__tests__/productAgentStatus.test.ts --outDir .test-dist --rootDir src --module nodenext --moduleResolution nodenext --target es2021 --strict --skipLibCheck && node .test-dist/lib/__tests__/productAgentStatus.test.js",

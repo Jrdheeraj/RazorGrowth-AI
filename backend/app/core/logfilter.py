@@ -2,10 +2,10 @@
 Secret-safe logging — Phase 9 hardening.
 
 Installs a logging Filter on the root logger that redacts the VALUES of
-configured secrets (AUTH_SECRET_KEY, LLM_API_KEY, GROQ_API_KEY,
-RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET, RAZORPAY_KEY_ID) should they
-ever appear in a log record. Defence in depth: application code must never
-log secrets in the first place.
+configured secrets (AUTH_SECRET_KEY, LLM_API_KEY, CLOUDFLARE_API_TOKEN,
+RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET) should they ever appear in a
+log record. Defence in depth: application code must never log secrets in the
+first place.
 """
 from __future__ import annotations
 
@@ -17,7 +17,9 @@ _REDACTED = "***REDACTED***"
 _SECRET_ENV_KEYS = (
     "AUTH_SECRET_KEY",
     "LLM_API_KEY",
-    "GROQ_API_KEY",
+    # Cloudflare API token serves BOTH the text-LLM and the FLUX image
+    # provider, so it must be redacted on every path that logs.
+    "CLOUDFLARE_API_TOKEN",
     "RAZORPAY_KEY_SECRET",
     "RAZORPAY_WEBHOOK_SECRET",
 )

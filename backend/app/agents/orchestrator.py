@@ -333,7 +333,7 @@ class GrowthAgentOrchestrator:
         phase: str,
         result: AgentResult,
     ) -> None:
-        """Replace deterministic timeline copy with a Groq-grounded turn."""
+        """Replace deterministic timeline copy with an LLM-grounded turn."""
         from backend.app.models.agent_debate import AgentMessage
 
         debate_id = ctx.shared.get("manager_debate_id")

@@ -67,25 +67,26 @@ class AnalyzeRequest(BaseModel):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _get_llm():
-    """Build the LLM provider from settings. Raises HTTP 503 if not configured."""
+    """Build the LLM provider from settings. Raises HTTP 503 if not configured.
+
+    Uses the shared resolver so this route agrees with the agent routes about
+    which provider is actually in use, and names the variables that are
+    actually missing instead of blaming an unrelated one.
+    """
+    from backend.app.ai.llm.provider import resolve_llm_provider
+
     settings = get_settings()
-    if settings.LLM_PROVIDER.lower() == "groq":
-        api_key, model = settings.GROQ_API_KEY, settings.GROQ_MODEL
-        missing_key_detail = (
-            "LLM provider not configured. Set GROQ_API_KEY in environment."
+    resolved = resolve_llm_provider(settings)
+    if resolved is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "LLM provider not configured. Set CLOUDFLARE_ACCOUNT_ID and "
+                "CLOUDFLARE_API_TOKEN (with LLM_PROVIDER=cloudflare) in the "
+                "environment."
+            ),
         )
-    else:
-        api_key, model = settings.LLM_API_KEY, settings.LLM_MODEL
-        missing_key_detail = (
-            "LLM provider not configured. Set LLM_API_KEY in environment."
-        )
-    if not api_key:
-        raise HTTPException(status_code=503, detail=missing_key_detail)
-    from backend.app.ai.llm.provider import build_llm_provider
-    return build_llm_provider(
-        provider=settings.LLM_PROVIDER,
-        api_key=api_key,
-        model=model,
+    return resolved.build(
         timeout=settings.LLM_REQUEST_TIMEOUT,
         max_retries=settings.LLM_MAX_RETRIES,
         max_tokens=settings.LLM_MAX_TOKENS,

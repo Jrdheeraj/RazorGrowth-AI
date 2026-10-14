@@ -39,10 +39,13 @@ class Settings(BaseSettings):
     )
 
     # ------------------------------------------------------------------ #
-    # AI — LLM provider
+    # AI — LLM provider (text generation)
     # ------------------------------------------------------------------ #
-    # Provider selection: "openai" | "groq" (see llm/provider.py factory).
-    LLM_PROVIDER: str = "openai"
+    # Provider selection: "cloudflare" | "openai" (see ai/llm/provider.py).
+    # Cloudflare Workers AI is the platform's text-LLM provider. It is reached
+    # through the same OpenAI-compatible chat-completions surface as OpenAI, so
+    # there is one client, one retry policy and one JSON/validation path.
+    LLM_PROVIDER: str = "cloudflare"
     LLM_MODEL: str = "gpt-4o-mini"
     LLM_API_KEY: str = ""
     LLM_REQUEST_TIMEOUT: int = 60          # seconds
@@ -50,10 +53,13 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int = 2048             # max output tokens
 
     # ------------------------------------------------------------------ #
-    # AI — Groq (used when LLM_PROVIDER="groq")
+    # AI — Cloudflare Workers AI (text generation)
     # ------------------------------------------------------------------ #
-    GROQ_API_KEY: str = ""
-    GROQ_MODEL: str = "openai/gpt-oss-120b"   # current Groq production model
+    # Uses the SAME CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN pair as the
+    # Designer Agent's FLUX image generation below. One Cloudflare credential
+    # serves both modalities; the token never leaves the backend and is never
+    # exposed to Vite or the browser.
+    CLOUDFLARE_TEXT_MODEL: str = "@cf/zai-org/glm-4.7-flash"
 
     # ------------------------------------------------------------------ #
     # AI — Embedding provider
@@ -110,6 +116,42 @@ class Settings(BaseSettings):
     # encryption at rest. Empty = derived from AUTH_SECRET_KEY (dev only;
     # production should set an explicit key — startup logs a warning).
     INTEGRATION_CREDENTIAL_KEY: str = ""
+
+    # ------------------------------------------------------------------ #
+    # Designer Agent — image generation (Cloudflare Workers AI).
+    #
+    # Platform-level provider config, exactly like the Marketing Agent
+    # integrations above: the credential lives only here, never in the
+    # database and never on the client. The Designer Agent itself is not a
+    # business-action path, so no approval gate is involved — but the flag
+    # below defaults to OFF so an unconfigured deployment can never spend
+    # provider quota by accident.
+    #
+    # Enabling requires BOTH the flag and both credentials. A missing piece
+    # is reported honestly as an unavailable provider; it is never faked,
+    # never silently bypassed, and never degrades into a placeholder image.
+    # ------------------------------------------------------------------ #
+    #: Master switch. False by default, including in Docker.
+    IMAGE_GENERATION_ENABLED: bool = False
+    #: Cloudflare account that owns the Workers AI binding. SHARED with the
+    #: text-LLM provider above — one account, one token, two modalities.
+    CLOUDFLARE_ACCOUNT_ID: str = ""
+    #: Cloudflare API token with Workers AI read permission. Server-side only.
+    CLOUDFLARE_API_TOKEN: str = ""
+    #: Hard ceiling on a single decoded image, enforced before persisting.
+    IMAGE_MAX_BYTES: int = 4 * 1024 * 1024          # 4 MiB
+    #: Wall-clock ceiling for one provider call.
+    IMAGE_REQUEST_TIMEOUT_SECONDS: int = 60
+    #: Provider retry attempts for transient failures (5xx / timeout).
+    IMAGE_MAX_RETRIES: int = 2
+    #: Per-merchant generation ceiling per UTC day.
+    IMAGE_DAILY_QUOTA_PER_MERCHANT: int = 50
+    #: Per-merchant stored-image ceiling per UTC day (bytes).
+    IMAGE_DAILY_STORAGE_QUOTA_BYTES: int = 64 * 1024 * 1024   # 64 MiB
+    #: JPEG structural limits enforced by the bounded parser.
+    IMAGE_MAX_WIDTH: int = 2048
+    IMAGE_MAX_HEIGHT: int = 2048
+    IMAGE_MAX_PIXELS: int = 4_194_304                            # 2048x2048
 
     # Email (Resend). Optional platform default; merchants may also connect
     # their own Resend key per workspace via the integrations API.

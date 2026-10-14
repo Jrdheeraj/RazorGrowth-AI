@@ -28,6 +28,13 @@ import type {
 import { WindowPanel } from "../components/WindowPanel";
 import { Button } from "../components/Button";
 import { StatusChip } from "../components/StatusIndicator";
+import {
+  designerCardFinding,
+  designerCardSupport,
+  designerAvailability,
+  type DesignerSnapshot,
+} from "../lib/designerAgent";
+import { loadDesignerAgentSnapshot } from "../lib/designerAgentApi";
 import { OfficeFloor } from "../office/OfficeFloor";
 import { toOfficeCharacter, mapLiveStatus, accentForIndex } from "../office/razorGrowthAdapter";
 import { isAuthenticated } from "../lib/auth";
@@ -673,10 +680,11 @@ function ProgressBar({ value, tone = "coral", striped = false }: { value: number
 }
 
 /* ── Reusable AI-team specialist card ───────────────────────────────────
-   One visual system for both autonomous employees; `accent` only swaps the
-   identity color (terracotta = Marketing, muted green = Product). Only the
-   explicit action button navigates — the card itself is never clickable. */
-type AgentCardAccent = "marketing" | "product";
+   One visual system for all three autonomous employees; `accent` only swaps
+   the identity color (terracotta = Marketing, muted green = Product, amber =
+   Designer). Only the explicit action button navigates — the card itself is
+   never clickable. */
+type AgentCardAccent = "marketing" | "product" | "designer";
 
 interface AgentCardProps {
   accent: AgentCardAccent;
@@ -1104,6 +1112,9 @@ export function AgentsPage() {
   // NEW Product Agent state (powers the ProductAgent roster slot only).
   // Read-only: dispatched by the same shared cycle, never by this page.
   const [productRun, setProductRun] = useState<ProductAgentRun | null>(null);
+  // Designer Agent state (powers the DesignerAgent employee card only).
+  // Composed from existing endpoints — there is no /api/designer-* surface.
+  const [designerSnapshot, setDesignerSnapshot] = useState<DesignerSnapshot | null>(null);
 
   const pollIntervalRef = useRef<number | null>(null);
   // Backend-owned cycle currently observed by this page (survives polling,
@@ -1136,6 +1147,11 @@ export function AgentsPage() {
     fetchMarketingAGICampaigns().then((c) => setMagiCampaigns(c.campaigns ?? [])).catch(() => undefined);
     // NEW Product Agent — latest run for the ProductAgent slot (read-only)
     fetchProductAgentRuns().then((r) => setProductRun(r.runs?.[0] ?? null)).catch(() => undefined);
+    // Designer Agent — real runs + persisted creative briefs for its card.
+    // Never throws into the page: a failure leaves the honest empty copy.
+    loadDesignerAgentSnapshot()
+      .then(setDesignerSnapshot)
+      .catch(() => setDesignerSnapshot(null));
   }, [windowDays]);
 
   useEffect(() => {
@@ -2308,7 +2324,7 @@ export function AgentsPage() {
           Immediately below the Agent Findings heading/description, before
           Growth Opportunities. One reusable card (AgentCard); Marketing
           carries the live run state, Product carries the frontend preview. */}
-      <WindowPanel title="autonomous.employees — marketing + product.app">
+      <WindowPanel title="autonomous.employees — marketing + product + design.app">
         <div className="agents-cc__employees">
           {(() => {
             const marketing = liveInfos.find((a) => a.key === "MarketingAgent") ?? null;
@@ -2349,10 +2365,37 @@ export function AgentsPage() {
               />
             );
           })()}
+          {(() => {
+            // Designer Agent — third autonomous employee. Every field below is
+            // read from the backend: the registry entry, its real run records
+            // and its persisted creative briefs. No invented metrics, no
+            // fabricated activity and no hardcoded status.
+            const availability = designerAvailability(
+              Boolean(designerSnapshot?.registered),
+              designerSnapshot?.runs ?? [],
+            );
+            const runs = designerSnapshot?.runs ?? [];
+            const findings = designerSnapshot?.findings ?? [];
+            return (
+              <AgentCard
+                accent="designer"
+                label="DESIGNER AGENT"
+                statusText={availability.label.toUpperCase()}
+                statusTone={availability.tone}
+                role="AUTONOMOUS CREATIVE EMPLOYEE"
+                description="Researches, plans, creates, validates and organizes brand, marketing and product design assets — then hands them to you for review."
+                findingLabel="LATEST FINDING"
+                finding={designerCardFinding(runs, findings)}
+                support={designerCardSupport(runs, findings)}
+                actionLabel="OPEN DESIGNER AGENT →"
+                onOpen={() => navigate("/designer-agent")}
+              />
+            );
+          })()}
         </div>
         <p className="agents-cc__employeesHint">
-          Both agents start from one shared analysis cycle — Start Analysis on
-          this page runs them concurrently.
+          All three agents start from one shared analysis cycle — Start Analysis
+          on this page runs them concurrently.
         </p>
       </WindowPanel>
 

@@ -47,6 +47,12 @@ class AgentRunService:
         input_summary: dict[str, Any] | None = None,
     ) -> AgentRun:
         settings = get_settings()
+        # Stamp the audit row from the SAME shared resolver every call site
+        # uses, so the recorded provider/model is the one that actually ran
+        # rather than a guess based on which environment variable is set.
+        from backend.app.ai.llm.provider import resolve_llm_provider
+
+        resolved = resolve_llm_provider(settings)
         run = AgentRun(
             merchant_id=merchant_id,
             orchestrator_run_id=orchestrator_run_id,
@@ -55,14 +61,8 @@ class AgentRunService:
             mode=mode,
             started_at=_utcnow(),
             input_summary=input_summary or {},
-            llm_provider=settings.LLM_PROVIDER if settings.LLM_API_KEY or settings.GROQ_API_KEY else None,
-            llm_model=(
-                settings.GROQ_MODEL
-                if settings.LLM_PROVIDER.lower() == "groq"
-                else settings.LLM_MODEL
-            )
-            if settings.LLM_API_KEY or settings.GROQ_API_KEY
-            else "not-configured",
+            llm_provider=resolved.name if resolved else None,
+            llm_model=resolved.model if resolved else "not-configured",
         )
         self.db.add(run)
         self.db.flush()

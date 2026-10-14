@@ -210,7 +210,7 @@ class MarketingAGIState:
     # investigating|planning|waiting_for_approval|degraded|done
     current_decision: str | None = None  # user-safe one-line decision summary
     reasoning_summary: str | None = None  # user-safe current reasoning summary
-    llm_degraded: bool = False  # True when Groq failed and the run fell
+    llm_degraded: bool = False  # True when the LLM failed and the run fell
     # back to the bounded deterministic workflow
 
     # Safe per-run timing observability (durations + counts only — never

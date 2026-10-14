@@ -6,7 +6,7 @@ The cycle, exactly as specified:
                        -> ANALYZE_PERFORMANCE  read real demand per product
                        -> FIND_OPPORTUNITIES   deterministic diagnosis
     RESEARCH           -> RESEARCH_ANALYZE     agentic RAG over this workspace
-    RECOMMEND          -> PREPARE_RECOMMENDATION  Groq reasons over the above
+    RECOMMEND          -> PREPARE_RECOMMENDATION  LLM reasons over the above
                        -> SAFETY_CHECK          recommendation-level safety gate
     HUMAN APPROVAL     -> WAITING_APPROVAL      existing agent_actions pipeline
     EXECUTE            -> EXECUTE_MEASURE       only ever a human-approved action
@@ -183,7 +183,7 @@ class ProductAGI:
         safe_summary: str,
         max_tokens: int = 1600,
     ) -> Any:
-        """Invoke Groq with full observability; re-raise on failure.
+        """Invoke the LLM with full observability; re-raise on failure.
 
         On success: records safe metadata (provider, model, latency,
         decision type) and emits a user-safe event. On failure: marks the run
@@ -233,7 +233,7 @@ class ProductAGI:
                 stage=stage.value,
                 event_type="llm_unavailable",
                 message=(
-                    "Groq reasoning unavailable "
+                    "LLM reasoning unavailable "
                     f"({type(exc).__name__}) — continuing with the "
                     "deterministic pipeline; no reasoning fabricated"
                 ),
@@ -437,7 +437,7 @@ class ProductAGI:
         if self._llm is not None:
             state.reasoning_status = "reasoning"
             state.reasoning_summary = (
-                "Groq reasoning engine engaged — reading live catalog and demand data"
+                "LLM reasoning engine engaged — reading live catalog and demand data"
             )
         else:
             state.reasoning_status = "reasoning"
@@ -588,7 +588,7 @@ class ProductAGI:
             )
             raise _EarlyComplete
 
-        # Name the primary signal (Groq) or derive it deterministically.
+        # Name the primary signal (LLM) or derive it deterministically.
         signal = self._read_signal(state, recorder)
         state.catalog["primary_signal"] = signal
         state.timing["analysis_total_ms"] = (
@@ -605,7 +605,7 @@ class ProductAGI:
         state.set_stage(Stage.analyze_performance)
 
     def _read_signal(self, state: ProductAgentState, recorder: EventRecorder) -> str:
-        """Primary product signal: Groq when configured, else deterministic."""
+        """Primary product signal: LLM when configured, else deterministic."""
         stage = Stage.understand_catalog
         if self._llm is not None:
             try:
@@ -617,7 +617,7 @@ class ProductAGI:
                     system=prompts.OBSERVE_SYSTEM,
                     user=prompts.observe_user(state.catalog, state.performance),
                     schema=SignalReading,
-                    safe_summary="Groq named the primary product signal",
+                    safe_summary="The LLM named the primary product signal",
                     max_tokens=800,
                 )
                 state.knowledge_gaps.extend(reading.knowledge_gaps[:8])
@@ -1000,7 +1000,7 @@ class ProductAGI:
     def _propose_questions(
         self, state: ProductAgentState, recorder: EventRecorder
     ) -> list[str]:
-        """Let Groq pick retrieval questions; fall back to the signal."""
+        """Let the LLM pick retrieval questions; fall back to the signal."""
         from backend.app.agents.product_agi.schemas import ResearchQuestions
 
         stage = Stage.research_analyze
@@ -1016,7 +1016,7 @@ class ProductAGI:
                     [p.get("name") for p in state.catalog.get("products") or []],
                 ),
                 schema=ResearchQuestions,
-                safe_summary="Groq proposed retrieval questions",
+                safe_summary="The LLM proposed retrieval questions",
                 max_tokens=500,
             )
             return [q.question for q in proposed.root[:2]]
@@ -1063,7 +1063,7 @@ class ProductAGI:
                         research=research,
                     ),
                     schema=AnalysisResult,
-                    safe_summary="Groq produced the structured recommendation set",
+                    safe_summary="The LLM produced the structured recommendation set",
                     max_tokens=2400,
                 )
             except Exception as exc:  # noqa: BLE001
@@ -1378,7 +1378,7 @@ class ProductAGI:
                     system=prompts.SAFETY_SYSTEM,
                     user=prompts.safety_user(state.recommendations),
                     schema=SafetyVerdict,
-                    safe_summary="Groq reviewed recommendations for safety",
+                    safe_summary="The LLM reviewed recommendations for safety",
                     max_tokens=900,
                 )
                 llm_notes = verdict.notes

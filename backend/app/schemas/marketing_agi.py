@@ -55,7 +55,7 @@ class AGIStateSummary(BaseModel):
     tool_call_count: int = 0
     duplicate_tool_calls: int = 0
     errors: list[str] = Field(default_factory=list)
-    # Groq reasoning-engine observability (safe metadata only).
+    # LLM reasoning-engine observability (safe metadata only).
     llm_calls: int = 0
     llm_decisions: list[dict[str, Any]] = Field(default_factory=list)
     reasoning_status: str = "idle"

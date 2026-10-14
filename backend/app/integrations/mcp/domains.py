@@ -123,6 +123,21 @@ DOMAINS: dict[str, MCPDomain] = {
             status=OPERATIONAL,
             consumers=("product_agent",),
         ),
+        MCPDomain(
+            name="design",
+            description=(
+                "Design workspace: projects, structured creative briefs, "
+                "versioned assets and honest image-generation availability."
+            ),
+            # Operational since the Designer workspace tables landed. Every
+            # tool is a real tenant-scoped read over persisted design work.
+            # There is deliberately NO image-generation tool: this build
+            # configures no image provider, so the domain exposes the
+            # availability question honestly instead of advertising a write it
+            # cannot perform.
+            status=OPERATIONAL,
+            consumers=("designer_agent",),
+        ),
     )
 }
 
@@ -163,6 +178,16 @@ AGENT_CAPABILITIES: dict[str, AgentCapabilities] = {
     "growth_radar": AgentCapabilities(
         agent="growth_radar",
         domains=("analytics", "commerce", "customer", "marketing"),
+    ),
+    # Designer Agent: its own workspace, plus the measured analytics it uses
+    # to ground a recommendation. It does NOT get the marketing domain:
+    # publishing is the Marketing Agent's job and goes through the action
+    # pipeline, not the designer. ``analytics`` is granted because several
+    # pre-existing tools are namespaced ``marketing.analytics.*`` — their real
+    # capability domain is analytics, which is what this grant selects.
+    "designer_agent": AgentCapabilities(
+        agent="designer_agent",
+        domains=("analytics", "design"),
     ),
 }
 
@@ -208,6 +233,9 @@ _SERVER_DOMAIN: dict[str, str] = {
     "instagram": "marketing",
     # RAG / memory evidence sources over this workspace's own data
     "knowledge": "analytics",
+    # design workspace capability group
+    "workspace": "design",
+    "image": "design",
 }
 
 

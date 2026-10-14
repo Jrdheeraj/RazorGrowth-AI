@@ -1,0 +1,1465 @@
+/* ==========================================================================
+   Designer Agent workstation — portrait-reference rebuild.
+
+   Background: the SAME illustrated RazorGrowth world the Marketing Agent
+   (.magi-world) and Product Agent (.prod-world) dashboards use —
+   <GlobalEnvironment /> renders .world-env (position: fixed; inset: 0) with
+   the Sky/Clouds/City/Street/Commerce/MerchantDistrict/Delivery/Foreground
+   layers. Nothing here paints a background image, so the Designer Agent
+   inherits that world untouched. Only the shell scaffold below is new.
+
+   Composition (from assets/illustrations/Desinger_agent_Design.png):
+     hero:      create.with.ai window — copy (7) + design request (5)
+     row 1:     agent.status (7)  + key.metrics (5)
+     row 2:     connected.tools (12)
+     row 3:     design.capabilities (12)
+     row 4:     recent.outputs (12)
+     row 5:     active.projects (7) + agent.activity (5)
+
+   Every color / shadow / border / font value comes from tokens.css.
+   ========================================================================== */
+
+/* ── world scaffold (mirrors .magi-world / .prod-world) ─────────────────── */
+
+.designer-world {
+  position: relative;
+}
+
+.designer-shell {
+  position: relative;
+  z-index: 1;
+  /* Shared Radar container: same width, centering and gutters as
+   * .rg-page--wide in GrowthRadar.css and .magi-shell / .prod-shell. */
+  width: min(1920px, calc(100% - 80px));
+  max-width: none;
+  margin-inline: auto;
+  padding: clamp(28px, 5vw, 56px) 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 2.4vw, 24px);
+}
+@media (max-width: 1100px) {
+  .designer-shell {
+    width: min(1920px, calc(100% - 48px));
+  }
+}
+
+/* ── shared bits ───────────────────────────────────────────────────────── */
+
+.designer-eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--coral-deep);
+  margin: 0 0 10px;
+}
+
+.designer-panel__sub {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+}
+
+.designer-linkbtn {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--coral-deep);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.designer-linkbtn:hover {
+  text-decoration: underline;
+}
+
+.designer-loading,
+.designer-empty {
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+  margin: 0;
+}
+
+.designer-error {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(169, 79, 56, 0.5);
+  border-radius: var(--radius-window);
+  background: var(--coral-wash);
+  color: var(--coral-deep);
+  font-size: var(--text-small);
+}
+
+.designer-uiicon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.designer-ico-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   HERO — create.with.ai
+
+   The left column sits DIRECTLY on the global RazorGrowth world: no card,
+   no border, no background, exactly like .magi-hero__copy on the Marketing
+   Agent page. Only the right column is a WindowPanel.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.designer-hero {
+  display: grid;
+  grid-template-columns: 7fr 5fr;
+  gap: clamp(16px, 3vw, 40px);
+  align-items: start;
+  min-width: 0;
+}
+
+.designer-hero__copy {
+  min-width: 0;
+  padding: clamp(20px, 2.5vw, 34px);
+  background:
+    linear-gradient(135deg, rgba(255, 243, 223, 0.98), rgba(247, 235, 215, 0.94));
+  border: 1px solid rgba(42, 24, 16, 0.22);
+  border-left: 4px solid var(--coral);
+  border-radius: 8px;
+  box-shadow: 7px 7px 0 rgba(33, 19, 14, 0.1);
+}
+
+.designer-hero__editorial {
+  display: block;
+}
+
+.designer-hero__title {
+  margin: 8px 0 0;
+  font-size: clamp(2.15rem, 3.55vw, 3.65rem);
+  font-weight: 850;
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+
+.designer-hero__accent {
+  color: var(--coral-strong);
+}
+
+/* ── workflow steps: Research → Create → Validate → Deliver ───────────── */
+
+.designer-flow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: clamp(6px, 1.2vw, 16px);
+  margin-top: 28px;
+  padding: 12px 18px 10px;
+  background: var(--paper-bright);
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  box-shadow: 3px 3px 0 rgba(33, 19, 14, 0.08);
+  min-width: 0;
+}
+
+.designer-flow__item {
+  display: contents;
+}
+
+.designer-flow__step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 0;
+}
+
+.designer-flow__icon {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  background: var(--paper-bright);
+  border: 1px solid var(--line);
+  border-radius: 1px;
+  box-shadow: 2px 2px 0 rgba(33, 19, 14, 0.14);
+}
+
+.designer-flow__label {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  text-align: center;
+}
+
+.designer-flow__arrow {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-top: -14px;
+  color: var(--coral-deep);
+  display: inline-flex;
+}
+
+/* ── design request (the reference's right-hand window) ───────────────── */
+
+/* Grid child — must opt out of min-width: auto so a long brief can never
+ * stretch the hero row past the viewport. The WindowPanel supplies the
+ * title bar, cream body, border and shadow. */
+.designer-request {
+  min-width: 0;
+}
+.designer-request > .window__body {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* "How it works" — a real destination (the home page section), never a
+ * decorative button. */
+.designer-request__how {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 13px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--ink);
+  background: var(--paper-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-button);
+  cursor: pointer;
+}
+.designer-request__how:hover {
+  background: var(--paper-bright);
+  transform: translate(-1px, -1px);
+}
+
+/* Status chip + the approval note share one row beneath the header. */
+.designer-request__statusrow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.designer-request__statusrow .designer-request__note {
+  flex: 1;
+  min-width: 180px;
+  padding-top: 2px;
+}
+
+.designer-request__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.designer-request__avatar {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--coral);
+  color: var(--paper-bright);
+  box-shadow: var(--shadow-button);
+}
+
+.designer-request__name {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.designer-request__desc {
+  margin: 4px 0 0;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+.designer-request__status {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--radius-window);
+  border: 1px solid rgba(62, 125, 88, 0.5);
+  background: rgba(112, 184, 138, 0.12);
+  color: var(--green-deep);
+  white-space: nowrap;
+}
+.designer-request__status--idle {
+  border-color: var(--line);
+  background: var(--paper-deep);
+  color: var(--ink-soft);
+}
+
+.designer-request__form {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  min-width: 0;
+}
+
+.designer-request__row {
+  /* textarea | attach | submit — all on ONE row, as in the reference. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.designer-request__textarea {
+  font-family: var(--font-display);
+  font-size: var(--text-small);
+  color: var(--ink);
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 11px 12px;
+  resize: vertical;
+  min-height: 62px;
+  width: 100%;
+  min-width: 0;
+}
+.designer-request__textarea::placeholder {
+  color: var(--ink-faint);
+}
+.designer-request__textarea:focus-visible {
+  outline: 2px solid var(--coral-deep);
+  outline-offset: 1px;
+}
+
+.designer-request__attach {
+  width: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-soft);
+  background: var(--paper-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+
+.designer-request__submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 18px;
+  font-family: var(--font-display);
+  font-size: var(--text-small);
+  font-weight: 700;
+  color: var(--paper-bright);
+  background: var(--coral);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-button);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.designer-request__submit:hover:not(:disabled) {
+  background: var(--coral-strong);
+  transform: translate(-1px, -1px);
+  box-shadow: var(--shadow-button-hover);
+}
+.designer-request__submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.designer-request__note {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+.designer-request__suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.designer-request__chip {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  text-transform: none;
+  color: var(--ink-soft);
+  background: var(--paper-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  padding: 3px 9px;
+  cursor: pointer;
+  text-align: left;
+}
+.designer-request__chip:hover {
+  color: var(--coral-deep);
+  border-color: var(--coral-deep);
+}
+
+.designer-request__msg {
+  margin: 0;
+  font-size: var(--text-small);
+  line-height: 1.5;
+  padding: 8px 11px;
+  border-radius: var(--radius-window);
+  border: 1px solid var(--line);
+}
+.designer-request__msg--ok {
+  background: rgba(112, 184, 138, 0.12);
+  border-color: rgba(62, 125, 88, 0.5);
+  color: var(--green-deep);
+}
+.designer-request__msg--bad {
+  background: var(--coral-wash);
+  border-color: rgba(169, 79, 56, 0.5);
+  color: var(--coral-deep);
+}
+
+/* ── GRID ──────────────────────────────────────────────────────────────── */
+
+.designer-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.designer-grid > .window {
+  min-width: 0;
+}
+
+.designer-span-status   { grid-column: span 7; }
+.designer-span-metrics  { grid-column: span 5; }
+.designer-span-projects { grid-column: span 7; }
+.designer-span-activity { grid-column: span 5; }
+.designer-span-full     { grid-column: span 12; }
+
+.designer-grid > .window > .window__body {
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* ── section header inside a window (title + right-hand link) ──────────── */
+
+.designer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.designer-head__title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+/* ── AGENT STATUS ──────────────────────────────────────────────────────── */
+
+.designer-status__main {
+  display: grid;
+  grid-template-columns: 1fr 168px;
+  gap: 20px;
+  align-items: center;
+  min-width: 0;
+}
+
+.designer-status__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--coral-deep);
+  font-weight: 500;
+}
+
+.designer-status__headline {
+  margin: 10px 0 0;
+  font-size: clamp(1.4rem, 2.2vw, 1.85rem);
+  font-weight: 850;
+  line-height: 1.08;
+  letter-spacing: var(--tracking-display);
+  color: var(--ink);
+}
+
+.designer-status__support {
+  margin: 10px 0 0;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+  max-width: 46ch;
+}
+
+.designer-status__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.designer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 18px;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-weight: 700;
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.designer-btn--primary {
+  color: var(--paper-bright);
+  background: var(--coral);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-button);
+}
+.designer-btn--primary:hover:not(:disabled) {
+  background: var(--coral-strong);
+  transform: translate(-1px, -1px);
+  box-shadow: var(--shadow-button-hover);
+}
+.designer-btn--ghost {
+  color: var(--ink);
+  background: var(--paper-deep);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-button);
+}
+.designer-btn--ghost:hover:not(:disabled) {
+  background: var(--paper-bright);
+  transform: translate(-1px, -1px);
+}
+.designer-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ── KEY METRICS — 2×2 grid, each cell carries an icon + mini bar chart ── */
+
+.designer-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.designer-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  box-shadow: var(--shadow-float-card);
+}
+
+.designer-metric__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.designer-metric__badge {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 1px;
+  color: var(--paper-bright);
+}
+.designer-metric__badge--coral { background: var(--coral); }
+.designer-metric__badge--green { background: var(--green-deep); }
+.designer-metric__badge--amber { background: var(--act-amber, #b08228); }
+/* Failure is its own red, distinct from the coral used for "in progress". */
+.designer-metric__badge--red   { background: var(--coral-strong); }
+
+.designer-metric__value {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.6rem;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.designer-metric__label {
+  font-size: var(--text-small);
+  color: var(--ink);
+}
+
+.designer-metric__hint {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--ink-faint);
+  overflow-wrap: anywhere;
+}
+.designer-metric__hint--ok { color: var(--green-deep); }
+.designer-metric__hint--accent { color: var(--coral-deep); }
+
+/* Mini bar chart drawn from the real run distribution — decorative but
+ * always proportional to the actual counts (never a random sparkline).
+ * Narrow vertical bars, right-aligned, as in the reference's metric cards. */
+.designer-metric__bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 3px;
+  height: 28px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.designer-metric__bar {
+  flex: 0 0 6px;
+  width: 6px;
+  background: var(--coral);
+  border-radius: 1px 1px 0 0;
+}
+.designer-metric__bar--green  { background: var(--green-deep); }
+.designer-metric__bar--amber  { background: var(--act-amber, #b08228); }
+.designer-metric__bar--red    { background: var(--coral-strong); }
+.designer-metric__bar--faint  { background: var(--line-soft); }
+
+/* ── CONNECTED DESIGN TOOLS ────────────────────────────────────────────── */
+
+.designer-tools {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+}
+
+.designer-tool {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  box-shadow: var(--shadow-float-card);
+  padding: 14px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  height: 100%;
+}
+
+/* Fixed 38px logo zone — every card reserves the same square, so a wide
+ * wordmark (Adobe) and a tall one (Figma) can never change card height or
+ * misalign the row. */
+.designer-tool__logo {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 1px;
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+/* Brand marks are contained inside the zone at a uniform optical size, so no
+ * logo is stretched to fill its box (they keep their own aspect ratio). */
+.designer-tool__logo--brand {
+  background: var(--paper-bright);
+}
+
+.designer-tool__logo--brand img {
+  max-width: 24px;
+  max-height: 24px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+}
+
+.designer-tool__name {
+  margin: 0;
+  font-size: var(--text-small);
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.designer-tool__pill {
+  margin-top: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--radius-window);
+  border: 1px solid rgba(169, 79, 56, 0.4);
+  background: var(--coral-wash);
+  color: var(--coral-deep);
+  white-space: nowrap;
+}
+.designer-tool__pill--on {
+  border-color: rgba(62, 125, 88, 0.5);
+  background: rgba(112, 184, 138, 0.12);
+  color: var(--green-deep);
+}
+.designer-tool__pill--setup {
+  border-color: rgba(176, 130, 40, 0.45);
+  background: rgba(224, 176, 74, 0.14);
+  color: #8a5a1a;
+}
+
+.designer-tool__meta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--ink-faint);
+  overflow-wrap: anywhere;
+}
+
+/* Group captions inside connected.tools — they make the split between the
+ * agent's own registry tools and unavailable external tools unmistakable. */
+.designer-toolgroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.designer-toolgroup__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* "Manage Tools" is an honest disclosure: it states where the real
+ * connection status comes from, so a logo is never mistaken for a link. */
+.designer-toolsnote {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--line-soft);
+  border-radius: var(--radius-window);
+  background: var(--paper-deep);
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+}
+
+/* Honest capability note. The icon states the real state; `unavailable`
+ * therefore reads as a limitation rather than as a feature.
+ *
+ * Deliberately NOT flex: in a flex row each child (including the bare text
+ * nodes and <strong>) becomes a shrinkable flex item, which wrapped
+ * "unavailable" mid-word. Block layout lets the sentence wrap naturally. */
+.designer-capnote {
+  display: block;
+  margin: 10px 0 0;
+  padding: 9px 11px;
+  border: 1px dashed var(--line-soft);
+  border-radius: var(--radius-window);
+  background: var(--paper-deep);
+  color: var(--ink-soft);
+  font-size: var(--text-small);
+  line-height: var(--leading-body);
+}
+
+.designer-capnote > svg {
+  vertical-align: -2px;
+  margin-right: 6px;
+  color: var(--coral-deep);
+}
+
+.designer-capnote > strong {
+  color: var(--ink, #241a12);
+  font-family: var(--font-display);
+  font-weight: 600;
+  /* Never let a status word break mid-token on a narrow viewport. */
+  white-space: nowrap;
+}
+
+/* A stored image thumbnail. The <img> is the real stored bytes served over
+ * the authenticated route — never a coloured plate standing in for one. */
+.designer-output__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Compact inline variant of the capability note, used as a head badge. */
+.designer-capnote--inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 5px 10px;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+}
+
+.designer-capnote--inline > svg {
+  margin-right: 0;
+  vertical-align: middle;
+  color: var(--green, #2f6b4f);
+}
+
+/* ── Image generation ───────────────────────────────────────────────────
+   One row: the action, then the honest sentence explaining what it will do
+   or why it cannot. Wraps on narrow viewports rather than overflowing. */
+.designer-genbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 14px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  background: var(--paper-deep);
+}
+
+.designer-genbar .designer-btn {
+  flex: none;
+}
+
+.designer-genbar .designer-btn[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.designer-genbar__msg {
+  flex: 1 1 260px;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-small);
+  line-height: var(--leading-body);
+  color: var(--ink-soft);
+}
+
+.designer-genbar__msg--ready {
+  color: var(--ink, #241a12);
+}
+
+.designer-genbar__msg--busy {
+  color: var(--coral-deep);
+}
+
+.designer-genbar__msg--ok {
+  color: var(--green, #2f6b4f);
+}
+
+.designer-genbar__msg--bad {
+  color: var(--coral-deep);
+}
+
+/* Image thumbnail states. The bytes come from the authenticated endpoint, so
+   there is never a broken <img> — only an explicit loading or error state. */
+.designer-output__thumb--loading,
+.designer-output__thumb--error {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  border: 1px dashed var(--line-soft);
+  border-radius: var(--radius-window);
+  background: var(--paper-deep);
+  text-align: center;
+}
+
+.designer-output__err {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: var(--text-small);
+  color: var(--coral-deep);
+}
+
+/* A small inline action inside a metadata line. */
+.designer-linkbtn--inline {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: inherit;
+  color: var(--coral-deep);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.designer-linkbtn--inline[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.designer-disclosure > summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--ink);
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper-deep);
+  box-shadow: var(--shadow-button);
+}
+.designer-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.designer-disclosure > summary:hover {
+  background: var(--paper-bright);
+}
+
+/* ── DESIGN CAPABILITIES ───────────────────────────────────────────────── */
+
+.designer-caps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.designer-cap {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  box-shadow: var(--shadow-float-card);
+}
+
+.designer-cap__icon {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 1px;
+}
+.designer-cap__icon--coral  { background: var(--coral-wash); color: var(--coral-deep); }
+.designer-cap__icon--purple { background: rgba(122, 91, 181, 0.14); color: #6a4ba5; }
+.designer-cap__icon--green  { background: var(--green-wash); color: var(--green-deep); }
+.designer-cap__icon--amber  { background: rgba(224, 176, 74, 0.16); color: #8a5a1a; }
+.designer-cap__icon--blue   { background: rgba(90, 141, 196, 0.16); color: #3a6ea8; }
+
+.designer-cap__title {
+  margin: 0;
+  font-size: var(--text-small);
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.designer-cap__desc {
+  margin: 3px 0 0;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+.designer-cap__arrow {
+  align-self: center;
+  color: var(--ink-faint);
+  display: inline-flex;
+}
+
+/* ── RECENT DESIGN OUTPUTS ─────────────────────────────────────────────── */
+
+.designer-outputs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.designer-output {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+  box-shadow: var(--shadow-float-card);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+
+.designer-output__thumb {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 96px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper-deep);
+  overflow: hidden;
+  cursor: pointer;
+}
+.designer-output__thumb:focus-visible {
+  outline: 2px solid var(--coral-deep);
+  outline-offset: -2px;
+}
+
+/* Deterministic abstract swatch, seeded by the real record id. It is a TYPE
+ * plate for structured work (a brief or a variant), never a stand-in for a
+ * rendered image — the kind label sits above it so the distinction is stated,
+ * not implied. */
+.designer-output__art {
+  position: absolute;
+  inset: 0;
+}
+
+/* The honest artefact-type label. Its presence is what stops a coloured
+ * plate from reading as a generated creative. */
+.designer-output__kindlabel {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 1;
+  padding: 3px 7px;
+  border-radius: var(--radius-pill, 999px);
+  background: rgba(28, 20, 14, 0.72);
+  color: var(--paper, #fdfaf3);
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.designer-output__pill {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 1;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  border-radius: var(--radius-window);
+  border: 1px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--paper-bright);
+  color: var(--ink);
+}
+.designer-output__pill--ok { color: var(--green-deep); }
+.designer-output__pill--accent { color: var(--coral-deep); }
+.designer-output__pill--neutral { color: var(--ink-soft); }
+
+.designer-output__body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.designer-output__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.designer-output__title {
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: var(--text-small);
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* Kind glyph inherits the title's weight but stays visually quieter. */
+.designer-output__title .designer-uiicon {
+  margin-top: 2px;
+  color: var(--coral-deep);
+}
+
+.designer-output__more {
+  flex-shrink: 0;
+  color: var(--ink-faint);
+  display: inline-flex;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.designer-output__meta {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.designer-output__detail {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--line-soft);
+  border-radius: var(--radius-window);
+  background: var(--paper-deep);
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+}
+
+.designer-signoff {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 60px;
+  margin: 4px 0 0;
+  padding: 12px 4px;
+  border-top: 1px solid var(--line-soft);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  line-height: 1.4;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+/* ── ACTIVE DESIGN PROJECTS ────────────────────────────────────────────── */
+
+.designer-tablewrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  background: var(--paper-bright);
+}
+
+.designer-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  font-size: var(--text-small);
+}
+
+.designer-table thead th {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-align: left;
+  padding: 9px 12px;
+  background: var(--paper-deep);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.designer-table tbody tr:hover {
+  background: var(--paper-deep);
+}
+
+.designer-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: middle;
+  color: var(--ink);
+}
+.designer-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.designer-table__project {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-weight: 700;
+}
+
+/* Flat colour chip stands in for a project cover the backend has not
+ * stored; it carries no meaning beyond identifying the row. */
+.designer-table__chip {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 1px;
+}
+
+.designer-table__name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.designer-table__type {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.designer-table__state {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--ink-soft);
+}
+.designer-table__state--ok { color: var(--green-deep); }
+.designer-table__state--accent { color: var(--coral-deep); }
+
+.designer-table__when {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+/* ── AGENT ACTIVITY ────────────────────────────────────────────────────── */
+
+.designer-activity {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.designer-activity__row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 26px 1fr auto;
+  gap: 10px;
+  align-items: start;
+  padding: 9px 0;
+  min-width: 0;
+}
+
+.designer-activity__row:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 34px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--line-soft);
+}
+
+.designer-activity__badge {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 1px;
+  color: var(--paper-bright);
+}
+.designer-activity__badge--ok { background: var(--green-deep); }
+.designer-activity__badge--accent { background: var(--coral); }
+.designer-activity__badge--neutral { background: var(--paper-deep); color: var(--ink-soft); }
+/* A failed run gets its own red, so it can never read as live progress. */
+.designer-activity__badge--red { background: var(--coral-strong); }
+
+.designer-activity__title {
+  margin: 0;
+  font-size: var(--text-small);
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.designer-activity__detail {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.designer-activity__when {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  padding-top: 2px;
+}
+
+/* ── responsive ────────────────────────────────────────────────────────── */
+
+@media (max-width: 1280px) {
+  .designer-tools {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .designer-outputs {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 1080px) {
+  .designer-span-status,
+  .designer-span-metrics,
+  .designer-span-projects,
+  .designer-span-activity {
+    grid-column: span 12;
+  }
+  .designer-caps {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  /* Below the desktop split the hero stacks and the copy spans the full
+   * width of the world, so bare text would land on the city band and lose
+   * contrast. It gets the same solid printed-paper ground the rest of the
+   * site uses (environment.css "READABILITY — solid printed-paper sheets":
+   * no translucency, no backdrop blur). */
+  .designer-hero {
+    grid-template-columns: 1fr;
+  }
+  .designer-hero__copy {
+    background: var(--paper);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-window);
+    box-shadow: 4px 4px 0 rgba(33, 19, 14, 0.08);
+    padding: clamp(18px, 3vw, 26px);
+  }
+
+}
+
+@media (max-width: 900px) {
+  .designer-metrics {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .designer-shell {
+    width: min(1920px, calc(100% - 32px));
+    padding-top: 20px;
+  }
+
+  /* Paper ground for the stacked hero copy is already set at ≤1080px. */
+
+  /* Request header stacks: avatar + copy on row 1, action full-width below. */
+  .designer-request__head {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+  .designer-request__how {
+    margin-left: 0;
+    flex: 1 0 100%;
+    justify-content: center;
+  }
+
+  .designer-tools,
+  .designer-caps,
+  .designer-outputs,
+  .designer-metrics {
+    grid-template-columns: 1fr;
+  }
+  .designer-status__main {
+    grid-template-columns: 1fr;
+  }
+  .designer-request__row {
+    grid-template-columns: 1fr;
+  }
+  .designer-request__attach {
+    display: none;
+  }
+  .designer-request__submit {
+    width: 100%;
+  }
+  .designer-flow {
+    flex-wrap: wrap;
+  }
+  .designer-signoff {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    white-space: normal;
+    min-height: 0;
+    gap: 4px;
+  }
+}

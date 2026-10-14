@@ -78,7 +78,10 @@ AGENT_PERMISSIONS: dict[str, frozenset[str]] = {
         READ_MERCHANT, READ_PRODUCTS, READ_ORDERS, READ_CUSTOMERS, READ_OPPORTUNITIES, SIMULATE, PROPOSE_ACTION,
     }),
     "DesignerAgent": frozenset({
-        READ_MERCHANT, READ_CAMPAIGNS, READ_CUSTOMERS,
+        # READ_OPPORTUNITIES is what lets the agent ground a design
+        # recommendation in a real Growth Radar signal / opportunity instead of
+        # asserting one. Read-only; it grants no write or approval capability.
+        READ_MERCHANT, READ_CAMPAIGNS, READ_CUSTOMERS, READ_OPPORTUNITIES,
     }),
     "SoftwareAgent": frozenset({
         READ_MERCHANT, READ_ORDERS, READ_CUSTOMERS,

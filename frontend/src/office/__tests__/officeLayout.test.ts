@@ -236,9 +236,9 @@ function rectsOf(placements: { id: string; rect: Rect | null }[]): Rect[] {
   const failed = productAgentOfficeSlot({
     ...base,
     status: "failed",
-    errors: ["groq quota exhausted"],
+    errors: ["ai provider quota exhausted"],
   });
-  check("failure surfaces the real backend reason", failed.monitor.includes("groq quota exhausted"));
+  check("failure surfaces the real backend reason", failed.monitor.includes("ai provider quota exhausted"));
 }
 
 /* ── 8. Marketing Agent: blocked ≠ failed, and never invents a reason ──── */
@@ -262,7 +262,7 @@ function rectsOf(placements: { id: string; rect: Rect | null }[]): Rect[] {
       llm_degraded: false,
       prepared_action: null,
     } as unknown as MarketingAGIRun["state"],
-    llm_provider: "groq",
+    llm_provider: "cloudflare",
     iterations: 1,
     tool_call_count: 0,
     analysis_cycle_id: null,

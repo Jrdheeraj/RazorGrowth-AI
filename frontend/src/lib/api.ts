@@ -167,6 +167,53 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   return (await res.json()) as T;
 }
 
+/**
+ * Binary variant of `request<T>()`, sharing its auth header, base URL, 401
+ * token-drop and error normalisation verbatim.
+ *
+ * Needed because this app authenticates with a Bearer token in localStorage,
+ * sent as a request HEADER. A plain `<img src="/api/...">` cannot set headers,
+ * so an image endpoint is unreachable from an image tag — the bytes must be
+ * fetched as a Blob and shown through an object URL instead.
+ *
+ * Kept next to `request()` deliberately: a second, divergent copy of the
+ * auth or error handling is exactly how the two drift apart.
+ */
+async function requestBlob(path: string, signal?: AbortSignal): Promise<Blob> {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  let res: Response;
+  try {
+    res = await fetch(BASE + path, {
+      method: "GET",
+      credentials: "same-origin",
+      headers,
+      signal,
+    });
+  } catch (e) {
+    if ((e as Error)?.name === "AbortError") throw e;
+    throw new ApiError(0, "NETWORK_ERROR: backend unreachable");
+  }
+
+  if (res.status === 401) clearToken();
+
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    const d: unknown = detail?.detail;
+    const message =
+      typeof d === "string"
+        ? d
+        : d && typeof d === "object" && "message" in (d as Record<string, unknown>)
+          ? String((d as Record<string, unknown>).message)
+          : `API error ${res.status}`;
+    throw new ApiError(res.status, message);
+  }
+
+  return await res.blob();
+}
+
 /* ── Auth ─────────────────────────────────────────────────────────────── */
 
 export function login(email: string, password: string): Promise<TokenResponse> {
@@ -621,4 +668,221 @@ export function startMarketingOAuth(
 
 export function fetchMarketingIntegrationAudit(): Promise<{ audit_events: import("../types/api").MarketingIntegrationAuditEvent[] }> {
   return request("/api/marketing-agi/integrations/audit?limit=50");
+}
+
+/* -- Designer Agent workspace ---------------------------------------------
+ *
+ * Thin wrappers over the private `request<T>()` above, so they inherit its
+ * exact auth header, base URL, 401 token-drop and error normalisation. No
+ * second fetch implementation is introduced here.
+ */
+
+/** Shared query-string builder; keeps the designer calls declarative. */
+function qs(params: Record<string, string | number | boolean | undefined>): string {
+  const parts = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== "")
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
+  return parts.length ? `?${parts.join("&")}` : "";
+}
+
+export function fetchDesignerStatus(
+  filters: { status?: string } = {},
+): Promise<import("../types/api").DesignerStatus> {
+  return request(`/api/designer/status${qs(filters)}`);
+}
+
+export function fetchDesignerProjects(
+  filters: {
+    status?: string;
+    project_type?: string;
+    analysis_cycle_id?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<import("../types/api").DesignProjectList> {
+  return request(`/api/designer/projects${qs(filters)}`);
+}
+
+export function createDesignerProject(body: {
+  objective: string;
+  title?: string;
+  project_type?: string;
+  analysis_cycle_id?: string;
+}): Promise<import("../types/api").DesignProject> {
+  return request("/api/designer/projects", { method: "POST", body });
+}
+
+export function fetchDesignerProject(
+  projectId: string,
+): Promise<import("../types/api").DesignProject> {
+  return request(`/api/designer/projects/${encodeURIComponent(projectId)}`);
+}
+
+export function updateDesignerProject(
+  projectId: string,
+  body: { title?: string; objective?: string; status?: string },
+): Promise<import("../types/api").DesignProject> {
+  return request(`/api/designer/projects/${encodeURIComponent(projectId)}`, {
+    method: "PATCH",
+    body,
+  });
+}
+
+/** Full version history for a project; earlier briefs are retained. */
+export function fetchDesignerProjectBriefs(
+  projectId: string,
+): Promise<import("../types/api").CreativeBriefList> {
+  return request(`/api/designer/projects/${encodeURIComponent(projectId)}/briefs`);
+}
+
+export function fetchDesignerBriefs(
+  filters: {
+    project_id?: string;
+    review_status?: string;
+    analysis_cycle_id?: string;
+    current_only?: boolean;
+    limit?: number;
+  } = {},
+): Promise<import("../types/api").CreativeBriefList> {
+  return request(`/api/designer/briefs${qs(filters)}`);
+}
+
+export function fetchDesignerBrief(
+  briefId: string,
+): Promise<import("../types/api").CreativeBrief> {
+  return request(`/api/designer/briefs/${encodeURIComponent(briefId)}`);
+}
+
+/**
+ * Record a HUMAN review decision. Requires the approver role server-side �
+ * this is the only path that moves a brief out of `pending_review`.
+ */
+export function reviewDesignerBrief(
+  briefId: string,
+  body: {
+    decision: "approved" | "changes_requested" | "rejected";
+    notes?: string;
+  },
+): Promise<import("../types/api").CreativeBrief> {
+  return request(`/api/designer/briefs/${encodeURIComponent(briefId)}/review`, {
+    method: "POST",
+    body,
+  });
+}
+
+export function fetchDesignerAssets(
+  filters: { project_id?: string; kind?: string; limit?: number } = {},
+): Promise<import("../types/api").DesignAssetList> {
+  return request(`/api/designer/assets${qs(filters)}`);
+}
+
+export function fetchDesignerAssetVersions(
+  assetId: string,
+): Promise<import("../types/api").DesignAssetVersionList> {
+  return request(`/api/designer/assets/${encodeURIComponent(assetId)}/versions`);
+}
+
+/** Append a NEW immutable revision. Earlier versions are never rewritten. */
+export function reviseDesignerAsset(
+  assetId: string,
+  body: { content: Record<string, unknown>; change_summary: string; rationale?: string },
+): Promise<import("../types/api").DesignAssetVersion> {
+  return request(`/api/designer/assets/${encodeURIComponent(assetId)}/revisions`, {
+    method: "POST",
+    body,
+  });
+}
+
+export function fetchDesignerActivity(
+  limit = 20,
+): Promise<import("../types/api").DesignerActivityList> {
+  return request(`/api/designer/activity${qs({ limit })}`);
+}
+
+/**
+ * Real image-generation availability. Returns `unavailable` with a reason when
+ * no provider is configured � never a fabricated URL.
+ */
+export function fetchDesignerImageGeneration(): Promise<import("../types/api").DesignerImageGeneration> {
+  return request("/api/designer/image-generation");
+}
+
+/**
+ * Generate one real image for a design asset and store it durably.
+ *
+ * Resolves with the honest outcome: `completed` only when a validated image
+ * is stored, otherwise `unavailable`/`failed` with a stated reason. Never
+ * fabricates an asset reference.
+ */
+export function generateDesignerImage(
+  assetId: string | null,
+  body: { prompt?: string; steps?: number } = {},
+): Promise<import("../types/api").DesignerImageGeneration> {
+  if (assetId) {
+    return request(
+      `/api/designer/assets/${encodeURIComponent(assetId)}/image-generation`,
+      { method: "POST", body },
+    );
+  }
+  return request("/api/designer/image-generation", { method: "POST", body });
+}
+
+/** Metadata only — the bytes are never included in a listing. */
+export function fetchRenderedAssets(
+  filters: { asset_id?: string; limit?: number } = {},
+): Promise<import("../types/api").RenderedAssetList> {
+  const parts = Object.entries(filters)
+    .filter(([, v]) => v !== undefined && v !== "")
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
+  return request(
+    `/api/designer/rendered-assets${parts.length ? `?${parts.join("&")}` : ""}`,
+  );
+}
+
+/**
+ * URL for the authenticated image bytes.
+ *
+ * NOTE: this path is for reference and for server-side/automated callers only.
+ * A browser `<img src>` cannot send the `Authorization` header this app
+ * authenticates with, so the page must use `fetchRenderedAssetBlob()` instead —
+ * using this in an `<img>` yields a broken image.
+ */
+export function renderedAssetContentUrl(renderedId: string): string {
+  return `/api/designer/rendered-assets/${encodeURIComponent(renderedId)}/content`;
+}
+
+/**
+ * Fetch one stored image as a Blob, carrying the bearer token.
+ *
+ * This is how the dashboard displays stored images: auth travels in a header,
+ * so the bytes are fetched explicitly and shown via a temporary object URL.
+ * Nothing is ever placed at a public, guessable URL.
+ */
+export function fetchRenderedAssetBlob(
+  renderedId: string,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  return requestBlob(renderedAssetContentUrl(renderedId), signal);
+}
+
+export function runDesignerUxAudit(body: {
+  objective: string;
+  project_id?: string;
+  window_days?: number;
+}): Promise<import("../types/api").DesignerUxAuditResult> {
+  return request("/api/designer/ux-audit", { method: "POST", body });
+}
+
+/**
+ * Hand a stored brief to another workflow. This records a structured handoff
+ * and never approves or executes anything; an optional proposed action still
+ * faces the platform's normal approval + EXECUTION_ENABLED gate.
+ */
+export function createDesignerHandoff(body: {
+  target: "marketing_agent" | "product_agent" | "software_agent" | "manager_agent";
+  brief_id: string;
+  note?: string;
+  proposed_action_type?: "generate_opportunity";
+}): Promise<import("../types/api").DesignerHandoff> {
+  return request("/api/designer/handoffs", { method: "POST", body });
 }

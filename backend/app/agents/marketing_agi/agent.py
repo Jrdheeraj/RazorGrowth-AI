@@ -435,7 +435,7 @@ class MarketingAGI:
         temperature: float = 0.0,
         max_tokens: int = 300,
     ) -> Any:
-        """Invoke the Groq reasoning layer with full observability.
+        """Invoke the LLM reasoning layer with full observability.
 
         On success records safe metadata (provider, model, latency,
         decision type, tool selected) into ``state.llm_decisions`` and
@@ -475,7 +475,7 @@ class MarketingAGI:
                 phase=phase,
                 event_type="llm_unavailable",
                 message=(
-                    "Groq reasoning unavailable "
+                    "LLM reasoning unavailable "
                     f"({type(exc).__name__}) — continuing with the bounded "
                     "deterministic workflow; no reasoning fabricated"
                 ),
@@ -665,7 +665,7 @@ class MarketingAGI:
         if self._llm is not None:
             state.reasoning_status = "reasoning"
             state.reasoning_summary = (
-                "Groq reasoning engine engaged — investigating live business data"
+                "LLM reasoning engine engaged — investigating live business data"
             )
         else:
             state.reasoning_status = "reasoning"

@@ -82,15 +82,24 @@ services:
       EXECUTION_ENABLED: ${EXECUTION_ENABLED:-false}
       GUARDRAIL_MAX_AMOUNT_INR: ${GUARDRAIL_MAX_AMOUNT_INR:-50000}
       GUARDRAIL_REQUIRE_APPROVAL: ${GUARDRAIL_REQUIRE_APPROVAL:-true}
-      # ---- AI / LLM (optional — agents degrade to deterministic mode) ----
-      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      # ---- AI / LLM: Cloudflare Workers AI (optional; without it agents
+      #      degrade to deterministic mode and AI routes return 503) ----
+      # CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN are passed below with
+      # the Designer image settings — one credential, both modalities.
+      LLM_PROVIDER: ${LLM_PROVIDER:-cloudflare}
+      CLOUDFLARE_TEXT_MODEL: ${CLOUDFLARE_TEXT_MODEL:-@cf/zai-org/glm-4.7-flash}
       LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
       LLM_API_KEY: ${LLM_API_KEY:-}
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openai}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
       EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-1536}
+      # ---- Designer Agent — image generation (optional, off by default) ----
+      # Mirrors the root .env names exactly, so local and Docker behave
+      # identically. Defaults are applied here too: an unset value in .env
+      # yields "disabled" rather than a half-configured provider.
+      IMAGE_GENERATION_ENABLED: ${IMAGE_GENERATION_ENABLED:-false}
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
       # ---- Marketing Agent integrations (platform defaults; per-workspace
       #      credentials are stored encrypted via the UI) ----
       INTEGRATION_CREDENTIAL_KEY: ${INTEGRATION_CREDENTIAL_KEY:-}

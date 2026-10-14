@@ -7,7 +7,8 @@ set -euo pipefail
 PATTERNS=(
   'sk-proj-[A-Za-z0-9_-]{20,}'          # OpenAI project keys
   'sk-[A-Za-z0-9]{32,}'                 # generic sk- keys
-  'gsk_[A-Za-z0-9]{20,}'                # Groq keys
+  'gsk_[A-Za-z0-9]{20,}'                # legacy Groq keys (still worth catching)
+  'v1\.0-[A-Za-z0-9_-]{20,}'            # Cloudflare API tokens
   'rzp_live_[A-Za-z0-9]{10,}'           # Razorpay LIVE key ids
   'AKIA[0-9A-Z]{16}'                    # AWS access keys
 )

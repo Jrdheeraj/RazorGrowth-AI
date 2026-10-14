@@ -58,7 +58,8 @@
 .rg-profile-container {
   position: relative;
   z-index: 1;
-  max-width: 1544px;
+  width: min(1920px, calc(100% - 80px));
+  max-width: none;
   margin: 0 auto;
   padding: 0;
 }
@@ -671,7 +672,7 @@
 }
 
 @media (max-width: 1100px) {
-  .rg-profile-container { padding: 0 16px; }
+  .rg-profile-container { width: min(1920px, calc(100% - 48px)); }
   .rg-stats { height: auto; min-height: 115px; grid-template-columns: 1fr 1fr; }
   .rg-stat:nth-child(3) { border-left: 0; border-top: 1px solid var(--rg-line-soft); }
   .rg-stat:nth-child(4) { border-top: 1px solid var(--rg-line-soft); }
@@ -682,7 +683,6 @@
 }
 
 @media (max-width: 720px) {
-  .rg-profile-container { padding: 0 12px; }
   .rg-hero { flex-direction: column; height: auto; }
   .rg-hero__main { padding: 20px; gap: 16px; }
   .rg-hero__avatar { width: 72px; height: 72px; font-size: 24px; }
@@ -696,4 +696,8 @@
   .rg-stat__icon { width: 48px; height: 48px; }
   .rg-grid { grid-template-columns: 1fr; }
   .rg-card__body { padding: 14px; }
+}
+
+@media (max-width: 640px) {
+  .rg-profile-container { width: min(1920px, calc(100% - 32px)); }
 }

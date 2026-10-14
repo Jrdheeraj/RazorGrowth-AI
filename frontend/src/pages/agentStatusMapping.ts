@@ -257,7 +257,7 @@ export function marketingAgentOfficeSlot(
   const evidenceCount = st?.evidence.length ?? 0;
   const toolCount = st?.tool_calls.length ?? 0;
   const llmCount = st?.llm_decisions.length ?? 0;
-  const engine = magiRun.llm_provider ?? "Groq";
+  const engine = magiRun.llm_provider ?? "Cloudflare Workers AI";
   const sub = `${evidenceCount} evidence · ${toolCount} tools used · ${llmCount} LLM decisions`;
   if (magiRun.status === "queued" || magiRun.status === "cancelled") {
     return { live: "IDLE", chip: "IDLE", tone: "neutral", anim: "none", monitor: "Ready — autonomous marketing employee", sub, progress: null, tools };

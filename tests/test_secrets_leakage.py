@@ -27,7 +27,7 @@ from tests.security_utils import (
 def secure(monkeypatch):
     monkeypatch.setenv("AUTH_MODE", "required")
     monkeypatch.setenv("AUTH_SECRET_KEY", TEST_SECRET)
-    monkeypatch.setenv("GROQ_API_KEY", "gsk_leaky-test-key-abcdefgh12345678")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "cf_leaky-test-key-abcdefgh12345678")
     get_settings.cache_clear()
     yield
     monkeypatch.undo()
@@ -122,11 +122,11 @@ class TestLogRedaction:
         f = SecretRedactingFilter()
         record = logging.getLogRecordFactory()(
             "test", logging.INFO, __file__, 1,
-            "attempting auth with key gsk_leaky-test-key-abcdefgh12345678 done",
+            "attempting auth with key cf_leaky-test-key-abcdefgh12345678 done",
             None, None,
         )
         assert f.filter(record) is True
-        assert "gsk_leaky-test-key-abcdefgh12345678" not in record.getMessage()
+        assert "cf_leaky-test-key-abcdefgh12345678" not in record.getMessage()
         assert "***REDACTED***" in record.getMessage()
 
     def test_short_values_are_not_treated_as_secrets(self):
@@ -149,11 +149,11 @@ class TestLogRedaction:
         record = logging.getLogRecordFactory()(
             "test", logging.INFO, __file__, 1,
             "value=%s",
-            ("gsk_leaky-test-key-abcdefgh12345678",),
+            ("cf_leaky-test-key-abcdefgh12345678",),
             None,
         )
         f.filter(record)
-        assert "gsk_leaky-test-key-abcdefgh12345678" not in str(record.args)
+        assert "cf_leaky-test-key-abcdefgh12345678" not in str(record.args)
 
     def test_installed_filter_actually_guards_root_logger(self, secure, caplog):
         from backend.app.core.logfilter import install_secret_redaction
@@ -162,9 +162,9 @@ class TestLogRedaction:
         try:
             with caplog.at_level(logging.INFO):
                 logging.getLogger("leakprobe").info(
-                    "key is gsk_leaky-test-key-abcdefgh12345678 end"
+                    "key is cf_leaky-test-key-abcdefgh12345678 end"
                 )
-            assert "gsk_leaky-test-key-abcdefgh12345678" not in caplog.text
+            assert "cf_leaky-test-key-abcdefgh12345678" not in caplog.text
         finally:
             root = logging.getLogger()
             root.filters.clear()

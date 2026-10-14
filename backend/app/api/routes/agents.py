@@ -169,32 +169,18 @@ def run_agents(
 
     settings = get_settings()
     llm = None
-    api_key = (
-        settings.GROQ_API_KEY
-        if settings.LLM_PROVIDER.lower() == "groq"
-        else settings.LLM_API_KEY
-    )
-    # Groq-first fallback: when a Groq key is configured but the generic
-    # provider points elsewhere, team/deep analysis still reasons with Groq
-    # instead of silently running without an LLM.
-    llm_provider = settings.LLM_PROVIDER
-    llm_model = (
-        settings.GROQ_MODEL
-        if settings.LLM_PROVIDER.lower() == "groq"
-        else settings.LLM_MODEL
-    )
-    if not api_key and settings.GROQ_API_KEY:
-        api_key = settings.GROQ_API_KEY
-        llm_provider = "groq"
-        llm_model = settings.GROQ_MODEL
+    # One shared resolver decides which provider is in use, so this route and
+    # the other LLM call sites can never disagree about it. Previously each
+    # re-implemented the choice.
+    from backend.app.ai.llm.provider import resolve_llm_provider
+
+    resolved = resolve_llm_provider(settings)
+    api_key = resolved.api_key if resolved else ""
+    llm_provider = resolved.name if resolved else settings.LLM_PROVIDER
+    llm_model = resolved.model if resolved else settings.LLM_MODEL
     if request.mode in ("deep", "growth_team") and api_key:
         # Synchronous legacy modes build the LLM inline (unchanged).
-        from backend.app.ai.llm.provider import build_llm_provider
-
-        llm = build_llm_provider(
-            provider=llm_provider,
-            api_key=api_key,
-            model=llm_model,
+        llm = resolved.build(
             timeout=settings.LLM_REQUEST_TIMEOUT,
             max_retries=settings.LLM_MAX_RETRIES,
             max_tokens=settings.LLM_MAX_TOKENS,
@@ -337,24 +323,19 @@ def _run_team_orchestrator_worker(
         if llm_cfg.get("provider"):
             try:
                 from backend.app.core.config import get_settings
-                from backend.app.ai.llm.provider import build_llm_provider
+                from backend.app.ai.llm.provider import resolve_llm_provider
 
                 settings = get_settings()
-                # The Groq key stays server-side; only primitive config
-                # crosses into the worker.
-                api_key = (
-                    settings.GROQ_API_KEY
-                    if str(llm_cfg["provider"]).lower() == "groq"
-                    else settings.LLM_API_KEY
-                )
-                if api_key:
-                    llm = build_llm_provider(
-                        provider=str(llm_cfg["provider"]),
-                        api_key=api_key,
-                        model=str(llm_cfg.get("model") or ""),
-                        timeout=int(llm_cfg.get("timeout", 60)),
-                        max_retries=int(llm_cfg.get("max_retries", 2)),
-                        max_tokens=int(llm_cfg.get("max_tokens", 2048)),
+                # The Cloudflare credential stays server-side; only primitive
+                # config crosses into the worker. Re-resolve the credential here
+                # and build from the SHARED resolver so the background worker
+                # uses exactly the same provider as the request that spawned it.
+                resolved = resolve_llm_provider(settings)
+                if resolved is not None:
+                    llm = resolved.build(
+                        timeout=int(llm_cfg.get("timeout", settings.LLM_REQUEST_TIMEOUT)),
+                        max_retries=int(llm_cfg.get("max_retries", settings.LLM_MAX_RETRIES)),
+                        max_tokens=int(llm_cfg.get("max_tokens", settings.LLM_MAX_TOKENS)),
                     )
             except Exception:
                 log.exception("Team worker: LLM setup failed; continuing without LLM")

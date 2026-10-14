@@ -1622,10 +1622,27 @@ class TestAPIStructuredErrors:
             assert body.error is not None
 
     def test_get_llm_raises_503_when_unconfigured(self):
+        """503 when NO provider credential is configured.
+
+        Both Cloudflare credential variables must be empty. A populated
+        CLOUDFLARE_API_TOKEN is a valid credential, so the route must resolve
+        Cloudflare rather than refuse.
+        """
+        from types import SimpleNamespace
+
         from fastapi import HTTPException
         from backend.app.api.routes.ai import _get_llm
+
+        unconfigured = SimpleNamespace(
+            LLM_PROVIDER="openai",
+            LLM_API_KEY="",
+            LLM_MODEL="gpt-4o-mini",
+            CLOUDFLARE_API_TOKEN="",
+            CLOUDFLARE_ACCOUNT_ID="",
+            CLOUDFLARE_TEXT_MODEL="@cf/zai-org/glm-4.7-flash",
+        )
         with patch("backend.app.api.routes.ai.get_settings") as mock_cfg:
-            mock_cfg.return_value.LLM_API_KEY = ""
+            mock_cfg.return_value = unconfigured
             with pytest.raises(HTTPException) as exc_info:
                 _get_llm()
             assert exc_info.value.status_code == 503
