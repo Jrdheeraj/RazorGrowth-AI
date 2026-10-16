@@ -122,6 +122,13 @@ def seed_commerce(db_session: Session, merchant: Merchant) -> None:
                     amount=Decimal("5000"),
                     currency=Currency.INR,
                     status=PaymentStatus.failed,
+                    # Real Razorpay ingestion always records a provider
+                    # failure code (services/razorpay_ingestion.py). Without
+                    # one the recovery agent correctly classifies the failure
+                    # as UNKNOWN and refuses to auto-retry it, so the fixture
+                    # must carry one to represent a genuine merchant.
+                    failure_code="GATEWAY_ERROR",
+                    failure_reason="Upstream gateway timeout",
                     created_at=now - timedelta(days=3),
                 )
             )
@@ -158,10 +165,10 @@ class TestAgentPermissions:
             assert "approve_action" not in entry["permissions"]
             assert "execute_action" not in entry["permissions"]
 
-    def test_catalog_has_all_13_agents(self):
-        """Verify all 13 agents (8 domain + 5 main) are in catalog."""
+    def test_catalog_has_all_registered_agents(self):
+        """Verify every registered agent (9 domain + 5 main) is in the catalog."""
         catalog = agent_catalog()
-        assert len(catalog) == 13
+        assert len(catalog) == len(AGENT_INSTANCES)
         names = {entry["name"] for entry in catalog}
         # 8 domain specialists
         assert "GrowthDiscoveryAgent" in names
@@ -172,6 +179,8 @@ class TestAgentPermissions:
         assert "OpportunityPrioritizationAgent" in names
         assert "ExperimentAgent" in names
         assert "GrowthMemoryAgent" in names
+        # 9th domain specialist: per-customer next-best-action decisioning.
+        assert "PersonalizationAgent" in names
         # 5 main growth team
         assert "ManagerAgent" in names
         assert "MarketingAgent" in names
@@ -185,7 +194,9 @@ class TestAgentPermissions:
         main_team = [e for e in catalog if e["category"] == "main_growth_team"]
         domain = [e for e in catalog if e["category"] == "domain_specialist"]
         assert len(main_team) == 5
-        assert len(domain) == 8
+        assert len(domain) == 9  # 8 original specialists + PersonalizationAgent
+        # Every registered agent must fall into exactly one category.
+        assert len(main_team) + len(domain) == len(catalog)
 
     def test_assert_permission_blocks_unauthorised(self):
         with pytest.raises(AgentPermissionError):

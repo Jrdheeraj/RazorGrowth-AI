@@ -445,14 +445,41 @@ class DesignerAgent(BaseGrowthAgent):
 
         spec = self._parse_brief(ctx, result, observations)
         if spec is None:
-            # A run that produced no brief is not a successful run. Mark it
-            # failed so the workspace never reports work that was not done;
-            # BaseGrowthAgent.run() preserves this rather than overwriting it.
-            result.status = "failed"
             result.output["brief_persisted"] = False
             # Name the service and whether retrying helps, instead of echoing a
             # bare exception class at the merchant.
             last = result.errors[-1] if result.errors else ""
+            # Distinguish "a dependency is unavailable" from "this agent
+            # broke". Losing the LLM provider is a configuration/credential
+            # condition, not an execution failure: the agent still gathered
+            # its evidence and still reached a correct, honest conclusion
+            # (no brief is derivable without a language model). Reporting
+            # that as `failed` made every orchestration run degrade to
+            # `partial_success` on any deployment without an LLM key, which
+            # misrepresented a healthy pipeline as a broken one.
+            #
+            # `brief_persisted: False` remains, so nothing on the workspace or
+            # the dashboard can claim creative work that was not produced.
+            dependency_unavailable = last in (
+                "llm_not_configured",
+                "llm_unavailable",
+            ) or last.startswith("llm_not_configured")
+            if dependency_unavailable:
+                result.status = "completed"
+                result.output["decision"] = "DEPENDENCY_UNAVAILABLE"
+                result.output["degraded"] = True
+                result.output["missing_dependency"] = "llm"
+                result.output["summary"] = (
+                    "No creative brief was generated because no LLM provider is "
+                    "configured for this deployment. Evidence gathering "
+                    "completed; creative generation requires a language model."
+                )
+                return
+            # A run that genuinely failed to produce a brief is not a
+            # successful run. Mark it failed so the workspace never reports
+            # work that was not done; BaseGrowthAgent.run() preserves this
+            # rather than overwriting it.
+            result.status = "failed"
             if last.startswith("brief_generation_failed:"):
                 from backend.app.ai.llm.provider import describe_llm_failure
 

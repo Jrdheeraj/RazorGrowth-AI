@@ -41,6 +41,21 @@ class AgentRunRequest(BaseModel):
     params: dict[str, Any] | None = None
 
 
+class SingleAgentRunRequest(BaseModel):
+    """
+    Launch ONE registered specialist directly from the AI Team workspace.
+
+    Deliberately narrower than ``AgentRunRequest``: a single-agent launch has
+    no orchestration mode, because there is no plan to execute.
+    """
+
+    params: dict[str, Any] | None = None
+    merchant_id: uuid.UUID | None = None
+    #: Correlates this run with an existing orchestrator cycle when the
+    #: dashboard drives several specialists under one analysis.
+    correlation_id: str | None = Field(default=None, max_length=64)
+
+
 class AgentRunSummary(BaseModel):
     agent: str
     status: str

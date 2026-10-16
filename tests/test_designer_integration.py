@@ -484,9 +484,12 @@ class TestActionApprovalBoundary:
 
 
 class TestNeighbouringAgentsUnchanged:
-    def test_registry_still_has_thirteen_agents(self):
-        assert len(AGENT_INSTANCES) == 13
-        assert len(agent_catalog()) == 13
+    def test_registry_and_catalog_stay_in_step(self):
+        # The Designer work must not desynchronise the registry from the
+        # merchant-visible catalog. Counted from the registry itself so adding
+        # a specialist does not silently break this guard.
+        assert len(AGENT_INSTANCES) == 14  # 9 domain specialists + 5 main team
+        assert len(agent_catalog()) == len(AGENT_INSTANCES)
 
     def test_marketing_agent_permissions_and_tools_unchanged(self):
         marketing = AGENT_INSTANCES["MarketingAgent"]

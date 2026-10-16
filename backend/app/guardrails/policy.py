@@ -31,6 +31,18 @@ log = logging.getLogger(__name__)
 # Action types that the guardrail layer understands
 # ─────────────────────────────────────────────────────────────────────────────
 
+#: Action types an agent is allowed to PROPOSE for human approval.
+#:
+#: Note the deliberate exclusion of ``publish_social_post`` and
+#: ``create_ad_campaign`` even though executors exist for both in
+#: ``action_executor._executor_registry``. This is NOT an oversight — it is a
+#: hard safety control. Rejecting them here means such an action can never
+#: reach ``approved``, so the MCP layer can never be handed an
+#: ``approved_action_id`` for it (``mcp/policy.assert_write_permitted``), and
+#: therefore no social publish or ad campaign can ever reach a provider.
+#: Enabling them would authorise autonomous external publishing, which this
+#: platform does not do. Pinned by
+#: ``tests/test_mcp_security.py::TestNoApprovalReplay``.
 PERMITTED_ACTION_TYPES: frozenset[str] = frozenset(
     {
         "send_campaign",

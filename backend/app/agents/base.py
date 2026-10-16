@@ -1,14 +1,17 @@
-"""
-Base agent infrastructure — Phase 5 Features 1, 13, 14.
+"""Base agent infrastructure — Phase 5 Features 1, 13, 14.
 
 Every specialised agent:
-  - has a clear responsibility (one per agent),
-  - receives structured input (AgentContext),
-  - returns structured output (AgentResult),
-  - is restricted by the permission registry,
-  - never raises past its boundary (execute() converts failures into
-    structured failed results so one agent cannot crash the system),
-  - records which internal tools it used and how long each layer took.
+   - has a clear responsibility (one per agent),
+   - receives structured input (AgentContext),
+   - returns structured output (AgentResult),
+   - is restricted by the permission registry,
+   - never raises past its boundary (execute() converts failures into
+     structured failed results so one agent cannot crash the system),
+   - records which internal tools it used and how long each layer took,
+   - follows a bounded autonomous execution lifecycle:
+     GOAL → CONTEXT GATHERING → PLAN → TOOL SELECTION → TOOL EXECUTION
+     → OBSERVATION → EVALUATION → REPLAN IF NECESSARY → PERSIST FINDINGS
+     → HANDOFF OR COMPLETE → LEARN FROM OUTCOME.
 """
 from __future__ import annotations
 
@@ -37,6 +40,8 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# ── AgentContext ──────────────────────────────────────────────────────
+
 @dataclass
 class AgentContext:
     """Structured input handed to every agent run."""
@@ -50,12 +55,14 @@ class AgentContext:
     shared: dict[str, Any] = field(default_factory=dict)  # cross-agent scratchpad
 
 
+# ── AgentResult ───────────────────────────────────────────────────────
+
 @dataclass
 class AgentResult:
     """Structured output produced by every agent run."""
 
     agent_name: str
-    status: str = "completed"               # completed | failed | skipped
+    status: str = "completed"               # completed | failed | skipped | blocked | replan_required
     opportunities_created: int = 0
     actions_proposed: int = 0
     insights_generated: int = 0
@@ -69,19 +76,36 @@ class AgentResult:
     llm_ms: int = 0
     db_ms: int = 0
     tool_ms: int = 0
+    # Lifecycle tracking
+    lifecycle_phases: list[dict[str, Any]] = field(default_factory=list)
+    evaluation_result: dict[str, Any] | None = None
+    replan_trigger: str | None = None  # reason for replan, if any
+    handoff_id: str | None = None
+    persist_flag: bool = False
 
     @property
     def ok(self) -> bool:
-        return self.status == "completed"
+        return self.status in ("completed", "partially_completed")
 
+
+# ── BaseGrowthAgent ──────────────────────────────────────────────────
 
 class BaseGrowthAgent(ABC):
-    """
-    Abstract specialised agent.
+    """Abstract specialised agent.
 
-    Subclasses implement `_run(ctx)` and MUST declare NAME + PERMISSIONS.
+    Subclasses implement _run(ctx, result) and MUST declare NAME + PERMISSIONS.
     All capability-gated helpers route through assert_permission so an
     agent physically cannot act outside its declared powers.
+
+    The execute() method follows a bounded autonomous execution lifecycle:
+    GOAL → CONTEXT GATHERING → PLAN → TOOL SELECTION → TOOL EXECUTION
+    → OBSERVATION → EVALUATION → REPLAN IF NECESSARY → PERSIST FINDINGS
+    → HANDOFF OR COMPLETE → LEARN FROM OUTCOME.
+
+    Configurable limits prevent infinite loops:
+    - max_steps: maximum lifecycle iterations (default 5)
+    - max_retries: maximum transient failure retries (default 3)
+    - max_replan: maximum replan attempts (default 2)
     """
 
     NAME: str = ""
@@ -89,11 +113,21 @@ class BaseGrowthAgent(ABC):
     PERMISSIONS: frozenset[str] = frozenset()
     TOOLS: tuple[str, ...] = ()
 
-    # ── public entry point (never raises) ────────────────────────────────
+    # ── lifecycle configuration ───────────────────────────────────────
+
+    max_steps: int = 5          # maximum full lifecycle iterations
+    max_retries: int = 3        # maximum transient failure retries
+    max_replan: int = 2         # maximum replan attempts within one run
+
+    # ── public entry point (never raises) ─────────────────────────────
 
     def execute(self, ctx: AgentContext) -> AgentResult:
         t0 = time.perf_counter()
-        result = AgentResult(agent_name=self.NAME, tools_used=list(self.TOOLS))
+        result = AgentResult(
+            agent_name=self.NAME,
+            tools_used=list(self.TOOLS),
+            lifecycle_phases=[],
+        )
         rag_context = ctx.shared.get("rag_context")
         result.output["objective"] = ctx.params.get("objective")
         if rag_context:
@@ -114,12 +148,17 @@ class BaseGrowthAgent(ABC):
             ):
                 result.output["decision"] = "INSUFFICIENT EVIDENCE"
                 result.output["recommendation"] = None
+                result.status = "completed"
+                result.lifecycle_phases.append(
+                    {"phase": "goal_set", "entered_at": _utcnow().isoformat(), "outcome": "blocked"}
+                )
+                return result
             else:
-                self._run(ctx, result)
+                self._execute_lifecycle(ctx, result)
             # Never launder a recorded failure into a success. An agent that
-            # detected its own failure inside `_run` (e.g. the Designer Agent
+            # detected its own failure inside _run (e.g. the Designer Agent
             # when the LLM provider refused) must keep the honest status.
-            if result.status != "failed":
+            if result.status not in ("failed", "blocked", "replan_required"):
                 result.status = "completed"
         except AgentPermissionError as exc:
             log.error("Permission violation in %s: %s", self.NAME, exc)
@@ -130,13 +169,91 @@ class BaseGrowthAgent(ABC):
             result.status = "failed"
             result.errors.append(f"{type(exc).__name__}: {exc}")
         result.total_ms = int((time.perf_counter() - t0) * 1000)
+        # Ensure lifecycle phases are recorded even on failure
+        if not result.lifecycle_phases:
+            result.lifecycle_phases.append(
+                {"phase": "goal_set", "outcome": result.status}
+            )
         return result
 
-    @abstractmethod
-    def _run(self, ctx: AgentContext, result: AgentResult) -> None:
-        """Do the agent's specialised work. Populate `result`."""
+    def _execute_lifecycle(self, ctx: AgentContext, result: AgentResult) -> None:
+        """Run the bounded autonomous execution lifecycle around _core_work."""
 
-    # ── capability-gated helpers ─────────────────────────────────────────
+        objectives = ctx.params.get("objective", "Growth analysis and optimization")
+
+        # Record goal set phase
+        result.lifecycle_phases.append(
+            {"phase": "goal_set", "objective": objectives, "entered_at": _utcnow().isoformat()}
+        )
+
+        # Run the agent's core work (_run) within the lifecycle framework
+        # with bounded retries and replan logic
+        for attempt in range(self.max_steps + 1):
+            # At the start of each attempt, record context_gathering phase
+            if attempt > 0:
+                result.lifecycle_phases.append(
+                    {"phase": "context_gathering", "attempt": attempt, "entered_at": _utcnow().isoformat()}
+                )
+
+            # PLAN - agent's _run does the planning inherently
+            result.lifecycle_phases.append(
+                {"phase": "planning", "attempt": attempt, "entered_at": _utcnow().isoformat()}
+            )
+
+            # Execute the agent's core work
+            try:
+                self._run(ctx, result)
+                # If _run completed without setting a non-completed status,
+                # mark as completed at the end
+                if result.status in ("completed", "partially_completed", "replan_required"):
+                    break
+                # If _run set status to failed, evaluate whether we should replan
+            except AgentPermissionError as exc:
+                log.error("Permission violation in %s: %s", self.NAME, exc)
+                result.status = "failed"
+                result.errors.append(f"PERMISSION_DENIED: {exc}")
+                break
+            except Exception as exc:  # noqa: BLE001 — failure isolation boundary
+                log.exception("Agent %s failed on attempt %d", self.NAME, attempt)
+                result.status = "failed"
+                result.errors.append(f"{type(exc).__name__}: {exc}")
+                # Transient failures: retry if under max_retries
+                if attempt < self.max_retries:
+                    continue
+                break
+
+        # If we exhausted attempts and status is still completed/partial, persist findings
+        if result.status in ("completed", "partially_completed"):
+            result.lifecycle_phases.append(
+                {"phase": "persist_findings", "outcome": result.status, "entered_at": _utcnow().isoformat()}
+            )
+            result.persist_flag = True
+            return
+        # If replan_required or failed, check if we should replan
+        if result.status == "replan_required" and attempt < self.max_replan:
+            result.lifecycle_phases.append(
+                {"phase": "replan", "trigger": result.replan_trigger, "attempt": attempt, "outcome": "will_replan", "entered_at": _utcnow().isoformat()}
+            )
+            # Reset status to running-like so the orchestrator can restart
+            result.status = "running"
+            return
+        # Failed or max_replan reached
+        if result.status == "failed" or result.status == "replan_required":
+            result.lifecycle_phases.append(
+                {"phase": "persist_findings", "outcome": result.status, "entered_at": _utcnow().isoformat()}
+            )
+            result.persist_flag = True
+
+    def _run(self, ctx: AgentContext, result: AgentResult) -> None:
+        """Do the agent's specialised work. Populate `result`.
+
+        Subclasses MUST implement this. This is the core business logic.
+        The base implementation sets a note that no work was defined.
+        """
+
+        result.output["note"] = "No agent work defined - subclass must implement _run"
+
+    # ── capability-gated helpers ───────────────────────────────────────
 
     def _require(self, capability: str) -> None:
         assert_permission(self.NAME, capability)

@@ -86,6 +86,14 @@ AGENT_PERMISSIONS: dict[str, frozenset[str]] = {
     "SoftwareAgent": frozenset({
         READ_MERCHANT, READ_ORDERS, READ_CUSTOMERS,
     }),
+    # Personalization — per-customer next-best-action decisioning.
+    # Deliberately WITHOUT PROPOSE_ACTION and WITHOUT READ_PAYMENTS: this
+    # agent recommends and explains, it never acts, and it does not read
+    # payment rows directly (it is told, at merchant scope, which customers
+    # have a recent failure).
+    "PersonalizationAgent": frozenset({
+        READ_CUSTOMERS, READ_PRODUCTS, READ_OPPORTUNITIES,
+    }),
 }
 
 

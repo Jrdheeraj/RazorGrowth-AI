@@ -254,6 +254,9 @@ export interface AgentRunRow {
   tool_latency_ms: number;
   opportunities_created: number;
   actions_proposed: number;
+  insights_generated?: number;
+  signals_detected?: number;
+  output_summary?: Record<string, unknown> | null;
   llm_provider: string | null;
   llm_model: string | null;
   tools_used: unknown;
@@ -1649,4 +1652,19 @@ export interface DesignerHandoff {
   /** Present only when the handoff proposed an existing action type. The
    *  action still faces the full human approval + EXECUTION_ENABLED gate. */
   action_id: string | null;
+}
+
+/* ── Personalization ─────────────────────────────────────────────────── */
+
+export interface PersonalizationDecisionRow {
+  decision_id: string;
+  customer_id: string;
+  recommended_action: string;
+  cohort: string;
+  score: number;
+  rationale: Record<string, unknown>;
+  recommended_product_ids: string[];
+  status: string;
+  observed_revenue: number | null;
+  created_at: string;
 }

@@ -1446,3 +1446,132 @@
     margin-left: 0;
   }
 }
+
+/* ── SPECIALIST ROSTER ──────────────────────────────────────────────────
+   Registry-driven roster for every in-scope specialist. Rendered inside the
+   EXISTING AI Team page — no separate dashboard. All values come from the
+   backend catalog; unimplemented capabilities are shown, never hidden. */
+
+.agents-cc__specialists { margin-top: clamp(16px, 2.4vw, 24px); }
+
+.agents-cc__specialistSummary {
+  margin: 0 0 14px;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+}
+
+.agents-cc__specialistEmpty {
+  margin: 0;
+  padding: 18px 4px;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+}
+
+.agents-cc__specialistGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.agents-cc__specialist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px 16px 16px;
+  background: var(--paper-bright);
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--line-soft);
+  border-radius: 8px;
+}
+
+.agents-cc__specialist[data-phase="failed"]        { border-left-color: var(--coral-strong); }
+.agents-cc__specialist[data-phase="partial"]       { border-left-color: var(--act-amber, #b08228); }
+.agents-cc__specialist[data-phase="completed"],
+.agents-cc__specialist[data-phase="approval_required"] { border-left-color: var(--green-deep); }
+.agents-cc__specialist[data-phase="running"]       { border-left-color: var(--choc-900, #2a1810); }
+
+.agents-cc__specialistHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.agents-cc__specialistName {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.agents-cc__specialistStatus {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: var(--tracking-meta);
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.agents-cc__specialistDesc {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+}
+
+.agents-cc__specialistTools {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
+.agents-cc__specialistToolList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.agents-cc__specialistToolList li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--ink-soft);
+  min-width: 0;
+}
+
+.agents-cc__specialistToolList code {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+
+.agents-cc__specialistPerm {
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.agents-cc__specialistUnimplemented,
+.agents-cc__specialistGap,
+.agents-cc__specialistError {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--coral-deep);
+  overflow-wrap: anywhere;
+}
+
+.agents-cc__specialist .btn { margin-top: auto; align-self: flex-start; }

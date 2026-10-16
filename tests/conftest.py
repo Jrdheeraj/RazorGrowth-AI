@@ -34,11 +34,49 @@ os.environ.setdefault("AUTH_MODE", "optional")
 os.environ.setdefault("AUTH_ENABLE_REGISTRATION", "true")
 os.environ.setdefault("AUTH_SECRET_KEY", "test-only-secret-key-do-not-use-in-production")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+os.environ.setdefault("APP_ENV", "testing")
+
 # Ensure Razorpay is disabled by default for tests (override .env)
 os.environ["RAZORPAY_ENABLED"] = "false"
 os.environ["RAZORPAY_TEST_MODE"] = "false"
 os.environ["REAL_TEST_INTEGRATION_ENABLED"] = "false"
 os.environ["RAZORPAY_WEBHOOK_SECRET"] = ""
+
+# --------------------------------------------------------------------------- #
+# External-execution + provider credentials MUST be forced, not defaulted.
+# --------------------------------------------------------------------------- #
+# A developer's real .env is loaded by pydantic-settings (core/config.py) and
+# typically carries live Cloudflare / Google / Meta / Razorpay credentials with
+# EXECUTION_ENABLED=true. Previously only the Razorpay family was neutralised,
+# so a normal `pytest` run inherited live execution and live OAuth client ids
+# and issued REAL authenticated calls to oauth2.googleapis.com and
+# googleads.googleapis.com.
+#
+# These are assigned unconditionally so a populated .env cannot leak into the
+# suite. Tests that genuinely need a credential inject it via monkeypatch and
+# clear the settings cache for the duration of that test.
+#
+# Image generation is deliberately NOT disabled here: the Designer FLUX tests
+# mock at the httpx boundary, and _no_live_llm below blanks the Cloudflare
+# credential so the provider reports itself unavailable rather than contacted.
+for _name, _value in (
+    # No agent or executor may perform a real external write in tests.
+    ("EXECUTION_ENABLED", "false"),
+    # Marketing provider credentials.
+    ("GOOGLE_OAUTH_CLIENT_ID", ""),
+    ("GOOGLE_OAUTH_CLIENT_SECRET", ""),
+    ("GOOGLE_OAUTH_REDIRECT_URI", ""),
+    ("GOOGLE_ADS_DEVELOPER_TOKEN", ""),
+    ("META_APP_ID", ""),
+    ("META_APP_SECRET", ""),
+    ("META_OAUTH_REDIRECT_URI", ""),
+    ("RESEND_API_KEY", ""),
+    ("RESEND_FROM_EMAIL", ""),
+    # Razorpay keys, so nothing can authenticate against the live API.
+    ("RAZORPAY_KEY_ID", ""),
+    ("RAZORPAY_KEY_SECRET", ""),
+):
+    os.environ[_name] = _value
 
 import pytest
 from sqlalchemy import create_engine, event

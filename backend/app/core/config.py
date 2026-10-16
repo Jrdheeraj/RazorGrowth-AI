@@ -188,6 +188,21 @@ class Settings(BaseSettings):
     MEASUREMENT_REQUIRE_REAL_DATA: bool = True  # never fabricate revenue
 
     # ------------------------------------------------------------------ #
+    # Autonomous research (web search + public page retrieval)
+    # ------------------------------------------------------------------ #
+    # Vendor-neutral: point these at whichever search API the deployment
+    # holds a credential for. With them unset, research-capable agents
+    # report `unavailable` with this exact reason and degrade honestly --
+    # they never invent sources, URLs or findings.
+    RESEARCH_SEARCH_ENDPOINT: str = ""
+    RESEARCH_API_KEY: str = ""
+    #: Dotted path to the result array inside the provider's JSON response.
+    RESEARCH_RESULTS_PATH: str = "results"
+    RESEARCH_TITLE_FIELD: str = "title"
+    RESEARCH_URL_FIELD: str = "url"
+    RESEARCH_SNIPPET_FIELD: str = "snippet"
+
+    # ------------------------------------------------------------------ #
     # Phase 6 — Authentication & security
     # ------------------------------------------------------------------ #
     # "required": every non-public endpoint needs a valid Bearer token.

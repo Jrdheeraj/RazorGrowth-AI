@@ -129,6 +129,9 @@ from backend.app.api.routes.marketing_integrations import router as marketing_in
 # Product AGI — autonomous product-growth employee (isolated module)
 from backend.app.api.routes.product_agi import router as product_agi_router
 from backend.app.api.routes.designer import router as designer_router
+# Specialist workspace APIs (tool catalog, single-agent launch, handoffs,
+# personalization). Feeds the EXISTING AI Team dashboard — no new page.
+from backend.app.api.routes.specialists import router as specialists_router
 
 app.include_router(health_router, prefix="/api")
 app.include_router(opportunities_router, prefix="/api")
@@ -164,6 +167,9 @@ app.include_router(marketing_integrations_router, prefix="/api")
 app.include_router(product_agi_router, prefix="/api")
 # Designer Agent routes (creative workspace: projects, briefs, assets, review)
 app.include_router(designer_router, prefix="/api")
+# Specialist workspace routes (AI Team dashboard data: tool catalog,
+# single-agent run, cross-agent handoffs, personalization decisions)
+app.include_router(specialists_router, prefix="/api")
 
 
 @app.get("/")

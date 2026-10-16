@@ -13,6 +13,7 @@
     "test:oauth": "tsc src/lib/integrationOauth.ts src/lib/__tests__/integrationOauth.test.ts --outDir .test-dist --rootDir src --module nodenext --moduleResolution nodenext --target es2021 --strict --skipLibCheck && node .test-dist/lib/__tests__/integrationOauth.test.js",
     "test:responsive": "node scripts/responsiveCss.contract.mjs",
     "test:product": "tsc src/lib/productAgentStatus.ts src/lib/__tests__/productAgentStatus.test.ts --outDir .test-dist --rootDir src --module nodenext --moduleResolution nodenext --target es2021 --strict --skipLibCheck && node .test-dist/lib/__tests__/productAgentStatus.test.js",
+    "test:roster": "tsc src/lib/specialistRoster.ts src/lib/__tests__/specialistRoster.test.ts --outDir .test-dist --rootDir src --module nodenext --moduleResolution nodenext --target es2021 --strict --skipLibCheck && node .test-dist/lib/__tests__/specialistRoster.test.js",
     "test:office": "tsc -p tsconfig.office-test.json && node .test-dist/office/__tests__/officeLayout.test.js"
   },
   "dependencies": {

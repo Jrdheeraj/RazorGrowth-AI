@@ -14,6 +14,7 @@ from backend.app.agents.payment_recovery import PaymentRecoveryAgent
 from backend.app.agents.prioritization import OpportunityPrioritizationAgent
 from backend.app.agents.product_agent import ProductAgent
 from backend.app.agents.revenue_optimization import RevenueOptimizationAgent
+from backend.app.agents.personalization_agent import PersonalizationAgent
 from backend.app.agents.software_agent import SoftwareAgent
 
 AGENT_INSTANCES: dict[str, BaseGrowthAgent] = {
@@ -34,6 +35,10 @@ AGENT_INSTANCES: dict[str, BaseGrowthAgent] = {
         ProductAgent(),
         DesignerAgent(),
         SoftwareAgent(),
+        # Personalization — per-customer next-best-action decisioning.
+        # Not a debate participant (it produces decisions, not debate
+        # turns); dispatched from the AI Team workspace like the specialists.
+        PersonalizationAgent(),
     )
 }
 
@@ -47,6 +52,7 @@ DOMAIN_SPECIALIST_AGENTS = {
     "OpportunityPrioritizationAgent",
     "ExperimentAgent",
     "GrowthMemoryAgent",
+    "PersonalizationAgent",
 }
 
 MAIN_GROWTH_TEAM_AGENTS = {
@@ -60,21 +66,54 @@ MAIN_GROWTH_TEAM_AGENTS = {
 
 # Public metadata for /api/agents (permissions included for transparency)
 def agent_catalog() -> list[dict]:
+    """
+    Registry-driven catalog for the AI Team dashboard.
+
+    ``tools`` is now resolved through the canonical catalog
+    (:mod:`backend.app.agents.catalog`) so every advertised id maps to a real,
+    registered, callable implementation. Anything an agent still declares
+    under a legacy name is translated via ``LEGACY_TOOL_ALIASES`` and
+    reported in ``unimplemented_tools`` rather than silently presented as a
+    capability it does not have.
+    """
+    from backend.app.agents.catalog import (
+        LEGACY_TOOL_ALIASES,
+        TOOL_REGISTRY,
+    )
     from backend.app.agents.permissions import FORBIDDEN_CAPABILITIES
 
-    return [
-        {
-            "name": agent.NAME,
-            "description": agent.DESCRIPTION,
-            "category": "main_growth_team" if agent.NAME in MAIN_GROWTH_TEAM_AGENTS else "domain_specialist",
-            "permissions": sorted(agent.PERMISSIONS),
-            "tools": list(agent.TOOLS),
-            "can_approve": False,
-            "can_execute": False,
-            "forbidden_capabilities": sorted(FORBIDDEN_CAPABILITIES),
-        }
-        for agent in AGENT_INSTANCES.values()
-    ]
+    entries: list[dict] = []
+    for agent in AGENT_INSTANCES.values():
+        resolved: list[str] = []
+        unimplemented: list[str] = []
+        for declared in agent.TOOLS:
+            mapped = LEGACY_TOOL_ALIASES.get(declared, declared)
+            if mapped in TOOL_REGISTRY:
+                if mapped not in resolved:
+                    resolved.append(mapped)
+            else:
+                unimplemented.append(declared)
+        entries.append(
+            {
+                "name": agent.NAME,
+                "description": agent.DESCRIPTION,
+                "category": (
+                    "main_growth_team"
+                    if agent.NAME in MAIN_GROWTH_TEAM_AGENTS
+                    else "domain_specialist"
+                ),
+                "permissions": sorted(agent.PERMISSIONS),
+                "tools": resolved,
+                "unimplemented_tools": unimplemented,
+                "tool_details": [
+                    TOOL_REGISTRY[t].to_dict() for t in resolved
+                ],
+                "can_approve": False,
+                "can_execute": False,
+                "forbidden_capabilities": sorted(FORBIDDEN_CAPABILITIES),
+            }
+        )
+    return entries
 
 
 def get_main_growth_team() -> list[BaseGrowthAgent]:

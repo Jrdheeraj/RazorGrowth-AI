@@ -1,16 +1,26 @@
 """
-PaymentRecoveryAgent — Phase 5 Feature 6.
+PaymentRecoveryAgent — reason-aware, measurable failed-payment recovery.
 
-Detects failed payments (count, value, repeat failures) from real rows,
-creates a failed_payment_recovery opportunity, simulates the recovery
-scenario, and MAY propose exactly one retry_payment Phase 4 action per
-run for the highest-value failure.
+Upgraded from the original implementation, which:
+  * ignored ``Payment.failure_code`` entirely,
+  * multiplied value by a hardcoded 0.25 "assumption",
+  * proposed one retry per run with no timing, stop rule or measurement.
 
-Safety:
-  - proposals enter 'requested' state; approval is human-only;
-  - real Razorpay execution stays disabled by default (RAZORPAY_ENABLED=false)
-    and the Phase 4 executor refuses honestly when disabled;
-  - no fake success is ever recorded.
+This version delegates the reasoning to
+:class:`~backend.app.services.payment_recovery.PaymentRecoveryService` and:
+
+  * classifies every failure using verified provider semantics;
+  * derives a recovery rate from THIS merchant's own history and withholds a
+    projection when history is too thin (never substitutes a constant);
+  * plans a bounded retry schedule per failure class;
+  * skips customers who must act first instead of burning a retry;
+  * proposes at most ``MAX_PROPOSALS`` retries per run, highest value first;
+  * hands Marketing an aggregate, privacy-scoped payload for an approved
+    reminder campaign.
+
+Safety: proposals enter 'requested' state; approval is human-only; real
+Razorpay execution stays disabled unless explicitly enabled; nothing here
+marks a payment recovered without verifying an actual captured payment.
 """
 from __future__ import annotations
 
@@ -18,6 +28,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -26,80 +37,107 @@ from backend.app.agents.base import AgentContext, AgentResult, BaseGrowthAgent
 from backend.app.agents.permissions import (
     AGENT_PERMISSIONS,
     PROPOSE_ACTION,
-    READ_PAYMENTS,
     assert_permission,
 )
+from backend.app.models.agent_action import AgentAction
 from backend.app.models.enums import OpportunityType, PaymentStatus
 from backend.app.models.opportunity import GrowthOpportunity
 from backend.app.models.payment import Payment
 from backend.app.services.action_service import create_action
-from backend.app.services.memory import GrowthMemoryService
-from backend.app.services.opportunity_upsert import (
-    build_opportunity_key,
-    upsert_opportunity,
+from backend.app.services.handoff import handoff_service
+from backend.app.services.opportunity_upsert import build_opportunity_key, upsert_opportunity
+from backend.app.services.payment_recovery import (
+    RETRYABLE,
+    PaymentRecoveryService,
+    measure_recovery_rate,
 )
 from backend.app.services.scoring import (
     OpportunityScoringEngine,
     default_risk_for_action_type,
 )
+from backend.app.services.simulation import SimulationEngine
 
 log = logging.getLogger(__name__)
 
 RECOVERY_WINDOW_DAYS = 30
-DEFAULT_RECOVERY_RATE = Decimal("0.25")   # documented assumption, not data
+
+#: Maximum retry proposals created in a single run. The original proposed
+#: exactly one (the largest payment); that is not recovery, it is a sample.
+MAX_PROPOSALS = 5
+
+#: Statuses that mean "already handled" for duplicate detection.
+_OPEN_RETRY_STATUSES = ("requested", "approved", "executing", "completed")
 
 
 class PaymentRecoveryAgent(BaseGrowthAgent):
     NAME = "PaymentRecoveryAgent"
     DESCRIPTION = (
-        "Finds failed and repeatedly-failing payments worth recovering, "
-        "quantifies recoverable revenue, and proposes retry actions that "
-        "still require human approval."
+        "Classifies real failed payments by provider failure code, measures "
+        "this merchant's own recovery rate, plans bounded retry timing, and "
+        "proposes approval-gated recovery actions."
     )
     PERMISSIONS = AGENT_PERMISSIONS[NAME]
     TOOLS = ("failed_payment_scan", "recovery_simulation", "phase4_propose")
 
     def _run(self, ctx: AgentContext, result: AgentResult) -> None:
-        assert_permission(self.NAME, READ_PAYMENTS)
         db: Session = ctx.db
         merchant_id: uuid.UUID = ctx.merchant_id
+        window_days = int(ctx.params.get("window_days", RECOVERY_WINDOW_DAYS))
 
-        now = datetime.now(timezone.utc)
-        cutoff = now - timedelta(days=RECOVERY_WINDOW_DAYS)
-
-        # ── read-only scan of REAL payment rows ──────────────────────────
-        t0 = self._now_ms()
-        fails = list(
-            db.scalars(
-                select(Payment)
-                .where(Payment.merchant_id == merchant_id)
-                .where(Payment.status == PaymentStatus.failed.value)
-                .where(Payment.created_at >= cutoff)
-                .order_by(Payment.amount.desc())
-            ).all()
+        # ── 1. Read-only analysis of REAL payment rows ──────────────────────
+        analysis = PaymentRecoveryService(db).analyse(
+            merchant_id, window_days=window_days
         )
-        result.db_ms += self._since_ms(t0)
-        total_value = sum((Decimal(str(p.amount)) for p in fails), Decimal("0"))
+        result.output["analysis"] = analysis
         result.output["failed_payments"] = {
-            "count": len(fails),
-            "total_value": float(total_value),
-            "highest_single": float(Decimal(str(fails[0].amount))) if fails else 0.0,
-            "window_days": RECOVERY_WINDOW_DAYS,
+            "count": analysis["failed_payment_count"],
+            "total_value": analysis["failed_value_inr"],
+            "retryable_value": analysis["retryable_value_inr"],
+            "window_days": window_days,
         }
         result.tools_used.append("failed_payment_scan")
-        if not fails:
-            return  # nothing to recover — emit no fabricated opportunity
 
-        # ── recovery opportunity (deduplicated) ──────────────────────────
-        scoring = OpportunityScoringEngine()
-        bucket = now.strftime("%Y%m")
+        if analysis["failed_payment_count"] == 0:
+            # Nothing to recover — emit no fabricated opportunity.
+            result.output["decision"] = "NO_FAILED_PAYMENTS"
+            result.output["summary"] = (
+                f"No failed payments in the last {window_days} days."
+            )
+            return
+
+        # ── 2. Opportunity, deduped per window bucket ──────────────────────
+        bucket = datetime.now(timezone.utc).strftime("%Y%m")
         key = build_opportunity_key(
-            merchant_id, "payment_recovery", f"window:{bucket}", RECOVERY_WINDOW_DAYS
+            merchant_id,
+            "payment_recovery",
+            f"window:{bucket}",
+            window_days,
         )
-        rec_scoring = scoring.score(
-            expected_revenue=total_value * DEFAULT_RECOVERY_RATE,
-            confidence=Decimal("0.70"),
-            evidence_items=2 + min(len(fails), 4),
+
+        # Projected revenue is MEASURED when history supports it, otherwise
+        # honestly withheld rather than multiplied by a constant.
+        projected = analysis.get("projected_recoverable_inr")
+        basis = analysis.get("projection_basis")
+        expected_revenue = (
+            Decimal(str(round(projected, 2)))
+            if projected is not None
+            else Decimal(str(analysis["retryable_value_inr"]))
+        )
+        if projected is None:
+            result.output["projection_note"] = (
+                "Projected recoverable value is withheld: "
+                f"{basis}. The opportunity's expected_revenue therefore "
+                "reports the full retryable value as an upper bound, not a "
+                "forecast."
+            )
+
+        measured = analysis["measured_recovery"]
+        confidence = Decimal(str(round(measured["rate"], 3))) if measured.get("rate") is not None else Decimal("0.30")
+
+        scoring = OpportunityScoringEngine().score(
+            expected_revenue=float(expected_revenue),
+            confidence=confidence,
+            evidence_items=2 + min(analysis["failed_payment_count"], 6),
             urgency_score=0.9,
             risk_score=default_risk_for_action_type("retry_payment"),
         )
@@ -109,117 +147,192 @@ class PaymentRecoveryAgent(BaseGrowthAgent):
             opportunity_key=key,
             type_=OpportunityType.failed_payment_recovery,
             title=(
-                f"Recover ₹{total_value} in {len(fails)} failed payments "
-                f"(last {RECOVERY_WINDOW_DAYS} days)"
+                f"Recover {analysis['retryable_count']} retryable of "
+                f"{analysis['failed_payment_count']} failed payments "
+                f"({analysis['retryable_value_inr']:.2f} INR)"
             ),
-            confidence=Decimal("0.70"),
-            expected_revenue=(total_value * DEFAULT_RECOVERY_RATE).quantize(Decimal("0.01")),
+            confidence=confidence,
+            expected_revenue=expected_revenue,
             reasoning=[
                 {
-                    "basis": "real failed payments",
-                    "count": len(fails),
-                    "value": float(total_value),
-                    "assumed_recovery_rate": float(DEFAULT_RECOVERY_RATE),
+                    "basis": "real failed payments classified by failure code",
+                    "failed_count": analysis["failed_payment_count"],
+                    "retryable_count": analysis["retryable_count"],
+                    "retryable_value_inr": analysis["retryable_value_inr"],
+                    "needs_customer_action_count": analysis["needs_customer_action_count"],
+                    "unknown_classification_count": analysis["unknown_classification_count"],
                 },
-                {"scoring": rec_scoring.to_dict()},
+                {"measured_recovery": measured},
+                {"projection_basis": basis},
+                {"scoring": scoring.to_dict()},
             ],
         )
         if created:
             result.opportunities_created += 1
         result.output["opportunity_id"] = str(opp.id)
 
-        # ── simulation ───────────────────────────────────────────────────
-        assert_permission(self.NAME, "simulate")
-        from backend.app.services.simulation import SimulationEngine
-
-        sim_engine = SimulationEngine(db)
-        simulation = sim_engine.simulate_payment_recovery(
-            failed_payment_value=float(total_value),
-            recovery_rate=float(DEFAULT_RECOVERY_RATE),
+        # ── 3. Simulation, driven by the MEASURED rate ─────────────────────
+        rate_for_sim = measured.get("rate")
+        sim_recovery_rate = (
+            float(rate_for_sim) if rate_for_sim is not None else 0.0
         )
-        sim_engine.persist(
+        simulation = SimulationEngine(db).simulate_payment_recovery(
+            failed_payment_value=float(analysis["retryable_value_inr"]),
+            recovery_rate=sim_recovery_rate,
+        )
+        SimulationEngine(db).persist(
             simulation,
             merchant_id=merchant_id,
             opportunity_id=opp.id,
             created_by_agent=self.NAME,
-            inputs={"failed_count": len(fails)},
+            inputs={
+                "measured_rate": rate_for_sim,
+                "projection_basis": basis,
+            },
         )
         result.output["simulation"] = simulation.to_dict()
-
-        # ── ONE retry proposal for the highest-value failure ─────────────
-        if bool(ctx.params.get("propose_retry_action", True)):
-            assert_permission(self.NAME, PROPOSE_ACTION)
-            top = fails[0]
-            if self._already_proposed(db, str(top.id)):
-                result.output["retry_proposal"] = "already_proposed"
-            else:
-                action = create_action(
-                    db,
-                    merchant_id=merchant_id,
-                    action_type="retry_payment",
-                    input_payload={
-                        "payment_id": str(top.provider_payment_id or top.id),
-                        "metadata": {
-                            "internal_payment_id": str(top.id),
-                            "amount_inr": float(top.amount),
-                            "source_agent": self.NAME,
-                            "note": (
-                                "Proposed by PaymentRecoveryAgent. Execution "
-                                "remains disabled until RAZORPAY_ENABLED is "
-                                "explicitly enabled with configured keys."
-                            ),
-                        },
-                    },
-                    requested_by=f"agent:{self.NAME}",
-                )
-                result.actions_proposed += 1
-                result.output["retry_proposal"] = {
-                    "action_id": str(action.id),
-                    "status": str(action.status),
-                }
-
-        # ── memory write (Feature 10/11 hook) ────────────────────────────
-        memory = GrowthMemoryService(db, embedding_provider=ctx.embedding_provider)
-        mem = memory.record(
-            merchant_id=merchant_id,
-            memory_type="recommendation",
-            content=(
-                f"PaymentRecoveryAgent proposed retry for highest-value "
-                f"failure; {len(fails)} failures worth ₹{total_value} in window."
-            ),
-            source_type="agent_run",
-            source_id=str(opp.id),
-            importance=0.7,
+        result.output["simulation_note"] = (
+            "Simulation uses the merchant's MEASURED recovery rate."
+            if measured.get("is_usable")
+            else "Insufficient history: the simulation uses a 0% rate and is "
+                 "deliberately conservative rather than optimistic."
         )
-        result.memories_written += 1
+        result.tools_used.append("recovery_simulation")
+
+        # ── 4. Bounded retry proposals, highest value first ────────────────
+        if bool(ctx.params.get("propose_retry_action", True)):
+            proposed = self._propose_retries(
+                db,
+                merchant_id=merchant_id,
+                analysis=analysis,
+                result=result,
+            )
+            result.output["proposals"] = proposed
+
+        # ── 5. Aggregate handoff to Marketing (no PII) ─────────────────────
+        try:
+            handoff = handoff_service.request(
+                db,
+                merchant_id=merchant_id,
+                source_agent=self.NAME,
+                destination_agent="CampaignStrategistAgent",
+                task=(
+                    "Design an approved reminder for retryable failed payments "
+                    "and a customer-action prompt for failures needing a card update."
+                ),
+                payload=PaymentRecoveryService(db).marketing_handoff_payload(analysis),
+                correlation_id=ctx.params.get("orchestrator_run_id"),
+            )
+            result.output["marketing_handoff"] = {
+                "handoff_id": handoff["handoff_id"],
+                "status": handoff["status"],
+            }
+        except Exception as exc:
+            # Collaboration must never break recovery analysis.
+            result.errors.append(f"marketing_handoff_skipped: {type(exc).__name__}")
+
+        result.output["summary"] = (
+            f"{analysis['retryable_count']} of {analysis['failed_payment_count']} "
+            f"failed payments are retryable "
+            f"({analysis['needs_customer_action_count']} need customer action). "
+            f"Measured recovery rate: "
+            + (
+                f"{measured['rate']:.0%} over {measured['resolved_failures']} failures."
+                if measured.get("rate") is not None
+                else "unavailable (insufficient history)."
+            )
+        )
 
     # ── helpers ──────────────────────────────────────────────────────────
 
-    @staticmethod
-    def _already_proposed(db: Session, internal_payment_id: str) -> bool:
-        from backend.app.models.agent_action import AgentAction
+    def _propose_retries(
+        self,
+        db: Session,
+        *,
+        merchant_id: uuid.UUID,
+        analysis: dict[str, Any],
+        result: AgentResult,
+    ) -> list[dict[str, Any]]:
+        """Propose bounded retries for genuinely retryable, not-already-proposed payments."""
+        assert_permission(self.NAME, PROPOSE_ACTION)
 
+        already = self._proposed_payment_keys(db, merchant_id)
+        proposed: list[dict[str, Any]] = []
+        limit = int(analysis.get("max_proposals", MAX_PROPOSALS))
+
+        for candidate in analysis["candidates"]:
+            if len(proposed) >= limit:
+                break
+            if not candidate["retryable"]:
+                continue
+            payment_id = candidate["payment_id"]
+            if payment_id in already:
+                continue
+            action = create_action(
+                db,
+                merchant_id=merchant_id,
+                action_type="retry_payment",
+                input_payload={
+                    "payment_id": payment_id,
+                    "metadata": {
+                        "internal_payment_id": payment_id,
+                        "order_id": candidate["order_id"],
+                        "amount_inr": candidate["amount_inr"],
+                        "failure_code": candidate["failure_code"],
+                        "failure_classification": candidate["classification"],
+                        "attempt_plan": candidate["schedule"],
+                        "source_agent": self.NAME,
+                        "note": (
+                            "Proposed by PaymentRecoveryAgent from a verified "
+                            "failure classification. Execution stays disabled "
+                            "until RAZORPAY_ENABLED is explicitly enabled; "
+                            "approval is human-only."
+                        ),
+                    },
+                },
+                requested_by=f"agent:{self.NAME}",
+            )
+            already.add(payment_id)
+            proposed.append(
+                {
+                    "action_id": str(action.id),
+                    "status": str(action.status),
+                    "payment_id": payment_id,
+                    "amount_inr": candidate["amount_inr"],
+                    "classification": candidate["classification"],
+                }
+            )
+            result.actions_proposed += 1
+
+        result.tools_used.append("phase4_propose")
+        skipped_existing = sum(
+            1
+            for c in analysis["candidates"]
+            if c["retryable"] and c["payment_id"] in already and
+            not any(p["payment_id"] == c["payment_id"] for p in proposed)
+        )
+        result.output["duplicate_proposals_skipped"] = skipped_existing
+        return proposed
+
+    @staticmethod
+    def _proposed_payment_keys(db: Session, merchant_id: uuid.UUID) -> set[str]:
+        """
+        Payment ids this merchant already has an open/completed retry for.
+
+        Scoped to the merchant: without that filter one workspace's in-flight
+        retry would suppress another workspace's proposal.
+        """
         rows = db.scalars(
             select(AgentAction).where(
+                AgentAction.merchant_id == merchant_id,
                 AgentAction.action_type == "retry_payment",
-                AgentAction.status.in_(["requested", "approved", "executing", "completed"]),
+                AgentAction.status.in_(list(_OPEN_RETRY_STATUSES)),
             )
         ).all()
+        keys: set[str] = set()
         for action in rows:
-            payload = action.input_payload or {}
-            meta = payload.get("metadata") or {}
-            if meta.get("internal_payment_id") == internal_payment_id:
-                return True
-        return False
-
-    @staticmethod
-    def _now_ms() -> int:
-        import time
-
-        return int(time.perf_counter() * 1000)
-
-    @staticmethod
-    def _since_ms(start_ms: int) -> int:
-        import time
-
-        return int(time.perf_counter() * 1000) - start_ms
+            meta = (action.input_payload or {}).get("metadata") or {}
+            pid = meta.get("internal_payment_id")
+            if pid:
+                keys.add(str(pid))
+        return keys

@@ -199,6 +199,25 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      # The frontend test suites used to exist as npm scripts that CI never
+      # executed, so they could rot silently. Each is now run explicitly so a
+      # regression fails the build instead of going unnoticed.
+      - name: Frontend unit suites (activity, designer, designer-workspace)
+        working-directory: frontend
+        run: |
+          npm run test:activity
+          npm run test:designer
+          npm run test:designer-workspace
+
+      - name: Frontend unit suites (oauth, product, roster, office, responsive)
+        working-directory: frontend
+        run: |
+          npm run test:oauth
+          npm run test:product
+          npm run test:roster
+          npm run test:office
+          npm run test:responsive
+
       - name: No hardcoded local-only API base in production bundle
         run: |
           # The dashboard must not embed machine-specific URLs in builds.

@@ -10,7 +10,12 @@ import {
   fetchMarketingAGIRuns,
   fetchMarketingAGICampaigns,
   fetchProductAgentRuns,
+  fetchAgentCatalog,
+  runSingleAgent,
+  type AgentCatalogResponse,
+  type SingleAgentRunResponse,
 } from "../lib/api";
+import { buildRoster, toolSummary, type RosterSummary } from "../lib/specialistRoster";
 import type {
   ActionPlan,
   ActionPlanItem,
@@ -40,6 +45,7 @@ import { toOfficeCharacter, mapLiveStatus, accentForIndex } from "../office/razo
 import { isAuthenticated } from "../lib/auth";
 import "../office/office.css";
 import "./AgentsPage.css";
+import { ActivityFeed } from "../features/public/ActivityFeed";
 
 const DEFAULT_OBJECTIVE = "Comprehensive commerce analysis and growth optimization";
 
@@ -1116,6 +1122,54 @@ export function AgentsPage() {
   // Composed from existing endpoints — there is no /api/designer-* surface.
   const [designerSnapshot, setDesignerSnapshot] = useState<DesignerSnapshot | null>(null);
 
+  // ── Specialist roster (registry-driven, real backend state) ────────────
+  // Loaded from /api/agents/catalog. Nothing here is synthesised: an agent
+  // whose declared tool names have no implementation is shown as such.
+  const [specialistCatalog, setSpecialistCatalog] = useState<AgentCatalogResponse | null>(null);
+  const [specialistCatalogError, setSpecialistCatalogError] = useState(false);
+  const [specialistRuns, setSpecialistRuns] = useState<
+    Record<string, SingleAgentRunResponse | null>
+  >({});
+  const [specialistLaunching, setSpecialistLaunching] = useState<string | null>(null);
+
+  const specialistRoster: RosterSummary = useMemo(
+    () => buildRoster(specialistCatalog, specialistRuns),
+    [specialistCatalog, specialistRuns],
+  );
+
+  // Load the roster once authenticated, exactly like the other agent panels.
+  useEffect(() => {
+    if (!isAuthenticated()) return;
+    let cancelled = false;
+    fetchAgentCatalog()
+      .then((data) => {
+        if (!cancelled) {
+          setSpecialistCatalog(data);
+          setSpecialistCatalogError(false);
+        }
+      })
+      .catch(() => {
+        // Honest failure state — the roster reports "unavailable", it does
+        // not fall back to a fabricated agent list.
+        if (!cancelled) setSpecialistCatalogError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const launchSpecialist = async (agentName: string) => {
+    setSpecialistLaunching(agentName);
+    try {
+      const result = await runSingleAgent(agentName, { params: { phase: "work" } });
+      setSpecialistRuns((prev) => ({ ...prev, [agentName]: result }));
+    } catch {
+      setSpecialistRuns((prev) => ({ ...prev, [agentName]: null }));
+    } finally {
+      setSpecialistLaunching(null);
+    }
+  };
+
   const pollIntervalRef = useRef<number | null>(null);
   // Backend-owned cycle currently observed by this page (survives polling,
   // never created by polling — only by Start Analysis POST).
@@ -1961,6 +2015,7 @@ export function AgentsPage() {
                           <p className="cmd__entryResult">→ {e.result}</p>
                         </div>
                       ))}
+                    <ActivityFeed merchantId={radar?.merchant_id} windowDays={windowDays} />
                     </div>
                   )}
                   <div className="cmd__foot">
@@ -2397,6 +2452,90 @@ export function AgentsPage() {
           All three agents start from one shared analysis cycle — Start Analysis
           on this page runs them concurrently.
         </p>
+      </WindowPanel>
+
+      {/* ── SPECIALIST ROSTER ────────────────────────────────────────────
+          Registry-driven list of every in-scope specialist, rendered from
+          /api/agents/catalog. This is the ONE place specialists are
+          catalogued — there is no separate page or duplicate roster. */}
+      <WindowPanel title="ai-team.specialists" className="agents-cc__specialists">
+        {specialistCatalogError ? (
+          <p className="agents-cc__specialistEmpty">
+            The specialist catalog is unavailable right now. Nothing is shown
+            here rather than guessing what the team can do.
+          </p>
+        ) : specialistRoster.isEmpty ? (
+          <p className="agents-cc__specialistEmpty">
+            No specialists are registered for this workspace yet.
+          </p>
+        ) : (
+          <>
+            <p className="agents-cc__specialistSummary">
+              {specialistRoster.totalAgents} agent(s) ·{" "}
+              {specialistRoster.totalTools} implemented tool(s) ·{" "}
+              {specialistRoster.fullyImplementedAgents} agent(s) with every
+              advertised capability implemented
+              {specialistRoster.agentsWithUnimplementedTools > 0 && (
+                <>
+                  {" "}· {specialistRoster.agentsWithUnimplementedTools} agent(s)
+                  still declare capabilities with no implementation
+                </>
+              )}
+            </p>
+            <div className="agents-cc__specialistGrid">
+              {specialistRoster.agents.map((agent) => (
+                <article
+                  key={agent.name}
+                  className="agents-cc__specialist"
+                  data-phase={agent.status}
+                >
+                  <header className="agents-cc__specialistHead">
+                    <h3 className="agents-cc__specialistName">{agent.name}</h3>
+                    <span className="agents-cc__specialistStatus">
+                      {agent.statusLabel}
+                    </span>
+                  </header>
+                  <p className="agents-cc__specialistDesc">{agent.description}</p>
+                  <p className="agents-cc__specialistTools">{toolSummary(agent)}</p>
+                  <ul className="agents-cc__specialistToolList">
+                    {agent.tools.map((tool) => (
+                      <li key={tool.id} title={tool.summary}>
+                        <code>{tool.id}</code>
+                        <span className="agents-cc__specialistPerm">
+                          {tool.readOnly ? "read-only" : "write"}
+                        </span>
+                      </li>
+                    ))}
+                    {agent.tools.length === 0 && (
+                      <li className="agents-cc__specialistUnimplemented">
+                        No tools registered
+                      </li>
+                    )}
+                  </ul>
+                  {agent.hasUnimplementedTools && (
+                    <p className="agents-cc__specialistGap">
+                      Declared but not implemented:{" "}
+                      {agent.unimplementedTools.join(", ")}
+                    </p>
+                  )}
+                  {agent.lastRun && agent.lastRun.errors.length > 0 && (
+                    <p className="agents-cc__specialistError">
+                      {agent.lastRun.errors.join("; ")}
+                    </p>
+                  )}
+                  <Button
+                    variant="secondary"
+                    mono
+                    disabled={specialistLaunching === agent.name}
+                    onClick={() => void launchSpecialist(agent.name)}
+                  >
+                    {specialistLaunching === agent.name ? "RUNNING…" : "RUN AGENT"}
+                  </Button>
+                </article>
+              ))}
+            </div>
+          </>
+        )}
       </WindowPanel>
 
       {visibleFindings.length > 0 && (

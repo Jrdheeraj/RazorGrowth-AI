@@ -52,6 +52,8 @@ from backend.app.models.experiment import (  # noqa: F401
 )
 from backend.app.models.agent_run import AgentRun  # noqa: F401
 from backend.app.models.agent_memory import AgentMemory  # noqa: F401
+from backend.app.models.handoff import AgentHandoff  # noqa: F401
+from backend.app.models.personalization import PersonalizationDecision  # noqa: F401
 
 # Phase 6 — Authentication, Multi-Tenancy & Production Security
 from backend.app.models.user import User  # noqa: F401

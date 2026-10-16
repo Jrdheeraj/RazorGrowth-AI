@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
+
+from backend.app.agents.registry import AGENT_INSTANCES
 from fastapi.testclient import TestClient
 
 from backend.app.models.customer import Customer
@@ -19,6 +21,7 @@ from backend.app.models.enums import (
 from backend.app.models.merchant import Merchant
 from backend.app.models.order import Order
 from backend.app.models.payment import Payment
+from tests.security_utils import bearer, make_world, create_access_token
 
 
 @pytest.fixture(scope="module")
@@ -27,17 +30,21 @@ def api(client: TestClient) -> TestClient:
 
 
 @pytest.fixture()
-def merchant(db_session) -> Merchant:
-    m = Merchant(
-        name=f"P5 API {uuid.uuid4().hex[:6]}",
-        slug=f"p5-api-{uuid.uuid4().hex[:10]}",
-        email="p5api@x.com",
-        status=MerchantStatus.active,
-        currency=Currency.INR,
-    )
-    db_session.add(m)
-    db_session.commit()
-    return m
+def world(db_session):
+    """A merchant with an owner membership."""
+    return make_world(db_session, slug_hint="p5api")
+
+
+def _auth(user) -> dict[str, str]:
+    """Authorization headers carrying a valid token."""
+    token, _ = create_access_token(user.id, user.email)
+    return {"Authorization": f"Bearer {token}"}
+
+
+# Keep the old merchant fixture for backward compatibility
+@pytest.fixture()
+def merchant(world) -> Merchant:
+    return world[0]
 
 
 def _seed_minimal_commerce(db_session, merchant: Merchant, *, failures: int = 2) -> None:
@@ -70,6 +77,11 @@ def _seed_minimal_commerce(db_session, merchant: Merchant, *, failures: int = 2)
         db_session.add(Payment(
             merchant_id=merchant.id, order_id=fo.id, provider=PaymentProvider.razorpay,
             amount=Decimal("2000"), currency=Currency.INR, status=PaymentStatus.failed,
+            # Real ingestion always records a provider failure code. Without
+            # one the recovery agent treats the failure as UNKNOWN and
+            # correctly refuses to auto-retry it, so a realistic code is
+            # required for this fixture to represent a genuine merchant.
+            failure_code="GATEWAY_ERROR",
             created_at=now - timedelta(days=2),
         ))
     db_session.commit()
@@ -94,17 +106,22 @@ class TestRoutePresence:
 
 
 class TestAgentsApi:
-    def test_list_agents_reports_permissions(self, api: TestClient):
-        res = api.get("/api/agents")
-        assert res.status_code == 200
+    def test_list_agents_reports_permissions(self, api: TestClient, world):
+        merchant, user, _token = world
+        res = api.get("/api/agents", headers=bearer(user))
+        assert res.status_code == 200, res.text
         body = res.json()
-        assert len(body["agents"]) == 13  # 8 domain specialists + 5 main growth team
+        # 9 domain specialists + 5 main growth team. Kept in step with the
+        # registry so a newly registered agent can never be silently omitted
+        # from the merchant-visible catalog.
+        assert len(body["agents"]) == len(AGENT_INSTANCES)
         for agent in body["agents"]:
             assert agent["can_approve"] is False and agent["can_execute"] is False
 
-    def test_runs_endpoint_shape(self, api: TestClient, db_session, merchant):
-        res = api.get("/api/agents/runs")
-        assert res.status_code == 200
+    def test_runs_endpoint_shape(self, api: TestClient, world, db_session):
+        merchant, user, _token = world
+        res = api.get("/api/agents/runs", headers=bearer(user))
+        assert res.status_code == 200, res.text
         body = res.json()
         assert "runs" in body
         assert all(
@@ -112,50 +129,68 @@ class TestAgentsApi:
             for r in body["runs"]
         )
 
-    def test_unknown_run_404(self, api: TestClient):
-        res = api.get(f"/api/agents/runs/{uuid.uuid4()}")
+    def test_unknown_run_404(self, api: TestClient, world):
+        merchant, user, _token = world
+        res = api.get(f"/api/agents/runs/{uuid.uuid4()}", headers=bearer(user))
         assert res.status_code == 404
 
-    def test_invalid_run_id_400(self, api: TestClient):
-        res = api.get("/api/agents/runs/not-a-uuid")
+    def test_invalid_run_id_400(self, api: TestClient, world):
+        merchant, user, _token = world
+        res = api.get("/api/agents/runs/not-a-uuid", headers=bearer(user))
         assert res.status_code == 400
 
-    def test_post_run_fast_mode(self, api: TestClient, db_session, merchant):
+    def test_post_run_fast_mode(self, api: TestClient, world, db_session):
+        merchant, user, _token = world
         _seed_minimal_commerce(db_session, merchant)
         res = api.post(
             "/api/agents/run",
             json={"mode": "fast", "merchant_id": str(merchant.id)},
+            headers=bearer(user),
         )
-        assert res.status_code == 200
+        assert res.status_code == 200, res.text
         body = res.json()
+        assert body["status"] in ("completed", "running", "pending")
+        # fast mode runs synchronously, so it should complete
         assert body["status"] == "completed"
         assert len(body["agents"]) == 4
         assert any(a["agent"] == "GrowthDiscoveryAgent" for a in body["agents"])
 
-    def test_post_run_invalid_mode_422(self, api: TestClient, db_session, merchant):
-        res = api.post("/api/agents/run", json={"mode": "chaos"})
+    def test_post_run_invalid_mode_422(self, api: TestClient, world, db_session):
+        merchant, user, _token = world
+        res = api.post(
+            "/api/agents/run", 
+            json={"mode": "chaos"},
+            headers=bearer(user),
+        )
         assert res.status_code == 422
 
-    def test_post_run_unknown_merchant_404(self, api: TestClient):
+    def test_post_run_unknown_merchant_403(self, api: TestClient, world):
+        merchant, user, _token = world
         res = api.post(
-            "/api/agents/run", json={"mode": "fast", "merchant_id": str(uuid.uuid4())}
+            "/api/agents/run", 
+            json={"mode": "fast", "merchant_id": str(uuid.uuid4())},
+            headers=bearer(user),
         )
-        assert res.status_code == 404
+        # Authenticated user without membership -> 403 MERCHANT_ACCESS_DENIED
+        assert res.status_code == 403, res.text
+        assert res.json()["detail"] == "MERCHANT_ACCESS_DENIED"
 
 
 class TestRadarAndRanked:
-    def test_radar_empty_merchant_no_signals(self, api: TestClient, db_session, merchant):
-        res = api.get(f"/api/radar?merchant_id={merchant.id}")
+    def test_radar_empty_merchant_no_signals(self, api: TestClient, world):
+        merchant, user, _token = world
+        res = api.get(f"/api/radar?merchant_id={merchant.id}", headers=bearer(user))
         assert res.status_code == 200
         assert res.json()["signals"] == []
 
-    def test_radar_refresh_produces_real_signals(self, api: TestClient, db_session, merchant):
+    def test_radar_refresh_produces_real_signals(self, api: TestClient, world, db_session):
+        merchant, user, _token = world
         _seed_minimal_commerce(db_session, merchant)
         res = api.post(
-            "/api/agents/run", json={"mode": "fast", "merchant_id": str(merchant.id)}
+            "/api/agents/run", json={"mode": "fast", "merchant_id": str(merchant.id)}, headers=bearer(user)
         )
         assert res.status_code == 200
-        res = api.get(f"/api/radar?merchant_id={merchant.id}")
+        res = api.get(f"/api/radar?merchant_id={merchant.id}", headers=bearer(user))
         signals = res.json()["signals"]
         assert signals, "expected persisted signals"
         sig = signals[0]
@@ -163,12 +198,13 @@ class TestRadarAndRanked:
                     "window_days", "confidence"):
             assert key in sig
 
-    def test_ranked_opportunities_with_breakdown(self, api: TestClient, db_session, merchant):
+    def test_ranked_opportunities_with_breakdown(self, api: TestClient, world, db_session):
         from backend.app.services.opportunity_upsert import upsert_opportunity
         from decimal import Decimal as D
         from backend.app.models.enums import OpportunityType
         from backend.app.services.opportunity_upsert import build_opportunity_key
 
+        merchant, user, _token = world
         opp, _ = upsert_opportunity(
             db_session,
             merchant_id=merchant.id,
@@ -180,7 +216,7 @@ class TestRadarAndRanked:
             reasoning=["evidence one", {"basis": "real data"}],
         )
         db_session.commit()
-        res = api.get(f"/api/opportunities/ranked?merchant_id={merchant.id}")
+        res = api.get(f"/api/opportunities/ranked?merchant_id={merchant.id}", headers=bearer(user))
         assert res.status_code == 200
         ranked = res.json()["opportunities"]
         assert len(ranked) == 1
@@ -188,31 +224,37 @@ class TestRadarAndRanked:
         assert top["rank"] == 1
         assert "score_breakdown" in top and "formula" in top["score_breakdown"]
 
-    def test_ranked_rejects_bad_status(self, api: TestClient, db_session, merchant):
-        res = api.get(f"/api/opportunities/ranked?merchant_id={merchant.id}&status=bogus")
+    def test_ranked_rejects_bad_status(self, api: TestClient, world):
+        merchant, user, _token = world
+        res = api.get(f"/api/opportunities/ranked?merchant_id={merchant.id}&status=bogus", headers=bearer(user))
         assert res.status_code == 400
 
 
 class TestInsightsApi:
-    def test_customer_insights_empty(self, api: TestClient, merchant):
-        res = api.get(f"/api/customer-insights?merchant_id={merchant.id}")
+    def test_customer_insights_empty(self, api: TestClient, world):
+        merchant, user, _token = world
+        res = api.get(f"/api/customer-insights?merchant_id={merchant.id}", headers=bearer(user))
         assert res.status_code == 200
         body = res.json()
         assert body["count"] == 0 and body["insights"] == []
 
-    def test_customer_insight_single_missing(self, api: TestClient, merchant):
+    def test_customer_insight_single_missing(self, api: TestClient, world):
+        merchant, user, _token = world
         res = api.get(
-            f"/api/customers/{uuid.uuid4()}/insights?merchant_id={merchant.id}"
+            f"/api/customers/{uuid.uuid4()}/insights?merchant_id={merchant.id}",
+            headers=bearer(user),
         )
         assert res.status_code == 404
 
-    def test_customer_insight_invalid_uuid(self, api: TestClient, merchant):
-        res = api.get(f"/api/customers/not-a-uuid/insights?merchant_id={merchant.id}")
+    def test_customer_insight_invalid_uuid(self, api: TestClient, world):
+        merchant, user, _token = world
+        res = api.get(f"/api/customers/not-a-uuid/insights?merchant_id={merchant.id}", headers=bearer(user))
         assert res.status_code == 400
 
 
 class TestSimulationsApi:
-    def test_create_discount_simulation(self, api: TestClient, db_session, merchant):
+    def test_create_discount_simulation(self, api: TestClient, world, db_session):
+        merchant, user, _token = world
         res = api.post(
             "/api/simulations",
             json={
@@ -223,14 +265,16 @@ class TestSimulationsApi:
                 "avg_order_value": 500,
                 "merchant_id": str(merchant.id),
             },
+            headers=bearer(user),
         )
-        assert res.status_code == 201
+        assert res.status_code == 201, res.text
         body = res.json()
         assert body["estimated_revenue"] == pytest.approx(9000.0)
         assert body["is_estimate"] is True
         assert body["confidence_low"] < body["estimated_revenue"] < body["confidence_high"]
 
-    def test_create_campaign_simulation(self, api: TestClient, merchant):
+    def test_create_campaign_simulation(self, api: TestClient, world):
+        merchant, user, _token = world
         res = api.post(
             "/api/simulations",
             json={
@@ -241,11 +285,13 @@ class TestSimulationsApi:
                 "cost_per_target": 2,
                 "merchant_id": str(merchant.id),
             },
+            headers=bearer(user),
         )
-        assert res.status_code == 201
+        assert res.status_code == 201, res.text
         assert res.json()["estimated_revenue"] == pytest.approx(10000.0)
 
-    def test_simulation_validation_error_422(self, api: TestClient, merchant):
+    def test_simulation_validation_error_422(self, api: TestClient, world):
+        merchant, user, _token = world
         res = api.post(
             "/api/simulations",
             json={
@@ -256,21 +302,24 @@ class TestSimulationsApi:
                 "avg_order_value": 100,
                 "merchant_id": str(merchant.id),
             },
+            headers=bearer(user),
         )
         assert res.status_code == 422
 
-    def test_list_simulations_scoped(self, api: TestClient, db_session, merchant):
+    def test_list_simulations_scoped(self, api: TestClient, world, db_session):
+        merchant, user, _token = world
         other = Merchant(name="OM", slug=f"om-{uuid.uuid4().hex[:8]}",
                          email="om@x.com", status=MerchantStatus.active,
                          currency=Currency.INR)
         db_session.add(other); db_session.commit()
-        res = api.get(f"/api/simulations?merchant_id={other.id}")
-        assert res.status_code == 200
-        assert res.json()["simulations"] == []
+        # User from `merchant` cannot access `other`'s data — expect 403
+        res = api.get(f"/api/simulations?merchant_id={other.id}", headers=bearer(user))
+        assert res.status_code == 403
 
 
 class TestExperimentsApi:
-    def test_create_and_list_experiment(self, api: TestClient, merchant):
+    def test_create_and_list_experiment(self, api: TestClient, world):
+        merchant, user, _token = world
         res = api.post(
             "/api/experiments",
             json={
@@ -281,49 +330,58 @@ class TestExperimentsApi:
                 "target_population_size": 300,
                 "merchant_id": str(merchant.id),
             },
+            headers=bearer(user),
         )
-        assert res.status_code == 201
+        assert res.status_code == 201, res.text
         created = res.json()
         assert created["status"] == "proposed"
 
-        listed = api.get(f"/api/experiments?merchant_id={merchant.id}").json()
+        listed = api.get(f"/api/experiments?merchant_id={merchant.id}", headers=bearer(user)).json()
         assert any(e["id"] == created["id"] for e in listed["experiments"])
 
-    def test_create_experiment_requires_name(self, api: TestClient, merchant):
+    def test_create_experiment_requires_name(self, api: TestClient, world):
+        merchant, user, _token = world
         res = api.post(
             "/api/experiments",
             json={"name": "", "merchant_id": str(merchant.id)},
+            headers=bearer(user),
         )
         assert res.status_code == 422
 
 
 class TestMemoryAndBriefApi:
-    def test_growth_memory_empty_then_recorded_via_run(self, api: TestClient, db_session, merchant):
-        res = api.get(f"/api/growth-memory?merchant_id={merchant.id}")
+    def test_growth_memory_empty_then_recorded_via_run(self, api: TestClient, world, db_session):
+        merchant, user, _token = world
+        res = api.get(f"/api/growth-memory?merchant_id={merchant.id}", headers=bearer(user))
         assert res.status_code == 200
         assert res.json()["memories"] == []
 
         _seed_minimal_commerce(db_session, merchant)
-        api.post("/api/agents/run", json={"mode": "deep", "merchant_id": str(merchant.id)})
-        res = api.get(f"/api/growth-memory?merchant_id={merchant.id}")
+        api.post("/api/agents/run", json={"mode": "deep", "merchant_id": str(merchant.id)}, headers=bearer(user))
+        res = api.get(f"/api/growth-memory?merchant_id={merchant.id}", headers=bearer(user))
         assert res.json()["memories"], "deep run should persist memories"
 
-    def test_growth_brief_structure(self, api: TestClient, db_session, merchant):
+    def test_growth_brief_structure(self, api: TestClient, world, db_session):
+        merchant, user, _token = world
         _seed_minimal_commerce(db_session, merchant)
-        res = api.get(f"/api/growth-brief?merchant_id={merchant.id}")
+        res = api.get(f"/api/growth-brief?merchant_id={merchant.id}", headers=bearer(user))
         assert res.status_code == 200
         body = res.json()
         assert body["revenue"]["current_period"] == pytest.approx(0.0)  # no current-window captures yet
         assert body["revenue"]["previous_period"] == pytest.approx(40000.0)
         assert "top_risk" in body and "recommended_action" in body
 
-    def test_brief_unknown_merchant_404(self, api: TestClient):
-        res = api.get(f"/api/growth-brief?merchant_id={uuid.uuid4()}")
-        assert res.status_code == 404
+    def test_brief_unknown_merchant_403(self, api: TestClient, world):
+        merchant, user, _token = world
+        res = api.get(f"/api/growth-brief?merchant_id={uuid.uuid4()}", headers=bearer(user))
+        # Authenticated user without membership -> 403 MERCHANT_ACCESS_DENIED
+        assert res.status_code == 403, res.text
+        assert res.json()["detail"] == "MERCHANT_ACCESS_DENIED"
 
 
 class TestCrossMerchantSafety:
-    def test_other_merchant_data_not_leaked(self, api: TestClient, db_session, merchant):
+    def test_other_merchant_data_not_leaked(self, api: TestClient, world, db_session):
+        merchant, user, _token = world
         other = Merchant(name="Secret", slug=f"sec-{uuid.uuid4().hex[:8]}",
                          email="sec@x.com", status=MerchantStatus.active,
                          currency=Currency.INR)
@@ -331,11 +389,11 @@ class TestCrossMerchantSafety:
         _seed_minimal_commerce(db_session, other)
 
         # query everything AS `merchant` — none of `other`'s data may appear
-        radar = api.get(f"/api/radar?merchant_id={merchant.id}").json()
+        radar = api.get(f"/api/radar?merchant_id={merchant.id}", headers=bearer(user)).json()
         assert all(str(s["id"]) for s in radar["signals"])
-        sims = api.get(f"/api/simulations?merchant_id={merchant.id}").json()
+        sims = api.get(f"/api/simulations?merchant_id={merchant.id}", headers=bearer(user)).json()
         assert sims["simulations"] == []
-        exps = api.get(f"/api/experiments?merchant_id={merchant.id}").json()
+        exps = api.get(f"/api/experiments?merchant_id={merchant.id}", headers=bearer(user)).json()
         assert exps["experiments"] == []
-        mems = api.get(f"/api/growth-memory?merchant_id={merchant.id}").json()
+        mems = api.get(f"/api/growth-memory?merchant_id={merchant.id}", headers=bearer(user)).json()
         assert mems["memories"] == []

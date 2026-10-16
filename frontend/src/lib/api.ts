@@ -1,7 +1,7 @@
 /**
  * Typed API client for the RazorGrowth AI FastAPI backend.
  *
- * - Base URL comes from VITE_API_BASE_URL (empty ⇒ same-origin; the Vite dev
+ * - Base URL comes from VITE_API_BASE_URL (empty â‡’ same-origin; the Vite dev
  *   server proxies /api to 127.0.0.1:8000).
  * - Bearer token is attached automatically when present (lib/auth.ts).
  * - A 401 clears the stored session so protected routes can react.
@@ -142,7 +142,7 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   }
 
   if (res.status === 401) {
-    // Session no longer valid — drop it so route guards react on next tick.
+    // Session no longer valid â€” drop it so route guards react on next tick.
     clearToken();
   }
 
@@ -173,7 +173,7 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
  *
  * Needed because this app authenticates with a Bearer token in localStorage,
  * sent as a request HEADER. A plain `<img src="/api/...">` cannot set headers,
- * so an image endpoint is unreachable from an image tag — the bytes must be
+ * so an image endpoint is unreachable from an image tag â€” the bytes must be
  * fetched as a Blob and shown through an object URL instead.
  *
  * Kept next to `request()` deliberately: a second, divergent copy of the
@@ -214,7 +214,7 @@ async function requestBlob(path: string, signal?: AbortSignal): Promise<Blob> {
   return await res.blob();
 }
 
-/* ── Auth ─────────────────────────────────────────────────────────────── */
+/* â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export function login(email: string, password: string): Promise<TokenResponse> {
   return request<TokenResponse>("/api/auth/login", {
@@ -242,7 +242,7 @@ export function fetchAccessibleMerchants(): Promise<AccessibleMerchantsResponse>
   return request<AccessibleMerchantsResponse>("/api/auth/merchants");
 }
 
-/* ── Growth radar & opportunities ─────────────────────────────────────── */
+/* â”€â”€ Growth radar & opportunities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export function fetchRadar(): Promise<RadarResponse> {
   return request<RadarResponse>("/api/radar");
@@ -266,7 +266,7 @@ export function fetchRankedOpportunities(): Promise<RankedOpportunitiesResponse>
   return request<RankedOpportunitiesResponse>("/api/opportunities/ranked");
 }
 
-/* ── Analytics (for Growth Radar charts) ────────────────────────────────── */
+/* â”€â”€ Analytics (for Growth Radar charts) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export function fetchAnalyticsOverview(periodDays = 30): Promise<AnalyticsOverviewResponse> {
   return request<AnalyticsOverviewResponse>(`/api/analytics/overview?period_days=${periodDays}`);
@@ -284,7 +284,130 @@ export function fetchCustomersTrend(periodDays = 30, granularity: "day" | "week"
   return request<CustomerTimeSeriesResponse>(`/api/analytics/customers/trend?period_days=${periodDays}&granularity=${granularity}`);
 }
 
-/* ── Agents / Investigation ───────────────────────────────────────────── */
+/* â”€â”€ Agents / Investigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+/* â”€â”€ Specialist workspace (AI Team dashboard) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+ * Registry-driven roster of every in-scope specialist, its REAL catalogued
+ * capabilities (including which declared tool names have no implementation),
+ * single-agent launch, cross-agent handoffs and personalization decisions.
+ * Backed by backend/app/api/routes/specialists.py. */
+
+export interface AgentToolSpec {
+  tool_id: string;
+  summary: string;
+  read_only: boolean;
+  required_permission: string | null;
+  timeout_seconds: number;
+  input_fields: string[];
+  output_fields: string[];
+  source: string;
+}
+
+export interface AgentCatalogEntry {
+  name: string;
+  description: string;
+  category: string;
+  permissions: string[];
+  tools: string[];
+  /** Declared tool names with no registered implementation. Surfaced rather
+   *  than hidden so the dashboard never claims a capability that does not exist. */
+  unimplemented_tools: string[];
+  tool_details: AgentToolSpec[];
+  can_approve: boolean;
+  can_execute: boolean;
+}
+
+export interface AgentCatalogResponse {
+  tools: AgentToolSpec[];
+  tool_count: number;
+  agents: AgentCatalogEntry[];
+  agent_count: number;
+}
+
+export interface SingleAgentRunResponse {
+  agent: string;
+  status: string;
+  ok: boolean;
+  output: Record<string, unknown>;
+  errors: string[];
+  tools_used: string[];
+  opportunities_created: number;
+  actions_proposed: number;
+  insights_generated: number;
+  signals_detected: number;
+  experiments_proposed: number;
+  latency_ms: { total: number; llm: number; db: number };
+  llm_configured: boolean;
+}
+
+export interface AgentHandoff {
+  handoff_id: string;
+  source_agent: string;
+  destination_agent: string;
+  task: string;
+  status: string;
+  dispatched: boolean;
+  result: Record<string, unknown> | null;
+  error_message: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface PersonalizationDecisionRow {
+  decision_id: string;
+  customer_id: string;
+  recommended_action: string;
+  cohort: string;
+  score: number;
+  rationale: Record<string, unknown>;
+  recommended_product_ids: string[];
+  status: string;
+  observed_revenue: number | null;
+  created_at: string;
+}
+
+export function fetchAgentCatalog(): Promise<AgentCatalogResponse> {
+  return request<AgentCatalogResponse>("/agents/catalog");
+}
+
+export function runSingleAgent(
+  agentName: string,
+  body: {
+    params?: Record<string, unknown>;
+    merchant_id?: string;
+    correlation_id?: string;
+  } = {},
+): Promise<SingleAgentRunResponse> {
+  return request<SingleAgentRunResponse>(`/agents/${encodeURIComponent(agentName)}/run`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchAgentHandoffs(limit = 50): Promise<{ handoffs: AgentHandoff[] }> {
+  return request<{ handoffs: AgentHandoff[] }>(`/agents/handoffs?limit=${limit}`);
+}
+
+export function dispatchAgentHandoff(handoffId: string): Promise<{ status: string; dispatched: boolean }> {
+  return request<{ status: string; dispatched: boolean }>(
+    `/agents/handoffs/${encodeURIComponent(handoffId)}/dispatch`,
+    { method: "POST" },
+  );
+}
+
+export function fetchPersonalizationDecisions(
+  limit = 100,
+  cohort?: string,
+): Promise<{
+  decisions: PersonalizationDecisionRow[];
+  measurement: Record<string, unknown>;
+}> {
+  const q = cohort ? `&cohort=${encodeURIComponent(cohort)}` : "";
+  return request<{
+    decisions: PersonalizationDecisionRow[];
+    measurement: Record<string, unknown>;
+  }>(`/personalization/decisions?limit=${limit}${q}`);
+}
 
 export function fetchAgentsMeta(): Promise<AgentsListResponse> {
   return request<AgentsListResponse>("/api/agents");
@@ -297,7 +420,7 @@ export function fetchAgentRuns(limit = 50, orchestratorRunId?: string): Promise<
   return request<AgentRunsResponse>(qs);
 }
 
-/** Internal API — wrapped as a merchant-facing business action. */
+/** Internal API â€” wrapped as a merchant-facing business action. */
 export function runAgents(
   body: AgentRunRequest,
 ): Promise<OrchestratorRunResponse> {
@@ -329,7 +452,7 @@ export function startAiTeamWork(
 
 /**
  * Start an Agent Debate session for multi-agent cross-examination.
- * Merchants see this as a business action — the underlying mode is hidden.
+ * Merchants see this as a business action â€” the underlying mode is hidden.
  */
 export function startInvestigation(
   objective: string,
@@ -347,13 +470,13 @@ export function startInvestigation(
   });
 }
 
-/* ── Customer intelligence ────────────────────────────────────────────── */
+/* â”€â”€ Customer intelligence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export function fetchCustomerInsights(): Promise<CustomerInsightsResponse> {
   return request<CustomerInsightsResponse>("/api/customer-insights");
 }
 
-/* ── Actions / approval workflow ──────────────────────────────────────── */
+/* â”€â”€ Actions / approval workflow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export function fetchActions(): Promise<ActionListResponse> {
   return request<ActionListResponse>("/api/actions");
@@ -383,7 +506,7 @@ export function fetchActionAudit(actionId: string): Promise<AuditEventListRespon
   return request<AuditEventListResponse>(`/api/actions/${actionId}/audit`);
 }
 
-/* ── Simulations & experiments ────────────────────────────────────────── */
+/* â”€â”€ Simulations & experiments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export function createSimulation(
   body: SimulationRequest,
@@ -402,7 +525,7 @@ export function fetchExperiments(): Promise<ExperimentsResponse> {
   return request<ExperimentsResponse>("/api/experiments");
 }
 
-/* ── Memory & brief ───────────────────────────────────────────────────── */
+/* â”€â”€ Memory & brief â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export function fetchGrowthMemory(): Promise<GrowthMemoryResponse> {
   return request<GrowthMemoryResponse>("/api/growth-memory");
@@ -412,7 +535,7 @@ export function fetchGrowthBrief(): Promise<GrowthBrief> {
   return request<GrowthBrief>("/api/growth-brief");
 }
 
-/* ── Checkout / Razorpay TEST ───────────────────────────────────────────── */
+/* â”€â”€ Checkout / Razorpay TEST â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export function createCheckoutSession(
   body: CheckoutSessionRequest,
@@ -432,7 +555,7 @@ export function verifyPayment(
   });
 }
 
-/* ── Products (AI-readable catalog) ────────────────────────────────────── */
+/* â”€â”€ Products (AI-readable catalog) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export function fetchProducts(): Promise<ProductListResponse> {
   return request<ProductListResponse>("/api/products");
@@ -444,7 +567,7 @@ export function fetchOrders(limit = 100, offset = 0): Promise<CatalogOrderListRe
 }
 
 /**
- * Product Agent — the autonomous product-growth employee's control surface.
+ * Product Agent â€” the autonomous product-growth employee's control surface.
  *
  * NOTE: `startProductAgentRun` is retained for the API contract but is NOT
  * the Product Agent dashboard's trigger. The Product Agent joins the shared
@@ -533,7 +656,7 @@ export function cancelProductAgentRun(runId: string): Promise<ProductAgentRun> {
   });
 }
 
-/* ── Agent Debate Dashboard ────────────────────────────────────────────── */
+/* â”€â”€ Agent Debate Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export function fetchAgentDashboard(debateId: string): Promise<AgentDashboardResponse> {
   return request<AgentDashboardResponse>(`/api/agent-debates/${debateId}/dashboard`);
@@ -567,7 +690,7 @@ export function askAgentDebate(debateId: string, question: string): Promise<impo
 }
 
 
-/* -- Marketing Agent — autonomous marketing employee ----------------------- */
+/* -- Marketing Agent â€” autonomous marketing employee ----------------------- */
 
 export function fetchMarketingAGIStatus(): Promise<import("../types/api").MarketingAGIStatus> {
   return request("/api/marketing-agi/status");
@@ -754,7 +877,7 @@ export function fetchDesignerBrief(
 }
 
 /**
- * Record a HUMAN review decision. Requires the approver role server-side �
+ * Record a HUMAN review decision. Requires the approver role server-side ï¿½
  * this is the only path that moves a brief out of `pending_review`.
  */
 export function reviewDesignerBrief(
@@ -801,7 +924,7 @@ export function fetchDesignerActivity(
 
 /**
  * Real image-generation availability. Returns `unavailable` with a reason when
- * no provider is configured � never a fabricated URL.
+ * no provider is configured ï¿½ never a fabricated URL.
  */
 export function fetchDesignerImageGeneration(): Promise<import("../types/api").DesignerImageGeneration> {
   return request("/api/designer/image-generation");
@@ -827,7 +950,7 @@ export function generateDesignerImage(
   return request("/api/designer/image-generation", { method: "POST", body });
 }
 
-/** Metadata only — the bytes are never included in a listing. */
+/** Metadata only â€” the bytes are never included in a listing. */
 export function fetchRenderedAssets(
   filters: { asset_id?: string; limit?: number } = {},
 ): Promise<import("../types/api").RenderedAssetList> {
@@ -844,7 +967,7 @@ export function fetchRenderedAssets(
  *
  * NOTE: this path is for reference and for server-side/automated callers only.
  * A browser `<img src>` cannot send the `Authorization` header this app
- * authenticates with, so the page must use `fetchRenderedAssetBlob()` instead —
+ * authenticates with, so the page must use `fetchRenderedAssetBlob()` instead â€”
  * using this in an `<img>` yields a broken image.
  */
 export function renderedAssetContentUrl(renderedId: string): string {
@@ -886,3 +1009,4 @@ export function createDesignerHandoff(body: {
 }): Promise<import("../types/api").DesignerHandoff> {
   return request("/api/designer/handoffs", { method: "POST", body });
 }
+
