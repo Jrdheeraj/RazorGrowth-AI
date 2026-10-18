@@ -1,0 +1,113 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   ActivityTrace — Immutable audit trails & activity traceability
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.activity-trace-container {
+  margin-top: 24px;
+}
+
+.audit-timeline-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-left: 2px solid var(--line-soft);
+  padding-left: 18px;
+  margin-left: 8px;
+  margin-bottom: 20px;
+}
+
+.audit-entry {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.audit-entry__marker {
+  position: absolute;
+  left: -29px;
+  top: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--paper-bright);
+  border: 1.5px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.audit-entry__marker--human {
+  background: #f0fdf4;
+  border-color: #16a34a;
+  color: #15803d;
+}
+
+.audit-entry__marker--ai {
+  background: #eff6ff;
+  border-color: #2563eb;
+  color: #1d4ed8;
+}
+
+.audit-entry__marker--sys {
+  background: #fef3c7;
+  border-color: #d97706;
+  color: #b45309;
+}
+
+.audit-entry__topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.audit-entry__title {
+  font-family: var(--font-mono);
+  font-size: 0.80rem;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: 0.04em;
+}
+
+.audit-entry__time {
+  font-family: var(--font-mono);
+  font-size: 0.70rem;
+  color: var(--ink-faint);
+}
+
+.audit-entry__detail {
+  font-size: 0.80rem;
+  color: var(--ink-soft);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.audit-entry__actor-tag {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+}
+
+.activity-summary-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--paper-deep);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  padding: 12px 18px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.activity-summary-text {
+  font-size: 0.80rem;
+  color: var(--ink-soft);
+  margin: 0;
+}

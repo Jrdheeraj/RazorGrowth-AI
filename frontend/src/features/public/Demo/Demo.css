@@ -1,0 +1,174 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   Demo — Interactive product walkthrough
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.walkthrough-container {
+  margin-top: 24px;
+}
+
+.walkthrough-step-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  background: var(--paper-deep);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  padding: 8px;
+  margin-bottom: 20px;
+}
+
+.walkthrough-tab-btn {
+  background: var(--paper-bright);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-control);
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: all var(--dur-fast) var(--ease-out);
+  font-family: var(--font-display);
+}
+
+.walkthrough-tab-btn:hover {
+  border-color: var(--line);
+  background: #ffffff;
+}
+
+.walkthrough-tab-btn--active {
+  background: #21130e;
+  border-color: #21130e;
+  color: #f7ebd7;
+  box-shadow: 2px 2px 0 rgba(33, 19, 14, 0.15);
+}
+
+.walkthrough-tab-step-num {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--coral-strong);
+  letter-spacing: 0.04em;
+}
+
+.walkthrough-tab-btn--active .walkthrough-tab-step-num {
+  color: var(--coral);
+}
+
+.walkthrough-tab-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.walkthrough-tab-btn--active .walkthrough-tab-title {
+  color: #ffffff;
+}
+
+.walkthrough-stage-card {
+  background: var(--paper-bright);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  padding: 22px;
+  box-shadow: 4px 4px 0 rgba(33, 19, 14, 0.08);
+}
+
+.walkthrough-stage-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line-soft);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.walkthrough-stage-title {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--ink);
+  margin: 0;
+}
+
+.walkthrough-stage-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.walkthrough-stage-narrative {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.walkthrough-stage-narrative p {
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+  line-height: 1.55;
+  margin: 0;
+}
+
+.walkthrough-stage-mockup {
+  background: var(--paper-deep);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+}
+
+.walkthrough-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.walkthrough-nav-btn {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  padding: 8px 16px;
+  border-radius: var(--radius-control);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--dur-fast) ease;
+}
+
+.walkthrough-nav-btn:hover:not(:disabled) {
+  background: var(--paper-bright);
+  transform: translateY(-1px);
+}
+
+.walkthrough-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.walkthrough-nav-btn--primary {
+  background: var(--coral-strong);
+  border-color: var(--coral-strong);
+  color: #ffffff;
+}
+
+.walkthrough-nav-btn--primary:hover:not(:disabled) {
+  background: var(--coral-deep);
+}
+
+@media (max-width: 800px) {
+  .walkthrough-step-tabs {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .walkthrough-stage-body {
+    grid-template-columns: 1fr;
+  }
+}

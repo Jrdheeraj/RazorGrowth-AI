@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { useReveal } from "../../../lib/useReveal";
 import { StatusIndicator } from "../../../components/StatusIndicator";
 import { SectionWindowHeader } from "../../../components/SectionWindowHeader";
@@ -7,64 +8,70 @@ const AUDIENCES = [
   {
     id: "solo-founders",
     number: "01",
+    icon: "👤",
     title: "SOLO FOUNDERS",
     windowTitle: "founder.workspace",
-    tagline: "Run growth without building a full department.",
-    description: "AI agents monitor signals, find opportunities, and prepare recommendations while you stay in control.",
+    tagline: "Discover opportunities and prepare growth actions without coordinating a large team.",
+    description: "AI specialists monitor store performance, identify high-intent customers, and draft actions for your one-click review.",
     signals: [
-      { tone: "ok" as const, pulse: true, label: "ONLINE", text: "Revenue signal detected" },
-      { tone: "accent" as const, pulse: true, label: "SCORING", text: "Opportunity score 87%" },
-      { tone: "accent" as const, pulse: false, label: "PENDING", text: "AI recommendation prepared" },
+      { tone: "ok" as const, pulse: true, label: "MONITOR", text: "Cart drop-off leakage detected" },
+      { tone: "accent" as const, pulse: false, label: "ACTION", text: "Automated recovery action queued" },
     ],
-    cta: "REVIEW PROPOSAL",
+    cta: "Explore AI Agents →",
+    targetRoute: "/agents",
   },
   {
     id: "lean-startups",
     number: "02",
+    icon: "🚀",
     title: "LEAN STARTUPS",
     windowTitle: "startup.monitor",
-    tagline: "Move faster without adding unnecessary headcount.",
-    description: "Deploy AI agents to monitor opportunities, prepare campaigns, and keep execution moving.",
+    tagline: "Connect growth analysis, campaign planning, and product experiments in one workflow.",
+    description: "Move from detection to execution without adding coordination overhead. Product, marketing, and design work stay linked.",
     signals: [
-      { tone: "ok" as const, pulse: true, label: "ONLINE", text: "Churn risk flagged" },
-      { tone: "accent" as const, pulse: true, label: "SCORING", text: "Retention opportunity 73%" },
-      { tone: "accent" as const, pulse: false, label: "PENDING", text: "Win-back sequence drafted" },
+      { tone: "ok" as const, pulse: true, label: "SIGNALS", text: "Real-time growth radar active" },
+      { tone: "accent" as const, pulse: false, label: "DEBATE", text: "Discount threshold debated" },
     ],
-    cta: "LAUNCH CAMPAIGN",
+    cta: "View Growth Radar →",
+    targetRoute: "/growth-radar",
   },
   {
     id: "growth-teams",
     number: "03",
+    icon: "👥",
     title: "GROWTH TEAMS",
     windowTitle: "team.workspace",
-    tagline: "Give humans and AI agents one shared operating context.",
-    description: "Keep marketing, product, sales, and growth work connected in one workspace.",
+    tagline: "Give specialists and AI agents a shared place to investigate, plan, and review work.",
+    description: "ManagerAgent assigns tasks across marketing, product, creative design, and technical feasibility so your team never works in silos.",
     signals: [
-      { tone: "ok" as const, pulse: true, label: "ACTIVE", text: "7 active opportunities" },
-      { tone: "accent" as const, pulse: true, label: "REVIEWING", text: "Team reviewing 3 proposals" },
-      { tone: "accent" as const, pulse: false, label: "PENDING", text: "Approval queue live" },
+      { tone: "ok" as const, pulse: true, label: "COORDINATE", text: "Multi-agent plan structured" },
+      { tone: "accent" as const, pulse: true, label: "CONSENSUS", text: "Cross-specialist review ready" },
     ],
-    cta: "VIEW WORKSPACE",
+    cta: "Meet Manager Agent →",
+    targetRoute: "/manager-agent",
   },
   {
-    id: "enterprise",
+    id: "organizations",
     number: "04",
-    title: "ENTERPRISE",
+    icon: "🏢",
+    title: "LARGER ORGANIZATIONS",
     windowTitle: "enterprise.governance",
-    tagline: "Scale AI growth with governance and control.",
-    description: "Deploy agents with role-based permissions, activity visibility, and auditable workflows.",
+    tagline: "Make growth workflows easier to review with permissions, controlled actions, and traceable activity.",
+    description: "Enforce strict tenant isolation, human approval boundaries, and immutable audit logs on every proposed financial action.",
     signals: [
-      { tone: "ok" as const, pulse: true, label: "VERIFIED", text: "Tenant isolation verified" },
-      { tone: "ok" as const, pulse: true, label: "ENFORCED", text: "RBAC enforced 100%" },
-      { tone: "accent" as const, pulse: false, label: "RECORDING", text: "Audit trail recording" },
+      { tone: "ok" as const, pulse: true, label: "ISOLATED", text: "Strict tenant boundary enforced" },
+      { tone: "accent" as const, pulse: false, label: "AUDIT", text: "Every decision logged immutably" },
     ],
-    cta: "VIEW CONTROLS",
+    cta: "Actions & Approvals →",
+    targetRoute: "/actions",
   },
 ] as const;
 
 type Audience = (typeof AUDIENCES)[number];
 
 function AudienceCard({ audience, index }: { audience: Audience; index: number }) {
+  const navigate = useNavigate();
+
   return (
     <article
       className="who-card"
@@ -76,7 +83,10 @@ function AudienceCard({ audience, index }: { audience: Audience; index: number }
 
       <div className="who-card__header">
         <span className="who-card__number">{audience.number}</span>
-        <h3 className="who-card__title">{audience.title}</h3>
+        <h3 className="who-card__title">
+          <span style={{ marginRight: 6 }} aria-hidden="true">{audience.icon}</span>
+          {audience.title}
+        </h3>
       </div>
 
       <p className="who-card__primary">{audience.tagline}</p>
@@ -98,11 +108,9 @@ function AudienceCard({ audience, index }: { audience: Audience; index: number }
         type="button"
         className="who-card__cta"
         aria-label={`${audience.title}: ${audience.cta}`}
+        onClick={() => navigate(audience.targetRoute)}
       >
         <span>{audience.cta}</span>
-        <span className="who-card__cta-arrow" aria-hidden="true">
-          -&gt;
-        </span>
       </button>
     </article>
   );
@@ -114,13 +122,12 @@ export function HomeWhoItsFor() {
   return (
     <section id="who-its-for" className="shell section" aria-labelledby="who-heading">
       <SectionWindowHeader
-        eyebrow="WHO IT'S FOR · AUDIENCE"
-        title="One workspace. Shared context."
-        accentTitle="No juggling."
-        description="RazorGrowth AI gives solo founders, lean startups, growth teams and enterprises an always-on AI growth department — agents do the watching, planning and drafting; people make the calls."
         id="who-heading"
-        windowTitle="razorgrowth — welcome.app"
-        compact
+        eyebrow="AUDIENCE · TAILORED USE CASES"
+        title="Built for teams that need"
+        accentTitle="more growth capacity."
+        description="Whether you are a solo merchant or leading a high-velocity growth organization, RazorGrowth AI adapts to your operational scale while keeping humans in control."
+        windowTitle="razorgrowth — audience.app"
       />
 
       <div ref={reveal} className="reveal">

@@ -1,0 +1,210 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   ManagerCoordination — ManagerAgent orchestrator & specialist ecosystem
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.manager-section {
+  position: relative;
+}
+
+.manager-orchestration-panel {
+  margin-top: 24px;
+}
+
+.manager-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 20px;
+}
+
+.manager-orchestrator-card {
+  background: var(--paper-bright);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-window);
+  padding: 22px 20px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 4px 4px 0 rgba(33, 19, 14, 0.08);
+}
+
+.manager-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.manager-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #21130e;
+  color: #f7ebd7;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: var(--radius-control);
+  letter-spacing: 0.04em;
+}
+
+.manager-role-title {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--ink);
+  margin: 0 0 8px;
+}
+
+.manager-role-desc {
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+  line-height: 1.55;
+  margin: 0 0 18px;
+}
+
+.manager-capabilities-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 20px;
+  padding: 0;
+  list-style: none;
+}
+
+.manager-capability-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.80rem;
+  color: var(--ink);
+  background: var(--paper-deep);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-control);
+  padding: 8px 10px;
+  line-height: 1.4;
+}
+
+.manager-capability-dot {
+  color: var(--coral-strong);
+  font-weight: bold;
+}
+
+.manager-cta-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--coral-strong);
+  color: #ffffff;
+  padding: 10px 18px;
+  border-radius: var(--radius-control);
+  font-family: var(--font-display);
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-decoration: none;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  box-shadow: 2px 2px 0 rgba(33, 19, 14, 0.2);
+  transition: all var(--dur-fast) var(--ease-out);
+  margin-top: auto;
+}
+
+.manager-cta-btn:hover {
+  background: var(--coral-deep);
+  transform: translateY(-1px);
+  box-shadow: 3px 3px 0 rgba(33, 19, 14, 0.25);
+}
+
+.specialists-roster-column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.specialist-card {
+  background: var(--paper-bright);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+
+.specialist-card:hover {
+  border-color: var(--line);
+  box-shadow: 3px 3px 0 rgba(33, 19, 14, 0.08);
+  transform: translateX(2px);
+}
+
+.specialist-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  background: #21130e;
+  color: #f7ebd7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+}
+
+.specialist-info {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.specialist-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 3px;
+}
+
+.specialist-name {
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+}
+
+.specialist-badge {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--coral-strong);
+  background: var(--paper-deep);
+  border: 1px solid var(--line-soft);
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+
+.specialist-desc {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.specialist-link {
+  font-family: var(--font-mono);
+  font-size: 0.70rem;
+  font-weight: 700;
+  color: var(--coral-strong);
+  text-decoration: none;
+  margin-top: 4px;
+  display: inline-block;
+}
+
+.specialist-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 900px) {
+  .manager-layout {
+    grid-template-columns: 1fr;
+  }
+}

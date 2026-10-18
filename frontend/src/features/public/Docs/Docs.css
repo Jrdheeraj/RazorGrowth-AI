@@ -1,0 +1,69 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   Docs — Architecture, security, and system transparency
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.docs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.docs-card {
+  background: var(--paper-bright);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+
+.docs-card:hover {
+  border-color: var(--line);
+  transform: translateY(-2px);
+  box-shadow: 4px 4px 0 rgba(33, 19, 14, 0.1);
+}
+
+.docs-card__tag {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--coral-strong);
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.docs-card__title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--ink);
+  margin: 0 0 8px;
+  line-height: 1.3;
+}
+
+.docs-card__desc {
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  line-height: 1.5;
+  margin: 0 0 14px;
+  flex-grow: 1;
+}
+
+.docs-card__link {
+  margin-top: auto;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--coral-strong);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.docs-card__link:hover {
+  text-decoration: underline;
+  color: var(--coral-deep);
+}

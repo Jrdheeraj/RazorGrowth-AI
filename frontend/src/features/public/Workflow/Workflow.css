@@ -1,0 +1,153 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   Workflow — Guarded action lifecycle & human approval gate
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.workflow-lifecycle-container {
+  margin-top: 24px;
+}
+
+.lifecycle-stages-bar {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  background: var(--paper-deep);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  padding: 12px;
+  margin-bottom: 20px;
+}
+
+.lifecycle-stage-step {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--paper-bright);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-control);
+  font-family: var(--font-mono);
+  position: relative;
+}
+
+.lifecycle-stage-step--highlight {
+  border-color: var(--coral-strong);
+  background: #fff8f5;
+  box-shadow: 0 0 0 1px var(--coral-strong);
+}
+
+.lifecycle-stage-num {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--coral-strong);
+}
+
+.lifecycle-stage-name {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.lifecycle-stage-sub {
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+  line-height: 1.3;
+}
+
+.contract-bounds-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.contract-bound-box {
+  padding: 16px 18px;
+  border-radius: var(--radius-window);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.contract-bound-box--will {
+  background: #f0fbf4;
+  border: 1px solid #bbf7d0;
+}
+
+.contract-bound-box--wont {
+  background: #fcf4f4;
+  border: 1px solid #fecaca;
+}
+
+.contract-bound-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+}
+
+.contract-bound-box--will .contract-bound-header {
+  color: #166534;
+}
+
+.contract-bound-box--wont .contract-bound-header {
+  color: #991b1b;
+}
+
+.contract-bound-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--ink-soft);
+}
+
+.workflow-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.workflow-bottom-meta {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--ink-faint);
+}
+
+.workflow-bottom-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--coral-strong);
+  color: #ffffff;
+  padding: 8px 16px;
+  border-radius: var(--radius-control);
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: 2px 2px 0 rgba(33, 19, 14, 0.2);
+  transition: all var(--dur-fast) ease;
+}
+
+.workflow-bottom-btn:hover {
+  background: var(--coral-deep);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 900px) {
+  .lifecycle-stages-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .contract-bounds-grid {
+    grid-template-columns: 1fr;
+  }
+}

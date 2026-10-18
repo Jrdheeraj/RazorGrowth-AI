@@ -8,27 +8,30 @@ export function FinalCTA() {
 
   return (
     <section id="cta" className="shell section" aria-labelledby="cta-heading">
-      <div ref={reveal} className="reveal" style={{ maxWidth: 760, marginInline: "auto" }}>
-        <WindowPanel title="get-started.app" tone="navy" dark>
-          <div style={{ textAlign: "center", padding: "8px 4px" }}>
+      <div ref={reveal} className="reveal" style={{ maxWidth: 780, marginInline: "auto" }}>
+        <WindowPanel title="razorgrowth — get_started.app" tone="navy" dark>
+          <div style={{ textAlign: "center", padding: "16px 8px" }}>
             <p className="meta-label" style={{ justifyContent: "center" }}>
-              READY WHEN YOU ARE
+              READY WHEN YOU ARE · DEPLOY IN MINUTES
             </p>
             <h2 id="cta-heading" className="display-lg" style={{ marginTop: 14, color: "var(--cream-text)" }}>
-              Hire your first{" "}
-              <span className="accent-word">AI growth agent.</span>
+              Give your growth team a{" "}
+              <span className="accent-word">clearer way to work.</span>
             </h2>
-            <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: 12, marginTop: 26 }}>
+            <p style={{ color: "var(--cream-muted)", maxWidth: "56ch", margin: "14px auto 0", fontSize: "0.95rem", lineHeight: 1.6 }}>
+              Explore how RazorGrowth AI connects growth analysis, specialist agents, recommendations, and controlled actions in one unified workspace.
+            </p>
+            <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: 14, marginTop: 26 }}>
               <ButtonLink to="/login" variant="primary">
-                Get started
+                Get Started
               </ButtonLink>
-              <ButtonLink to="/login" variant="secondary">
-                Log in
+              <ButtonLink to="/agents" variant="secondary">
+                Explore the AI Team
               </ButtonLink>
             </div>
-            <hr className="meta-rule" style={{ marginBlock: 24 }} />
-            <p className="meta-label" style={{ justifyContent: "center" }}>
-              FREE / HUMAN APPROVAL / FULL AUDIT TRAIL
+            <hr className="meta-rule" style={{ marginBlock: 24, borderColor: "var(--line-on-dark-soft)" }} />
+            <p className="meta-label" style={{ justifyContent: "center", color: "var(--cream-muted)" }}>
+              AI-ASSISTED GROWTH · HUMAN APPROVAL · TRACEABLE WORKFLOWS
             </p>
           </div>
         </WindowPanel>

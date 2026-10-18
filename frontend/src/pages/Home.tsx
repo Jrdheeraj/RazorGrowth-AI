@@ -4,13 +4,15 @@ import { scrollToSection, scrollToTop } from "../lib/scroll";
 import { GlobalEnvironment } from "../features/public/Environment/GlobalEnvironment";
 
 import { Hero } from "../features/public/Hero/Hero";
+import { ProductOverview } from "../features/public/ProductOverview/ProductOverview";
 import { HomeWhoItsFor } from "../features/public/WhoItsFor/HomeWhoItsFor";
 import { HowItWorks } from "../features/public/HowItWorks/HowItWorks";
+import { ManagerCoordination } from "../features/public/ManagerCoordination/ManagerCoordination";
 import { ProductShowcase } from "../features/public/ProductShowcase/ProductShowcase";
 import { Agents } from "../features/public/Agents/Agents";
 import { Workflow } from "../features/public/Workflow/Workflow";
+import { ActivityTrace } from "../features/public/ActivityTrace/ActivityTrace";
 import { Demo } from "../features/public/Demo/Demo";
-import { Manifesto } from "../features/public/Manifesto/Manifesto";
 import { Docs } from "../features/public/Docs/Docs";
 import { FinalCTA } from "../features/public/FinalCTA/FinalCTA";
 
@@ -18,13 +20,21 @@ import { FinalCTA } from "../features/public/FinalCTA/FinalCTA";
  * The complete public SaaS website — ONE continuous page inside ONE
  * continuous living commerce world.
  *
- * The environment is mounted once and evolves through eight story
- * chapters (morning → activity → customers → opportunity → agents →
- * approval → growth → night) as the visitor scrolls.
+ * Protected Hero: The hero section (HeroMainWindow, HeroFloatingWindows,
+ * and the living commerce background) remains 100% intact and untouched.
  *
- * Readability: every section except the Hero and the Manifesto sits on a
- * solid printed-paper sheet (.readable) — no translucency, no blur — so
- * the world stays clearly visible around and between sections.
+ * Lower Sections:
+ *   1. ProductOverview — Connected workflow architecture
+ *   2. HomeWhoItsFor   — Audience use cases (#who-its-for)
+ *   3. HowItWorks      — Growth loop & human approval (#how-it-works)
+ *   4. ManagerCoordination — ManagerAgent orchestrator & specialist dispatch
+ *   5. ProductShowcase — Radar, Actions, Debates, and Workstation panels
+ *   6. Agents          — Confirmed registered AI Team roster
+ *   7. Workflow        — Guarded action lifecycle & contract bounds
+ *   8. ActivityTrace   — Immutable audit trail & traceability
+ *   9. Demo            — Interactive multi-stage product walkthrough
+ *  10. Docs            — Architecture, security & trust manual
+ *  11. FinalCTA        — Final call to action
  */
 export function Home() {
   const location = useLocation();
@@ -45,20 +55,19 @@ export function Home() {
     <div className="world-page">
       <GlobalEnvironment />
 
-      {/* Chapter 1 — MORNING. The hero meets the waking world directly. */}
+      {/* Chapter 1 — MORNING HERO (Locked & Protected Region) */}
       <Hero />
 
       <div className="world-column">
+        <div className="readable"><ProductOverview /></div>
         <div className="readable"><HomeWhoItsFor /></div>
         <div className="readable"><HowItWorks /></div>
+        <div className="readable"><ManagerCoordination /></div>
         <div className="readable"><ProductShowcase /></div>
         <div className="readable"><Agents /></div>
         <div className="readable"><Workflow /></div>
+        <div className="readable"><ActivityTrace /></div>
         <div className="readable"><Demo /></div>
-
-        {/* NIGHT CHAPTER — solid navy statement, no scrim needed */}
-        <Manifesto />
-
         <div className="readable"><Docs /></div>
         <div className="readable"><FinalCTA /></div>
       </div>

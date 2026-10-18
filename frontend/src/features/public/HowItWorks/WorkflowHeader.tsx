@@ -3,10 +3,10 @@ import { SectionWindowHeader } from "../../../components/SectionWindowHeader";
 export function WorkflowHeader() {
   return (
     <SectionWindowHeader
-      eyebrow="HOW IT WORKS · THE LOOP"
-      title="It works like a real team."
-      accentTitle="Because it is one."
-      description="You give direction. Your AI growth team investigates, plans, and prepares. You stay in control of every important decision."
+      eyebrow="OPERATING WORKFLOW · FROM SIGNAL TO ACTION"
+      title="From growth signal"
+      accentTitle="to reviewed action."
+      description="You provide direction or let agents detect opportunities. The AI team coordinates, models risk, and prepares the next step. You remain in control of consequential decisions."
       id="hiw-heading"
       windowTitle="razorgrowth — how_it_works.app"
       compact

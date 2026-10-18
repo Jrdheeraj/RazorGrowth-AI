@@ -4,61 +4,157 @@
 
 .agents-grid {
   display: grid;
-  gap: 18px;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   margin-top: 26px;
 }
 
 .agent-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.agent-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 6px 6px 0 rgba(33, 19, 14, 0.12);
 }
 
 .agent-card .window__body {
-  padding: clamp(18px, 3vw, 28px);
+  padding: 16px 18px 20px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
 }
 
 .agent-card__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.agent-card__icon-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.agent-card__icon {
+  font-size: 1.25rem;
+  line-height: 1;
 }
 
 .agent-card__name {
-  font-size: var(--text-title);
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 800;
   color: var(--ink);
-  margin: 6px 0 0;
+  margin: 0;
   line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.agent-card__role-badge {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--coral-strong);
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
 }
 
 .agent-card__line {
-  font-size: var(--text-small);
+  font-size: 0.80rem;
   color: var(--ink-soft);
-  line-height: 1.55;
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  line-height: 1.45;
+  margin: 0 0 12px;
+  flex-grow: 1;
 }
 
-.agent-card__meta {
+.agent-card__tools {
+  background: var(--paper-deep);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-control);
+  padding: 6px 8px;
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  letter-spacing: var(--tracking-meta);
-  text-transform: uppercase;
+  font-size: 0.68rem;
   color: var(--ink-faint);
+  margin-bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.agent-card__tool-tag {
+  background: rgba(42, 24, 16, 0.05);
+  padding: 1px 4px;
+  border-radius: 2px;
+  color: var(--ink);
+}
+
+.agent-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-soft);
+}
+
+.agent-card__link {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--coral-strong);
+  text-decoration: none;
+}
+
+.agent-card__link:hover {
+  text-decoration: underline;
+}
+
+.agent-roster-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--paper-deep);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-window);
+  padding: 14px 20px;
+  margin-top: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.agent-roster-cta-text {
+  font-size: 0.84rem;
+  color: var(--ink-soft);
   margin: 0;
-  white-space: nowrap;
+}
+
+.agent-roster-cta-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #21130e;
+  color: #f7ebd7;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: var(--radius-control);
+  text-decoration: none;
+  border: 1px solid var(--line);
+  transition: all var(--dur-fast) ease;
+}
+
+.agent-roster-cta-btn:hover {
+  background: #3a2117;
+  color: #ffffff;
+  transform: translateY(-1px);
 }
 
 /* Mobile adjustments */
@@ -66,22 +162,5 @@
   .agents-grid {
     grid-template-columns: 1fr;
     gap: 14px;
-  }
-
-  .agent-card .window__titlebar {
-    padding: 8px 10px;
-  }
-
-  .agent-card .window__filename {
-    font-size: 0.65rem;
-    padding-left: 4px;
-  }
-
-  .agent-card__header {
-    gap: 8px;
-  }
-
-  .agent-card__name {
-    font-size: var(--text-small);
   }
 }
