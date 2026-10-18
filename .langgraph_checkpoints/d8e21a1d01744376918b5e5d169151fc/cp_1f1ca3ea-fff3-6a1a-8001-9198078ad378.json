@@ -1,0 +1,99 @@
+{
+  "checkpoint": {
+    "v": 4,
+    "ts": "2026-10-17T15:23:21.471849+00:00",
+    "id": "1f1ca3ea-fff3-6a1a-8001-9198078ad378",
+    "channel_values": {
+      "merchant_id": "9b529fad-1d9b-4221-bc56-90439050c755",
+      "run_id": "d8e21a1d01744376918b5e5d169151fc",
+      "workflow_id": "96818326-7eec-4077-989d-f7d1653d2269",
+      "mode": "team",
+      "objective": "Test 14-agent team pipeline",
+      "window_days": 30,
+      "params": {
+        "objective": "Test 14-agent team pipeline",
+        "window_days": 30
+      },
+      "generation": 1,
+      "current_step_index": 0,
+      "selected_specialists": [],
+      "agents_run": [],
+      "resumed_steps": [],
+      "needs_reconciliation": [],
+      "opportunities": [],
+      "ranked_opportunities": [],
+      "findings": [],
+      "actions_proposed": [],
+      "tool_records": [],
+      "shared_memory": {},
+      "errors": [],
+      "status": "running",
+      "cancelled": false,
+      "cancelled_at_step": null,
+      "totals": {},
+      "debate_id": null,
+      "action_plan": null,
+      "terminal_outcome": {},
+      "branch:to:load_context": null
+    },
+    "channel_versions": {
+      "__start__": 2,
+      "merchant_id": 2,
+      "run_id": 2,
+      "workflow_id": 2,
+      "mode": 2,
+      "objective": 2,
+      "window_days": 2,
+      "params": 2,
+      "generation": 2,
+      "current_step_index": 3,
+      "selected_specialists": 2,
+      "agents_run": 2,
+      "resumed_steps": 2,
+      "needs_reconciliation": 2,
+      "opportunities": 2,
+      "ranked_opportunities": 2,
+      "findings": 2,
+      "actions_proposed": 2,
+      "tool_records": 2,
+      "shared_memory": 2,
+      "errors": 2,
+      "status": 3,
+      "cancelled": 3,
+      "cancelled_at_step": 2,
+      "totals": 2,
+      "debate_id": 2,
+      "action_plan": 2,
+      "terminal_outcome": 2,
+      "branch:to:validate_request": 3,
+      "branch:to:load_context": 3
+    },
+    "versions_seen": {
+      "__input__": {},
+      "__start__": {
+        "__start__": 1
+      },
+      "validate_request": {
+        "branch:to:validate_request": 2
+      }
+    },
+    "updated_channels": [
+      "branch:to:load_context",
+      "cancelled",
+      "current_step_index",
+      "status"
+    ]
+  },
+  "metadata": {
+    "source": "loop",
+    "step": 1,
+    "parents": {}
+  },
+  "channel_versions": {
+    "current_step_index": 3,
+    "status": 3,
+    "cancelled": 3,
+    "branch:to:validate_request": 3,
+    "branch:to:load_context": 3
+  }
+}

@@ -9,6 +9,8 @@
 
 import { getToken, clearToken } from "./auth";
 import type {
+  ActionDeleteResponse,
+  ActionBulkDeleteResponse,
   ActionListResponse,
   ActionTransitionResponse,
   AgentRunRequest,
@@ -56,6 +58,8 @@ import type {
 } from "../types/api";
 
 export type {
+  ActionDeleteResponse,
+  ActionBulkDeleteResponse,
   ActionListResponse,
   ActionTransitionResponse,
   AgentRunRequest,
@@ -420,6 +424,52 @@ export function fetchAgentRuns(limit = 50, orchestratorRunId?: string): Promise<
   return request<AgentRunsResponse>(qs);
 }
 
+/**
+ * Authoritative, read-only "is an analysis actually running?" probe.
+ *
+ * The dashboard used to infer this from the mere presence of a `running` row,
+ * which a crashed worker leaves behind — so opening the page showed
+ * "ANALYZING…" indefinitely. The backend now applies a staleness bound, so this
+ * returns `active: false` for an abandoned row and the page can honestly say
+ * idle.
+ *
+ * Safe to call on mount, on refresh, on every StrictMode remount and on every
+ * poll tick: it is a GET and the endpoint never mutates anything.
+ */
+export interface ActiveRunReport {
+  active: boolean;
+  run_id: string | null;
+  mode: string | null;
+  status: string | null;
+  started_at: string | null;
+  last_heartbeat_at: string | null;
+  idle_reason: string | null;
+  steps_running: number;
+  cancel_requested_at: string | null;
+}
+
+export function fetchActiveRun(): Promise<ActiveRunReport> {
+  return request<ActiveRunReport>("/api/agents/active-run");
+}
+
+/**
+ * Request cancellation of one specific analysis cycle.
+ *
+ * This actually stops backend execution: the orchestrator observes the request
+ * between steps and starts no further work. It is not a UI-only "hide the
+ * spinner" — the cycle's persisted status becomes `cancelled`.
+ */
+export function cancelAgentRun(runId: string): Promise<{
+  orchestrator_run_id: string;
+  status: string;
+  cancel_requested_at: string | null;
+  cancelled: boolean;
+}> {
+  return request(`/api/agents/runs/${encodeURIComponent(runId)}/cancel`, {
+    method: "POST",
+  });
+}
+
 /** Internal API â€” wrapped as a merchant-facing business action. */
 export function runAgents(
   body: AgentRunRequest,
@@ -504,6 +554,18 @@ export function executeAction(actionId: string): Promise<ExecutionResponse> {
 
 export function fetchActionAudit(actionId: string): Promise<AuditEventListResponse> {
   return request<AuditEventListResponse>(`/api/actions/${actionId}/audit`);
+}
+
+export function deleteAction(actionId: string): Promise<ActionDeleteResponse> {
+  return request<ActionDeleteResponse>(`/api/actions/${actionId}`, {
+    method: "DELETE",
+  });
+}
+
+export function deleteAllActions(): Promise<ActionBulkDeleteResponse> {
+  return request<ActionBulkDeleteResponse>("/api/actions", {
+    method: "DELETE",
+  });
 }
 
 /* â”€â”€ Simulations & experiments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -1010,3 +1072,205 @@ export function createDesignerHandoff(body: {
   return request("/api/designer/handoffs", { method: "POST", body });
 }
 
+
+/* Manager Agent coordination — the central coordinator's own API surface.
+ *
+ * These are thin wrappers over the private `request<T>()` in this module, so
+ * they inherit its exact auth header, base URL, 401 token-drop and error
+ * normalisation. No second fetch implementation is introduced.
+ *
+ * Planning is deliberately a separate call from execution:
+ *   createManagerPlan()   -> validated plan, runs nothing
+ *   runAgents()           -> the EXISTING orchestrator endpoint, executes
+ * Pass the plan's `workflow_id` to `runAgents()` via `params.correlation_id`
+ * style correlation so the cycle's audit rows match the plan that produced
+ * them. `startAiTeamWork` already stamps a shared cycle id.
+ */
+
+export interface ManagerGoal {
+  goal: string;
+  themes: string[];
+  constraints: string[];
+  time_horizon_days: number;
+  evidence_status: string;
+  success_criteria: string[];
+  requires_human_approval: boolean;
+  blocked_reasons: string[];
+  selection_rationale: string | null;
+}
+
+export interface ManagerTask {
+  task_id: string;
+  agent_id: string;
+  description: string;
+  expected_output: string;
+  depends_on: string[];
+  required_inputs: string[];
+  tools: string[];
+  priority: string;
+  approval_required: boolean;
+  completion_criteria: string[];
+}
+
+export interface ManagerPlan {
+  workflow_id: string;
+  merchant_id: string;
+  goal: ManagerGoal;
+  selected_agents: string[];
+  tasks: ManagerTask[];
+  limits: { max_steps: number; max_retries: number; max_replan: number; max_agents: number };
+  validation: { valid: boolean; rejections: string[]; validated_at: string };
+  status: string;
+  executed: boolean;
+  requires_human_approval_for_actions: boolean;
+  selection?: Array<{ agent_id: string; reason: string; matched_tools: string[] }>;
+}
+
+export interface ManagerRosterEntry {
+  agent_id: string;
+  description: string;
+  permissions: string[];
+  tools: string[];
+  unimplemented_tools: string[];
+  fully_implemented: boolean;
+  selectable: boolean;
+  can_approve: boolean;
+  can_execute: boolean;
+}
+
+export interface ManagerRoster {
+  agent_count: number;
+  agents: ManagerRosterEntry[];
+  main_growth_team: string[];
+  domain_specialists: string[];
+}
+
+export interface ManagerEvaluation {
+  agent_id: string;
+  status: string;
+  failure_kind: string | null;
+  detail: string;
+  errors: string[];
+  actions_proposed: number;
+  latency_ms: number | null;
+  tools_used: string[];
+  retryable: boolean;
+}
+
+export interface ManagerWorkflowReport {
+  workflow_id: string;
+  merchant_id: string;
+  mode: string | null;
+  status: string;
+  objective: string | null;
+  agents_run: Array<{
+    agent: string;
+    status: string;
+    opportunities_created: number;
+    actions_proposed: number;
+    insights_generated: number;
+    signals_detected: number;
+    experiments_proposed: number;
+    tools_used: string[];
+    errors: string[];
+    latency_ms: { total: number; llm: number; db: number; tool: number };
+    output: Record<string, unknown>;
+    started_at: string;
+    completed_at: string | null;
+  }>;
+  totals: Record<string, number>;
+  plan: ManagerPlan | null;
+  evaluation: {
+    outcome: string;
+    evaluations: ManagerEvaluation[];
+    completed: string[];
+    failed: string[];
+    blocked: string[];
+    retryable: string[];
+    replan_recommended: boolean;
+    replan_budget: number;
+    replan_within_bounds: boolean;
+  };
+  report: Record<string, unknown>;
+  /** Honest capability statement — these rows are progress records, not a
+   *  resumable checkpoint. Never present them as crash recovery. */
+  durable_checkpoint: boolean;
+  recoverable_after_restart: boolean;
+  recovery_note: string;
+}
+
+export interface ManagerMetrics {
+  merchant_id: string;
+  agents_coordinated: number;
+  tasks_completed: number;
+  awaiting_approval: number;
+  active_workflows: number;
+  total_workflows: number;
+  window_days: number;
+  metrics_available: boolean;
+  unavailable_reasons: string[];
+}
+
+export interface ManagerPendingAction {
+  id: string;
+  action_type: string;
+  status: string;
+  requested_by: string | null;
+  origin_agent: string | null;
+  workflow_id: string | null;
+  workflow_agents: string[];
+  created_at: string;
+  input_payload: Record<string, unknown>;
+  approvable: boolean;
+  approved_by_manager: boolean;
+}
+
+/** Live registry. `agent_count` comes from the backend registry, never a constant. */
+export function fetchManagerRoster(): Promise<ManagerRoster> {
+  return request<ManagerRoster>("/api/manager/roster");
+}
+
+/**
+ * Create a validated growth plan for a merchant goal. Executes nothing.
+ *
+ * `proposedTasks` is untrusted: the backend rejects unknown agent ids,
+ * duplicate task ids, invalid or circular dependencies, tools an agent does
+ * not own, and model-issued permissions, reporting each in
+ * `validation.rejections`.
+ */
+export function createManagerPlan(
+  body: {
+    objective: string;
+    window_days?: number;
+    constraints?: string[];
+    budget?: number;
+    deadline?: string;
+    proposed_tasks?: Array<Record<string, unknown>>;
+  },
+): Promise<ManagerPlan> {
+  return request<ManagerPlan>("/api/manager/plan", { method: "POST", body });
+}
+
+/** Real workflow state, rebuilt from the caller's real agent-run rows. */
+export function fetchManagerWorkflow(workflowId: string): Promise<ManagerWorkflowReport> {
+  return request<ManagerWorkflowReport>(
+    `/api/manager/workflows/${encodeURIComponent(workflowId)}`,
+  );
+}
+
+/** Dashboard figures computed from real rows. */
+export function fetchManagerMetrics(
+  windowDays = 30,
+): Promise<ManagerMetrics> {
+  return request<ManagerMetrics>(`/api/manager/metrics?window_days=${windowDays}`);
+}
+
+/** Pending proposals with their real originating agent and workflow. Read-only. */
+export function fetchManagerActions(
+  workflowId?: string,
+  limit = 50,
+): Promise<{ merchant_id: string; actions: ManagerPendingAction[]; pending_count: number }> {
+  const qs = new URLSearchParams({ limit: String(limit) });
+  if (workflowId) qs.set("workflow_id", workflowId);
+  return request(`/api/manager/actions?${qs.toString()}`);
+}

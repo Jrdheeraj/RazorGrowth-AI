@@ -1,0 +1,59 @@
+{
+  "checkpoint": {
+    "v": 4,
+    "ts": "2026-10-17T16:09:53.121037+00:00",
+    "id": "1f1ca452-ff31-668c-bfff-5cd2cf9d8ea7",
+    "channel_values": {
+      "__start__": {
+        "merchant_id": "7711bcaf-ad1d-4d0f-a982-29a2212616b5",
+        "run_id": "17a4bec0ff7c4ace9264b5d77da867c5",
+        "workflow_id": "1f070843-7133-46fe-9511-6727b2d60e3a",
+        "mode": "team",
+        "objective": "Comprehensive commerce analysis and growth optimization",
+        "window_days": 30,
+        "params": {
+          "window_days": 30,
+          "propose_retry_action": true,
+          "objective": "Comprehensive commerce analysis and growth optimization"
+        },
+        "generation": 1,
+        "current_step_index": 0,
+        "selected_specialists": [],
+        "agents_run": [],
+        "resumed_steps": [],
+        "needs_reconciliation": [],
+        "opportunities": [],
+        "ranked_opportunities": [],
+        "findings": [],
+        "actions_proposed": [],
+        "tool_records": [],
+        "shared_memory": {},
+        "errors": [],
+        "status": "running",
+        "cancelled": false,
+        "cancelled_at_step": null,
+        "totals": {},
+        "debate_id": null,
+        "action_plan": null,
+        "terminal_outcome": {}
+      }
+    },
+    "channel_versions": {
+      "__start__": 1
+    },
+    "versions_seen": {
+      "__input__": {}
+    },
+    "updated_channels": [
+      "__start__"
+    ]
+  },
+  "metadata": {
+    "source": "input",
+    "step": -1,
+    "parents": {}
+  },
+  "channel_versions": {
+    "__start__": 1
+  }
+}

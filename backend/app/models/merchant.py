@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from backend.app.models.customer_insight import CustomerInsight
     from backend.app.models.experiment import Simulation, Experiment
     from backend.app.models.agent_run import AgentRun
+    from backend.app.models.agent_workflow import AgentWorkflowRun
     from backend.app.models.agent_memory import AgentMemory
 
 
@@ -96,6 +97,11 @@ class Merchant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     agent_runs: Mapped[list[AgentRun]] = relationship(
         "AgentRun", back_populates="merchant", cascade="all, delete-orphan"
+    )
+    #: Resumable multi-agent cycles. Cascaded so deleting a merchant (or a
+    #: test tenant) never leaves an orphaned workflow behind.
+    agent_workflow_runs: Mapped[list[AgentWorkflowRun]] = relationship(
+        "AgentWorkflowRun", back_populates="merchant", cascade="all, delete-orphan"
     )
     agent_memories: Mapped[list[AgentMemory]] = relationship(
         "AgentMemory", back_populates="merchant", cascade="all, delete-orphan"

@@ -1,0 +1,20 @@
+[
+  [
+    "cancelled",
+    true
+  ],
+  [
+    "status",
+    "cancelled"
+  ],
+  [
+    "errors",
+    [
+      "GrowthMemoryAgent cancelled before execution"
+    ]
+  ],
+  [
+    "branch:to:fast_discovery",
+    null
+  ]
+]

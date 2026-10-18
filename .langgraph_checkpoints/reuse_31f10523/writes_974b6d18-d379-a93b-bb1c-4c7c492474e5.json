@@ -1,0 +1,40 @@
+[
+  [
+    "current_step_index",
+    2
+  ],
+  [
+    "agents_run",
+    [
+      {
+        "agent_name": "GrowthDiscoveryAgent",
+        "step_key": "fast:001:GrowthDiscoveryAgent:-:83ec23d526bc8f2a98c41b2f",
+        "status": "completed",
+        "opportunities_created": 0,
+        "actions_proposed": 0,
+        "tools_used": [
+          "growth_radar",
+          "opportunity_upsert",
+          "opportunity_scoring"
+        ],
+        "errors": [],
+        "reused": true
+      }
+    ]
+  ],
+  [
+    "resumed_steps",
+    [
+      {
+        "step_index": 1,
+        "step_key": "fast:001:GrowthDiscoveryAgent:-:83ec23d526bc8f2a98c41b2f",
+        "agent": "GrowthDiscoveryAgent",
+        "phase": null
+      }
+    ]
+  ],
+  [
+    "branch:to:fast_payment_recovery",
+    null
+  ]
+]

@@ -26,12 +26,17 @@ Duplicate execute on a completed action is an idempotent no-op
 from __future__ import annotations
 
 import enum
+import hashlib
+import json
 import logging
+import threading
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import get_settings
@@ -104,6 +109,52 @@ def _build_proposed_action(action: AgentAction) -> ProposedAction:
 # ---------------------------------------------------------------------------
 
 
+def _find_by_idempotency_key(
+    db: Session, merchant_id: uuid.UUID, idempotency_key: str
+) -> AgentAction | None:
+    """Read back the winner of an idempotent insert, scoped to this merchant."""
+    return db.scalars(
+        select(AgentAction).where(
+            AgentAction.merchant_id == merchant_id,
+            AgentAction.idempotency_key == idempotency_key,
+        )
+    ).first()
+
+
+def action_idempotency_key(
+    *,
+    merchant_id: uuid.UUID,
+    action_type: AgentActionType | str,
+    input_payload: dict | None,
+    workflow_run_id: uuid.UUID | None = None,
+) -> str:
+    """
+    Stable fingerprint of a LOGICALLY IDENTICAL proposal.
+
+    Two proposals collapse to one key only when they are the same work for the
+    same tenant: action type, canonicalised payload and -- when known -- the
+    originating workflow are folded in. The merchant is part of the scope, so
+    one workspace can never be deduped against another's.
+
+    Deliberately EXCLUDED: ``requested_by`` and any timestamp. A retry that
+    re-proposes the same action from a different code path, or minutes later,
+    is still the same action; that is the entire point. Genuinely distinct
+    actions differ in type or payload and therefore keep distinct keys.
+    """
+    canonical = json.dumps(
+        {
+            "merchant_id": str(merchant_id),
+            "action_type": _enum_value(action_type),
+            "payload": input_payload or {},
+            "workflow_run_id": str(workflow_run_id) if workflow_run_id else None,
+        },
+        sort_keys=True,
+        default=str,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:64]
+
+
 def create_action(
     db: Session,
     *,
@@ -111,6 +162,8 @@ def create_action(
     action_type: AgentActionType,
     input_payload: dict | None = None,
     requested_by: str | None = DEVELOPMENT_ACTOR,
+    idempotency_key: str | None = None,
+    workflow_run_id: uuid.UUID | None = None,
 ) -> AgentAction:
     """
     Create a new AgentAction in 'requested' state.
@@ -118,6 +171,20 @@ def create_action(
     The AI agent proposes an action. It must pass through guardrails
     before a human can approve it. The payload is validated against the
     typed schema for the action type — arbitrary JSON is never trusted.
+
+    Idempotency
+    -----------
+    With ``idempotency_key``, a repeat of the same logical request returns the
+    EXISTING action instead of creating a second one. The guarantee is enforced
+    by the DATABASE (``uq_agent_actions_merchant_idempotency``), not by a
+    read-then-write check here: two concurrent retries can both miss a prior
+    lookup, and only a unique index makes exactly one of them win. The loser
+    re-reads the winner's row.
+
+    This is at-most-once PROPOSAL only. It does NOT imply at-most-once
+    external execution: approval stays human-gated, and an external provider
+    whose outcome was never persisted is never treated as proof that the call
+    did or did not happen.
     """
     from backend.app.schemas.action import validate_action_payload
 
@@ -129,6 +196,30 @@ def create_action(
         if error:
             raise ValueError(f"INVALID_PAYLOAD: {error}")
 
+    # When no explicit key is supplied but a workflow is in scope, derive one.
+    # Eight agent call sites invoke create_action directly rather than through
+    # the agent base class; deriving here means all of them are idempotent
+    # without any agent knowing that workflow tracking exists. Outside a
+    # workflow the key stays NULL, which preserves the previous behaviour and
+    # does not collide with any historical row.
+    if idempotency_key is None:
+        from backend.app.services.workflow_run_service import current_workflow_id
+
+        ambient = current_workflow_id()
+        if ambient is not None:
+            idempotency_key = action_idempotency_key(
+                merchant_id=merchant_id,
+                action_type=action_type,
+                input_payload=payload,
+                workflow_run_id=ambient,
+            )
+            workflow_run_id = workflow_run_id or ambient
+
+    if idempotency_key:
+        existing = _find_by_idempotency_key(db, merchant_id, idempotency_key)
+        if existing is not None:
+            return existing
+
     action = AgentAction(
         id=uuid.uuid4(),
         merchant_id=merchant_id,
@@ -136,9 +227,26 @@ def create_action(
         status=AgentActionStatus.requested,
         input_payload=payload,
         requested_by=requested_by,
+        idempotency_key=idempotency_key,
+        workflow_run_id=workflow_run_id,
     )
-    db.add(action)
-    db.flush()
+
+    if idempotency_key:
+        # SAVEPOINT-scoped insert. If a concurrent transaction already committed
+        # this key, the unique violation aborts only the savepoint, leaving the
+        # caller's outer transaction usable so the winner can be re-read.
+        try:
+            with db.begin_nested():
+                db.add(action)
+                db.flush()
+        except IntegrityError:
+            winner = _find_by_idempotency_key(db, merchant_id, idempotency_key)
+            if winner is not None:
+                return winner
+            raise
+    else:
+        db.add(action)
+        db.flush()
 
     _write_audit_event(
         db,
@@ -210,6 +318,223 @@ class ActionNotFoundError(LookupError):
 
 class InvalidTransitionError(ValueError):
     """Raised when a state transition violates the lifecycle graph."""
+
+
+class ActionRunningConflictError(InvalidTransitionError):
+    """Raised when attempting to delete an action that is currently executing."""
+
+
+def delete_action(
+    db: Session,
+    action_id: uuid.UUID,
+    *,
+    actor: str = DEVELOPMENT_ACTOR,
+) -> None:
+    """
+    Safely delete an action.
+
+    Running-action safety:
+      If the action is in 'executing' state, deletion is refused with
+      ActionRunningConflictError to prevent data races and orphaned background workers.
+      The worker or external operation must finish or be stopped first.
+
+    In all other states (requested, approved, completed, failed, rejected):
+      1. Safely unbind any referencing product/marketing models (action_id set to None)
+         so campaign and recommendation history is preserved without orphan/FK errors.
+      2. Record an immutable AuditEvent (AuditEventType.action_deleted) to preserve
+         the complete audit trail and accountability history.
+      3. Hard delete the row, releasing the idempotency constraint so subsequent
+         AI workflows can propose new actions if desired.
+    """
+    action = db.get(AgentAction, action_id)
+    if not action:
+        raise ActionNotFoundError(f"Action {action_id} not found")
+
+    if action.status == AgentActionStatus.executing:
+        raise ActionRunningConflictError(
+            "ACTION_STILL_RUNNING: Action is currently executing. "
+            "Please wait for execution to complete or stop it before deleting."
+        )
+
+    # Detach any marketing or product models that reference this action
+    # to safeguard audit history and avoid foreign key or cascade issues.
+    try:
+        from backend.app.models.marketing_agi import MarketingAGICampaign
+        from backend.app.models.product_agi import ProductAgentRecommendation
+
+        linked_camps = list(
+            db.scalars(
+                select(MarketingAGICampaign).where(MarketingAGICampaign.action_id == action.id)
+            ).all()
+        )
+        for camp in linked_camps:
+            camp.action_id = None
+
+        linked_recs = list(
+            db.scalars(
+                select(ProductAgentRecommendation).where(ProductAgentRecommendation.action_id == action.id)
+            ).all()
+        )
+        for rec in linked_recs:
+            rec.action_id = None
+    except Exception as exc:
+        log.warning("Could not unlink referencing models for action %s: %s", action.id, exc)
+
+    # Write audit event before removing the record
+    _write_audit_event(
+        db,
+        action.merchant_id,
+        ActorType.merchant_user if actor != DEVELOPMENT_ACTOR else ActorType.system,
+        AuditEventType.action_deleted,
+        str(action.id),
+        {
+            "action_type": _enum_value(action.action_type),
+            "final_status": _enum_value(action.status),
+            "requested_by": action.requested_by,
+            "approved_by": action.approved_by,
+            "deleted_by": actor,
+        },
+        actor_id=actor,
+    )
+
+    db.delete(action)
+    db.flush()
+    log.info(
+        "Action deleted. id=%s merchant=%s status=%s actor=%s",
+        str(action.id), action.merchant_id, _enum_value(action.status), actor,
+    )
+
+
+@dataclass
+class BulkDeleteResult:
+    eligible: int
+    deleted: int
+    skipped: int
+    failed: int
+    details: list[dict[str, Any]]
+
+
+_bulk_delete_locks: dict[uuid.UUID, threading.Lock] = {}
+_bulk_delete_master_lock = threading.Lock()
+
+
+class BulkOperationConflictError(InvalidTransitionError):
+    """Raised when duplicate concurrent bulk operations are attempted for a merchant."""
+
+
+def delete_all_actions(
+    db: Session,
+    merchant_id: uuid.UUID,
+    *,
+    actor: str = DEVELOPMENT_ACTOR,
+) -> BulkDeleteResult:
+    """
+    Safely delete all eligible actions for a merchant.
+
+    Concurrency:
+      Prevents duplicate concurrent bulk operations for the same merchant
+      using a thread-safe tenant lock.
+
+    Status and worker safety:
+      - Awaiting Approval (requested): safely deleted with audit event.
+      - Approved (approved): safely removed without triggering execution.
+      - Running (executing): request cancellation through workflow lifecycle if linked,
+        and safely SKIP deletion while execution is in-flight to prevent worker race conditions.
+      - Completed (completed): safely removed while preserving required execution results
+        and full audit records in audit_events.
+      - Failed / Stopped (failed, rejected): safely removed while preserving failure details
+        and audit records.
+
+    Audit and referencing models:
+      - All referencing models (MarketingAGICampaign, ProductAgentRecommendation)
+        have their action_id safely detached, preserving campaign and recommendation history.
+      - Immutable action_deleted AuditEvent entries are recorded for each deleted action.
+      - Idempotency keys are freed so subsequent AI cycles can propose actions if desired.
+    """
+    with _bulk_delete_master_lock:
+        if merchant_id not in _bulk_delete_locks:
+            _bulk_delete_locks[merchant_id] = threading.Lock()
+        tenant_lock = _bulk_delete_locks[merchant_id]
+
+    if not tenant_lock.acquire(blocking=False):
+        raise BulkOperationConflictError(
+            "BULK_OPERATION_IN_PROGRESS: Another bulk deletion is currently running for this merchant."
+        )
+
+    try:
+        stmt = (
+            select(AgentAction)
+            .where(AgentAction.merchant_id == merchant_id)
+            .order_by(AgentAction.created_at.desc())
+        )
+        if db.bind and db.bind.dialect.name == "postgresql":
+            stmt = stmt.with_for_update()
+
+        actions = list(db.scalars(stmt).all())
+        eligible = len(actions)
+        deleted = 0
+        skipped = 0
+        failed = 0
+        details: list[dict[str, Any]] = []
+
+        if eligible == 0:
+            return BulkDeleteResult(
+                eligible=0,
+                deleted=0,
+                skipped=0,
+                failed=0,
+                details=[],
+            )
+
+        for action in actions:
+            if action.status == AgentActionStatus.executing:
+                # Attempt to cancel any linked workflow run if one exists
+                if action.workflow_run_id:
+                    try:
+                        from backend.app.services.workflow_run_service import request_cancel
+                        from backend.app.models.agent_workflow import AgentWorkflowRun
+                        wf = db.get(AgentWorkflowRun, action.workflow_run_id)
+                        if wf and wf.run_id and wf.status == "running":
+                            request_cancel(db, merchant_id=merchant_id, run_id=wf.run_id)
+                    except Exception as wf_exc:
+                        log.debug("Workflow cancellation check for action %s: %s", action.id, wf_exc)
+
+                skipped += 1
+                details.append({
+                    "action_id": str(action.id),
+                    "status": "executing",
+                    "reason": "Action is currently executing; skipped to prevent race conditions with in-flight worker.",
+                })
+                continue
+
+            try:
+                with db.begin_nested():
+                    delete_action(db, action.id, actor=actor)
+                deleted += 1
+                details.append({
+                    "action_id": str(action.id),
+                    "status": _enum_value(action.status),
+                    "result": "deleted",
+                })
+            except Exception as exc:
+                failed += 1
+                log.exception("Failed to delete action %s during bulk deletion", action.id)
+                details.append({
+                    "action_id": str(action.id),
+                    "status": _enum_value(action.status),
+                    "error": str(exc),
+                })
+
+        db.flush()
+        return BulkDeleteResult(
+            eligible=eligible,
+            deleted=deleted,
+            skipped=skipped,
+            failed=failed,
+            details=details,
+        )
+    finally:
+        tenant_lock.release()
 
 
 def approve_action(

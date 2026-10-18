@@ -125,6 +125,7 @@ class AuditEventType(str, enum.Enum):
     action_completed = "action_completed"
     action_failed = "action_failed"
     action_skipped_idempotent = "action_skipped_idempotent"
+    action_deleted = "action_deleted"
     payment_created = "payment_created"
     payment_succeeded = "payment_succeeded"
     payment_failed = "payment_failed"
@@ -243,10 +244,47 @@ class AgentName(str, enum.Enum):
 
 
 class AgentRunStatus(str, enum.Enum):
+    """
+    Durable per-step execution status.
+
+    The four original values are unchanged. ``partially_completed`` and
+    ``blocked`` mirror ``AgentResult``'s vocabulary, which
+    ``AgentRunService.complete_run`` previously collapsed into ``failed`` --
+    losing the difference between "degraded but produced a result" and "never
+    produced one". ``interrupted`` is reserved for a step whose owning process
+    died before it could record an outcome; only the recovery path writes it.
+    """
+
     running = "running"
     completed = "completed"
     failed = "failed"
     skipped = "skipped"
+    partially_completed = "partially_completed"
+    blocked = "blocked"
+    interrupted = "interrupted"
+    needs_reconciliation = "needs_reconciliation"
+    cancelled = "cancelled"
+
+
+class WorkflowStatus(str, enum.Enum):
+    """
+    Cycle-level status for a resumable multi-agent workflow.
+
+    Deliberately separate from ``AgentRunStatus``: a workflow outlives any one
+    step and is what a caller resumes by id. ``interrupted`` is the crash
+    signal and is only ever written by the recovery path.
+    """
+
+    running = "running"
+    completed = "completed"
+    partial = "partial"
+    failed = "failed"
+    interrupted = "interrupted"
+    needs_reconciliation = "needs_reconciliation"
+    #: Explicitly stopped by an operator. Distinct from ``interrupted`` (the
+    #: process died) so a dashboard can say "you stopped this" rather than
+    #: implying a crash. Fits the existing VARCHAR(24) column unchanged.
+    cancelled = "cancelled"
 
 
 class MemoryType(str, enum.Enum):

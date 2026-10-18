@@ -50,6 +50,8 @@ from backend.app.models.experiment import (  # noqa: F401
     Experiment,
     ExperimentResult,
 )
+# Imported BEFORE agent_run: agent_runs.workflow_id references it.
+from backend.app.models.agent_workflow import AgentWorkflowRun  # noqa: F401
 from backend.app.models.agent_run import AgentRun  # noqa: F401
 from backend.app.models.agent_memory import AgentMemory  # noqa: F401
 from backend.app.models.handoff import AgentHandoff  # noqa: F401

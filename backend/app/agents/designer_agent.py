@@ -326,8 +326,8 @@ class DesignerAgent(BaseGrowthAgent):
             result.errors.append("llm_not_configured")
             return None
         try:
-            out, llm_ms = self._timed(
-                ctx.llm.generate_structured,
+            adapter = self.get_langchain_adapter(ctx)
+            out, llm_ms = adapter.execute_structured_reasoning(
                 "You are the RazorGrowth AI Designer Agent's UX auditor. You report "
                 "only what the supplied observations show, separate measured facts "
                 "from hypotheses, and never claim a measured conversion or revenue "
@@ -340,7 +340,6 @@ class DesignerAgent(BaseGrowthAgent):
                 "- If the observations are insufficient, return an empty list.\n",
                 UXAuditResult,
                 temperature=0.2,
-                max_tokens=1800,
             )
             result.llm_ms += llm_ms
             return list(out.findings)
@@ -361,8 +360,8 @@ class DesignerAgent(BaseGrowthAgent):
             result.errors.append("llm_not_configured")
             return None
         try:
-            out, llm_ms = self._timed(
-                ctx.llm.generate_structured,
+            adapter = self.get_langchain_adapter(ctx)
+            out, llm_ms = adapter.execute_structured_reasoning(
                 "You are the RazorGrowth AI Designer Agent. You produce structured "
                 "creative briefs grounded strictly in the observations you are "
                 "given. You never invent brand, business or customer facts, and you "
@@ -371,7 +370,6 @@ class DesignerAgent(BaseGrowthAgent):
                 self._observation_prompt(observations),
                 CreativeBriefSpec,
                 temperature=0.2,
-                max_tokens=2400,
             )
             result.llm_ms += llm_ms
             return out

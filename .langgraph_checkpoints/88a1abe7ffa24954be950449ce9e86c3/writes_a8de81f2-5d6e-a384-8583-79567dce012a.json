@@ -1,0 +1,36 @@
+[
+  [
+    "status",
+    "completed"
+  ],
+  [
+    "totals",
+    {
+      "opportunities_created": 5,
+      "actions_proposed": 2,
+      "signals_detected": 0,
+      "insights_generated": 0,
+      "experiments_proposed": 0,
+      "failed_agents": 0,
+      "reused_steps": 0,
+      "agents_completed": 9
+    }
+  ],
+  [
+    "terminal_outcome",
+    {
+      "status": "completed",
+      "totals": {
+        "opportunities_created": 5,
+        "actions_proposed": 2,
+        "signals_detected": 0,
+        "insights_generated": 0,
+        "experiments_proposed": 0,
+        "failed_agents": 0,
+        "reused_steps": 0,
+        "agents_completed": 9
+      },
+      "errors": []
+    }
+  ]
+]

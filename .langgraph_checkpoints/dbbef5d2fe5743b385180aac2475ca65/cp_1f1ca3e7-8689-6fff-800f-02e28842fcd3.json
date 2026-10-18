@@ -1,0 +1,406 @@
+{
+  "checkpoint": {
+    "v": 4,
+    "ts": "2026-10-17T15:21:48.210175+00:00",
+    "id": "1f1ca3e7-8689-6fff-800f-02e28842fcd3",
+    "channel_values": {
+      "merchant_id": "9241e4ac-a306-4e85-bc80-f5a82eb7531a",
+      "run_id": "dbbef5d2fe5743b385180aac2475ca65",
+      "workflow_id": "3fa45699-1bcc-4b8a-9ca5-a5b85ceba737",
+      "mode": "team",
+      "objective": "Improve overall growth",
+      "window_days": 30,
+      "params": {},
+      "generation": 1,
+      "current_step_index": 13,
+      "selected_specialists": [],
+      "agents_run": [
+        {
+          "agent_name": "GrowthMemoryAgent",
+          "step_key": "team:000:GrowthMemoryAgent:load:632fb95926da5f442aeb7b73",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "memory_retrieve",
+            "memory_record"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "GrowthDiscoveryAgent",
+          "step_key": "team:001:GrowthDiscoveryAgent:-:fb6e9ae0f6da4d64111f919f",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "growth_radar",
+            "opportunity_upsert",
+            "opportunity_scoring"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "CustomerIntelligenceAgent",
+          "step_key": "team:002:CustomerIntelligenceAgent:-:c62f7498086a51a414a55169",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "customer_metrics",
+            "segment_classification",
+            "churn_engine"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "RevenueOptimizationAgent",
+          "step_key": "team:003:RevenueOptimizationAgent:-:14a79b6aeebf52a02a0afbf7",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "opportunity_ranking",
+            "what_if_simulation",
+            "phase4_propose"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "PaymentRecoveryAgent",
+          "step_key": "team:004:PaymentRecoveryAgent:-:cf9446a6efb4b0ba1a862948",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "failed_payment_scan",
+            "recovery_simulation",
+            "phase4_propose",
+            "failed_payment_scan"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "MarketingAgent",
+          "step_key": "team:005:MarketingAgent:work:d2b7b799cb65eb68883f0c09",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "segment_analysis",
+            "campaign_design",
+            "messaging_strategy",
+            "simulation",
+            "finding_creation"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "ProductAgent",
+          "step_key": "team:006:ProductAgent:work:49463e51962e81b50d2fface",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "product_affinity_analysis",
+            "upsell_cross_sell_detection",
+            "experiment_design",
+            "simulation",
+            "finding_creation"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "CampaignStrategistAgent",
+          "step_key": "team:007:CampaignStrategistAgent:-:ade6b8a035bc904db813de88",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "segment_lookup",
+            "campaign_simulation",
+            "phase4_propose"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "DesignerAgent",
+          "step_key": "team:008:DesignerAgent:work:5ebf96d996293d30974e76eb",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "creative_concept",
+            "messaging_strategy",
+            "experiment_variants",
+            "ux_recommendations",
+            "creative_brief"
+          ],
+          "errors": [
+            "llm_not_configured"
+          ]
+        },
+        {
+          "agent_name": "ExperimentAgent",
+          "step_key": "team:009:ExperimentAgent:-:8f6b41fb0c56086b5af4ad29",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "experiment_design"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "OpportunityPrioritizationAgent",
+          "step_key": "team:010:OpportunityPrioritizationAgent:-:4e6532b7ea9fa7ce30fe2f86",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "opportunity_scoring"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "SoftwareAgent",
+          "step_key": "team:011:SoftwareAgent:work:1ab56b16de9d408a93a22d0f",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "technical_planning",
+            "integration_analysis",
+            "automation_design",
+            "feasibility_assessment",
+            "spec_creation"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "PersonalizationAgent",
+          "step_key": "team:012:PersonalizationAgent:-:195e6d309b70ea2c08fccd16",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "customer.insights",
+            "commerce.catalog_intelligence",
+            "customer.insights",
+            "commerce.catalog_intelligence"
+          ],
+          "errors": []
+        }
+      ],
+      "resumed_steps": [],
+      "needs_reconciliation": [],
+      "opportunities": [],
+      "ranked_opportunities": [],
+      "findings": [],
+      "actions_proposed": [],
+      "tool_records": [],
+      "shared_memory": {
+        "rag_context": {
+          "merchant_id": "9241e4ac-a306-4e85-bc80-f5a82eb7531a",
+          "query": "Improve overall growth",
+          "status": "insufficient_data",
+          "data_sufficiency": {
+            "status": "insufficient_data",
+            "message": "No real Razorpay test data available. Create test orders/payments via Checkout to view growth metrics.",
+            "minimum_required": 3,
+            "available": 0
+          },
+          "verified_facts": [
+            {
+              "fact": "captured_revenue",
+              "value": 0.0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "captured_transactions",
+              "value": 0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "successful_payments",
+              "value": 0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "failed_payments",
+              "value": 0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "total_customers",
+              "value": 0,
+              "verified": true,
+              "source": "customers"
+            },
+            {
+              "fact": "total_orders",
+              "value": 0,
+              "verified": true,
+              "source": "orders"
+            }
+          ],
+          "derived_metrics": {
+            "average_order_value": 0.0,
+            "signals": []
+          },
+          "retrieved_context": [
+            {
+              "source_type": "growth_radar",
+              "source_id": "9241e4ac-a306-4e85-bc80-f5a82eb7531a",
+              "document_id": "9241e4ac-a306-4e85-bc80-f5a82eb7531a",
+              "chunk_id": "radar-30",
+              "similarity": null,
+              "content_preview": "Captured revenue INR 0.00; captured transactions 0; customers 0; orders 0.",
+              "metadata": {
+                "verified": true,
+                "window_days": 30,
+                "signals": []
+              }
+            }
+          ],
+          "inference_allowed": false
+        },
+        "langchain_adapter": "<backend.app.ai.langchain_adapter.adapter.LangChainAgentAdapter object at 0x00000234C3ACDE10>",
+        "memories": [],
+        "ranked_opportunities": []
+      },
+      "errors": [
+        "llm_not_configured"
+      ],
+      "status": "running",
+      "cancelled": false,
+      "cancelled_at_step": null,
+      "totals": {},
+      "debate_id": null,
+      "action_plan": null,
+      "terminal_outcome": {},
+      "branch:to:team_manager": null
+    },
+    "channel_versions": {
+      "__start__": 2,
+      "merchant_id": 2,
+      "run_id": 2,
+      "workflow_id": 2,
+      "mode": 2,
+      "objective": 2,
+      "window_days": 2,
+      "params": 2,
+      "generation": 2,
+      "current_step_index": 17,
+      "selected_specialists": 2,
+      "agents_run": 17,
+      "resumed_steps": 2,
+      "needs_reconciliation": 2,
+      "opportunities": 2,
+      "ranked_opportunities": 17,
+      "findings": 2,
+      "actions_proposed": 2,
+      "tool_records": 2,
+      "shared_memory": 17,
+      "errors": 13,
+      "status": 3,
+      "cancelled": 3,
+      "cancelled_at_step": 2,
+      "totals": 2,
+      "debate_id": 2,
+      "action_plan": 2,
+      "terminal_outcome": 2,
+      "branch:to:validate_request": 3,
+      "branch:to:load_context": 4,
+      "branch:to:team_memory_load": 5,
+      "branch:to:team_discovery": 6,
+      "branch:to:team_customer_intel": 7,
+      "branch:to:team_revenue_opt": 8,
+      "branch:to:team_payment_recovery": 9,
+      "branch:to:team_marketing": 10,
+      "branch:to:team_product": 11,
+      "branch:to:team_campaign_strategist": 12,
+      "branch:to:team_designer": 13,
+      "branch:to:team_experiment": 14,
+      "branch:to:team_prioritization": 15,
+      "branch:to:team_software": 16,
+      "branch:to:team_personalization": 17,
+      "branch:to:team_manager": 17
+    },
+    "versions_seen": {
+      "__input__": {},
+      "__start__": {
+        "__start__": 1
+      },
+      "validate_request": {
+        "branch:to:validate_request": 2
+      },
+      "load_context": {
+        "branch:to:load_context": 3
+      },
+      "team_memory_load": {
+        "branch:to:team_memory_load": 4
+      },
+      "team_discovery": {
+        "branch:to:team_discovery": 5
+      },
+      "team_customer_intel": {
+        "branch:to:team_customer_intel": 6
+      },
+      "team_revenue_opt": {
+        "branch:to:team_revenue_opt": 7
+      },
+      "team_payment_recovery": {
+        "branch:to:team_payment_recovery": 8
+      },
+      "team_marketing": {
+        "branch:to:team_marketing": 9
+      },
+      "team_product": {
+        "branch:to:team_product": 10
+      },
+      "team_campaign_strategist": {
+        "branch:to:team_campaign_strategist": 11
+      },
+      "team_designer": {
+        "branch:to:team_designer": 12
+      },
+      "team_experiment": {
+        "branch:to:team_experiment": 13
+      },
+      "team_prioritization": {
+        "branch:to:team_prioritization": 14
+      },
+      "team_software": {
+        "branch:to:team_software": 15
+      },
+      "team_personalization": {
+        "branch:to:team_personalization": 16
+      }
+    },
+    "updated_channels": [
+      "agents_run",
+      "branch:to:team_manager",
+      "current_step_index",
+      "ranked_opportunities",
+      "shared_memory"
+    ]
+  },
+  "metadata": {
+    "source": "loop",
+    "step": 15,
+    "parents": {}
+  },
+  "channel_versions": {
+    "current_step_index": 17,
+    "agents_run": 17,
+    "ranked_opportunities": 17,
+    "shared_memory": 17,
+    "branch:to:team_personalization": 17,
+    "branch:to:team_manager": 17
+  }
+}

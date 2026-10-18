@@ -1,0 +1,155 @@
+[
+  [
+    "current_step_index",
+    1
+  ],
+  [
+    "agents_run",
+    [
+      {
+        "agent_name": "GrowthMemoryAgent",
+        "step_key": "team:000:GrowthMemoryAgent:load:632fb95926da5f442aeb7b73",
+        "status": "completed",
+        "opportunities_created": 0,
+        "actions_proposed": 0,
+        "tools_used": [
+          "memory_retrieve",
+          "memory_record"
+        ],
+        "errors": []
+      }
+    ]
+  ],
+  [
+    "shared_memory",
+    {
+      "rag_context": {
+        "merchant_id": "3cdc8486-a7e1-4f2e-a907-009cf6d3a800",
+        "query": "recover failed payments",
+        "status": "insufficient_data",
+        "data_sufficiency": {
+          "status": "insufficient_data",
+          "message": "More real captured transactions are required to generate a reliable growth signal (1 recorded, 3 required).",
+          "minimum_required": 3,
+          "available": 1
+        },
+        "verified_facts": [
+          {
+            "fact": "captured_revenue",
+            "value": 40000.0,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "captured_transactions",
+            "value": 1,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "successful_payments",
+            "value": 1,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "failed_payments",
+            "value": 1,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "total_customers",
+            "value": 1,
+            "verified": true,
+            "source": "customers"
+          },
+          {
+            "fact": "total_orders",
+            "value": 2,
+            "verified": true,
+            "source": "orders"
+          }
+        ],
+        "derived_metrics": {
+          "average_order_value": 40000.0,
+          "signals": [
+            {
+              "signal": "payment_failures",
+              "title": "1 payment failures worth \u20b92000.00 in the last 30 days",
+              "observed_data": {
+                "failed_count": 1,
+                "source": "payments.status='failed'"
+              },
+              "calculated_metric": "failed_payment_value_inr",
+              "opportunity": "Payment recovery opportunity",
+              "confidence": 0.311,
+              "reason": "Observed failed_payment_value_inr from 30-day PostgreSQL payment/order data.",
+              "recommended_action": "Review failed transactions and offer a compliant payment-recovery path."
+            },
+            {
+              "signal": "payment_recovery_opportunity",
+              "title": "Recoverable failed-payment revenue of \u20b92000.00",
+              "observed_data": {
+                "failed_count": 1
+              },
+              "calculated_metric": "recoverable_revenue_inr",
+              "opportunity": "Recover failed-payment revenue",
+              "confidence": 0.311,
+              "reason": "Observed recoverable_revenue_inr from 30-day PostgreSQL payment/order data.",
+              "recommended_action": "Follow up on the recorded failed payments using an approved recovery workflow."
+            }
+          ]
+        },
+        "retrieved_context": [
+          {
+            "source_type": "growth_radar",
+            "source_id": "3cdc8486-a7e1-4f2e-a907-009cf6d3a800",
+            "document_id": "3cdc8486-a7e1-4f2e-a907-009cf6d3a800",
+            "chunk_id": "radar-30",
+            "similarity": null,
+            "content_preview": "Captured revenue INR 40000.00; captured transactions 1; customers 1; orders 2.",
+            "metadata": {
+              "verified": true,
+              "window_days": 30,
+              "signals": [
+                {
+                  "signal": "payment_failures",
+                  "title": "1 payment failures worth \u20b92000.00 in the last 30 days",
+                  "observed_data": {
+                    "failed_count": 1,
+                    "source": "payments.status='failed'"
+                  },
+                  "calculated_metric": "failed_payment_value_inr",
+                  "opportunity": "Payment recovery opportunity",
+                  "confidence": 0.311,
+                  "reason": "Observed failed_payment_value_inr from 30-day PostgreSQL payment/order data.",
+                  "recommended_action": "Review failed transactions and offer a compliant payment-recovery path."
+                },
+                {
+                  "signal": "payment_recovery_opportunity",
+                  "title": "Recoverable failed-payment revenue of \u20b92000.00",
+                  "observed_data": {
+                    "failed_count": 1
+                  },
+                  "calculated_metric": "recoverable_revenue_inr",
+                  "opportunity": "Recover failed-payment revenue",
+                  "confidence": 0.311,
+                  "reason": "Observed recoverable_revenue_inr from 30-day PostgreSQL payment/order data.",
+                  "recommended_action": "Follow up on the recorded failed payments using an approved recovery workflow."
+                }
+              ]
+            }
+          }
+        ],
+        "inference_allowed": false
+      },
+      "langchain_adapter": "<backend.app.ai.langchain_adapter.adapter.LangChainAgentAdapter object at 0x000002179802B6D0>",
+      "memories": []
+    }
+  ],
+  [
+    "branch:to:team_discovery",
+    null
+  ]
+]

@@ -1,0 +1,216 @@
+[
+  [
+    "current_step_index",
+    2
+  ],
+  [
+    "agents_run",
+    [
+      {
+        "agent_name": "GrowthDiscoveryAgent",
+        "step_key": "deep:001:GrowthDiscoveryAgent:-:2f1a7ab9eeee71a8e4635aee",
+        "status": "completed",
+        "opportunities_created": 4,
+        "actions_proposed": 0,
+        "tools_used": [
+          "growth_radar",
+          "opportunity_upsert",
+          "opportunity_scoring"
+        ],
+        "errors": []
+      }
+    ]
+  ],
+  [
+    "shared_memory",
+    {
+      "rag_context": {
+        "merchant_id": "19e2f150-1ee5-4d22-9895-825cebfed8dc",
+        "query": "Improve overall growth",
+        "status": "insufficient_data",
+        "data_sufficiency": {
+          "status": "insufficient_data",
+          "message": "More real captured transactions are required to generate a reliable growth signal (0 recorded, 3 required).",
+          "minimum_required": 3,
+          "available": 0
+        },
+        "verified_facts": [
+          {
+            "fact": "captured_revenue",
+            "value": 0.0,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "captured_transactions",
+            "value": 0,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "successful_payments",
+            "value": 0,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "failed_payments",
+            "value": 2,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "total_customers",
+            "value": 4,
+            "verified": true,
+            "source": "customers"
+          },
+          {
+            "fact": "total_orders",
+            "value": 2,
+            "verified": true,
+            "source": "orders"
+          }
+        ],
+        "derived_metrics": {
+          "average_order_value": 0.0,
+          "signals": [
+            {
+              "signal": "revenue_drop",
+              "title": "Revenue changed -100.00% over the last 30 days",
+              "observed_data": {
+                "current_window": {
+                  "captured_payments": 0
+                },
+                "previous_window": {
+                  "captured_payments": 4
+                },
+                "threshold_pct": -10.0
+              },
+              "calculated_metric": "captured_revenue_inr",
+              "opportunity": "Revenue recovery opportunity",
+              "confidence": 0.344,
+              "reason": "Observed captured_revenue_inr from 30-day PostgreSQL payment/order data.",
+              "recommended_action": "Investigate the real revenue decline and target retention or recovery work."
+            },
+            {
+              "signal": "unusual_order_behavior",
+              "title": "Order volume shifted -50.00% versus the prior window",
+              "observed_data": {
+                "band_pct": 40.0
+              },
+              "calculated_metric": "order_count",
+              "opportunity": "Growth opportunity",
+              "confidence": 0.366,
+              "reason": "Observed order_count from 30-day PostgreSQL payment/order data.",
+              "recommended_action": "Review the recorded evidence with the merchant team."
+            },
+            {
+              "signal": "payment_failures",
+              "title": "2 payment failures worth \u20b910000.00 in the last 30 days",
+              "observed_data": {
+                "failed_count": 2,
+                "source": "payments.status='failed'"
+              },
+              "calculated_metric": "failed_payment_value_inr",
+              "opportunity": "Payment recovery opportunity",
+              "confidence": 0.322,
+              "reason": "Observed failed_payment_value_inr from 30-day PostgreSQL payment/order data.",
+              "recommended_action": "Review failed transactions and offer a compliant payment-recovery path."
+            },
+            {
+              "signal": "payment_recovery_opportunity",
+              "title": "Recoverable failed-payment revenue of \u20b910000.00",
+              "observed_data": {
+                "failed_count": 2
+              },
+              "calculated_metric": "recoverable_revenue_inr",
+              "opportunity": "Recover failed-payment revenue",
+              "confidence": 0.322,
+              "reason": "Observed recoverable_revenue_inr from 30-day PostgreSQL payment/order data.",
+              "recommended_action": "Follow up on the recorded failed payments using an approved recovery workflow."
+            }
+          ]
+        },
+        "retrieved_context": [
+          {
+            "source_type": "growth_radar",
+            "source_id": "19e2f150-1ee5-4d22-9895-825cebfed8dc",
+            "document_id": "19e2f150-1ee5-4d22-9895-825cebfed8dc",
+            "chunk_id": "radar-30",
+            "similarity": null,
+            "content_preview": "Captured revenue INR 0.00; captured transactions 0; customers 4; orders 2.",
+            "metadata": {
+              "verified": true,
+              "window_days": 30,
+              "signals": [
+                {
+                  "signal": "revenue_drop",
+                  "title": "Revenue changed -100.00% over the last 30 days",
+                  "observed_data": {
+                    "current_window": {
+                      "captured_payments": 0
+                    },
+                    "previous_window": {
+                      "captured_payments": 4
+                    },
+                    "threshold_pct": -10.0
+                  },
+                  "calculated_metric": "captured_revenue_inr",
+                  "opportunity": "Revenue recovery opportunity",
+                  "confidence": 0.344,
+                  "reason": "Observed captured_revenue_inr from 30-day PostgreSQL payment/order data.",
+                  "recommended_action": "Investigate the real revenue decline and target retention or recovery work."
+                },
+                {
+                  "signal": "unusual_order_behavior",
+                  "title": "Order volume shifted -50.00% versus the prior window",
+                  "observed_data": {
+                    "band_pct": 40.0
+                  },
+                  "calculated_metric": "order_count",
+                  "opportunity": "Growth opportunity",
+                  "confidence": 0.366,
+                  "reason": "Observed order_count from 30-day PostgreSQL payment/order data.",
+                  "recommended_action": "Review the recorded evidence with the merchant team."
+                },
+                {
+                  "signal": "payment_failures",
+                  "title": "2 payment failures worth \u20b910000.00 in the last 30 days",
+                  "observed_data": {
+                    "failed_count": 2,
+                    "source": "payments.status='failed'"
+                  },
+                  "calculated_metric": "failed_payment_value_inr",
+                  "opportunity": "Payment recovery opportunity",
+                  "confidence": 0.322,
+                  "reason": "Observed failed_payment_value_inr from 30-day PostgreSQL payment/order data.",
+                  "recommended_action": "Review failed transactions and offer a compliant payment-recovery path."
+                },
+                {
+                  "signal": "payment_recovery_opportunity",
+                  "title": "Recoverable failed-payment revenue of \u20b910000.00",
+                  "observed_data": {
+                    "failed_count": 2
+                  },
+                  "calculated_metric": "recoverable_revenue_inr",
+                  "opportunity": "Recover failed-payment revenue",
+                  "confidence": 0.322,
+                  "reason": "Observed recoverable_revenue_inr from 30-day PostgreSQL payment/order data.",
+                  "recommended_action": "Follow up on the recorded failed payments using an approved recovery workflow."
+                }
+              ]
+            }
+          }
+        ],
+        "inference_allowed": false
+      },
+      "langchain_adapter": "<backend.app.ai.langchain_adapter.adapter.LangChainAgentAdapter object at 0x0000021ACB67BA50>",
+      "memories": []
+    }
+  ],
+  [
+    "branch:to:deep_customer_intel",
+    null
+  ]
+]

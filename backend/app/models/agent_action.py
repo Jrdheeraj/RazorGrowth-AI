@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -50,6 +50,23 @@ class AgentAction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     requested_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     approved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: Stable fingerprint of a LOGICALLY IDENTICAL proposal, scoped to the
+    #: merchant. Two calls proposing the same thing for the same workflow --
+    #: a retry, a replay, two workers racing -- produce the same key, and the
+    #: unique constraint turns the second into a reference to the first.
+    #:
+    #: NULL means "no idempotency was offered", which is how every caller
+    #: behaved before this column existed; NULLs do not collide in PostgreSQL
+    #: or SQLite, so historical rows need no backfill.
+    idempotency_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    #: The cycle this proposal came from, when known. Lets a merchant trace a
+    #: pending action back to the workflow that produced it, and keeps the
+    #: idempotency scope tied to one execution rather than to all time.
+    workflow_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("agent_workflow_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     # Structured payloads stored as JSONB — typed at application layer
     input_payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     output_payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
@@ -71,6 +88,15 @@ class AgentAction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     __table_args__ = (
         # FK columns use index=True; no duplicate Index() entries needed.
+        #
+        # Enforced in the DATABASE, not by a read-then-write check in Python:
+        # two concurrent retries can both miss a prior lookup, and only a
+        # unique index makes the second one lose deterministically.
+        UniqueConstraint(
+            "merchant_id",
+            "idempotency_key",
+            name="uq_agent_actions_merchant_idempotency",
+        ),
     )
 
     def __repr__(self) -> str:

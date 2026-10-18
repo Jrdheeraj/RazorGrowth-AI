@@ -30,11 +30,14 @@ httpx==0.28.1                     # HTTP client (tooling, tests, integration pat
 # ── Payments ────────────────────────────────────────────────────────────────
 razorpay==2.0.1                   # Razorpay TEST-mode orders, payments, webhooks
 
-# ── AI / LLM ────────────────────────────────────────────────────────────────
+# ── AI / LLM / Multi-Agent Graph ─────────────────────────────────────────────
 openai==1.58.1                    # OpenAI SDK powering the provider layer
                                   # (Cloudflare Workers AI / OpenAI — backend/app/ai/llm).
                                    # Cloudflare is reached through its documented OpenAI-compatible endpoint,
                                    # so one SDK serves both providers.
+langchain-core==1.6.12            # Unified prompt, message, tool, and model abstractions
+langgraph==1.2.16                 # Stateful multi-agent graph execution, state reducers, and checkpoints
+langchain==1.4.6                  # High-level agent and tool integration utilities
 
 # ── Testing ─────────────────────────────────────────────────────────────────
 pytest==9.1.1                     # backend test suite (673 tests, SQLite-compatible)

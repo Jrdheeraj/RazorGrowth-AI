@@ -1,0 +1,18 @@
+[
+  [
+    "status",
+    "running"
+  ],
+  [
+    "current_step_index",
+    0
+  ],
+  [
+    "cancelled",
+    false
+  ],
+  [
+    "branch:to:load_context",
+    null
+  ]
+]

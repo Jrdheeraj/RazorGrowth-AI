@@ -49,6 +49,23 @@ async def lifespan(app: FastAPI):
     )
     init_db(engine)
     log.info("Database connection pool initialised.")
+
+    try:
+        from backend.app.db.session import get_session_factory
+        from backend.app.services.workflow_run_service import (
+            reconcile_orphan_runs,
+            sweep_stale_workflows,
+        )
+
+        startup_db = get_session_factory()()
+        try:
+            sweep_stale_workflows(startup_db, max_batch=50)
+            reconcile_orphan_runs(startup_db, stale_after_seconds=0)
+        finally:
+            startup_db.close()
+    except Exception:
+        log.exception("Startup orphan reconciliation encountered an error")
+
     yield
     log.info("Shutting down.")
 
@@ -132,6 +149,11 @@ from backend.app.api.routes.designer import router as designer_router
 # Specialist workspace APIs (tool catalog, single-agent launch, handoffs,
 # personalization). Feeds the EXISTING AI Team dashboard — no new page.
 from backend.app.api.routes.specialists import router as specialists_router
+# Manager Agent coordination APIs (goal intake, validated plan, workflow
+# status, real metrics, pending proposals). Planning is deliberately kept
+# separate from the orchestrator's execution endpoint so a plan can be
+# created without running anything.
+from backend.app.api.routes.manager import router as manager_router
 
 app.include_router(health_router, prefix="/api")
 app.include_router(opportunities_router, prefix="/api")
@@ -170,6 +192,8 @@ app.include_router(designer_router, prefix="/api")
 # Specialist workspace routes (AI Team dashboard data: tool catalog,
 # single-agent run, cross-agent handoffs, personalization decisions)
 app.include_router(specialists_router, prefix="/api")
+# Manager Agent coordination routes (plan, workflow status, metrics, queue)
+app.include_router(manager_router, prefix="/api")
 
 
 @app.get("/")

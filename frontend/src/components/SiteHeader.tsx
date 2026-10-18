@@ -53,6 +53,11 @@ const AI_TEAM_MENU = [
     desc: "Team dashboard",
   },
   {
+    to: "/manager-agent",
+    label: "Manager Agent",
+    desc: "Autonomous growth orchestrator",
+  },
+  {
     to: "/product-agent",
     label: "Product Agent",
     desc: "Product research and growth",
@@ -67,13 +72,20 @@ const AI_TEAM_MENU = [
     label: "Designer Agent",
     desc: "Creative intelligence and automated design",
   },
+  {
+    to: "/software-agent",
+    label: "Software Agent",
+    desc: "Technical feasibility and automation",
+  },
 ] as const;
 
 const AI_TEAM_ROUTES = new Set([
   "/agents",
+  "/manager-agent",
   "/product-agent",
   "/marketing-agent",
   "/designer-agent",
+  "/software-agent",
 ]);
 
 /** Must match the CSS breakpoint that swaps `.site-nav` for `.nav-toggle`. */
@@ -177,8 +189,23 @@ const IconPalette = () => (
   </NavIcon>
 );
 
+const IconCode = () => (
+  <NavIcon>
+    <polyline points="16 18 22 12 16 6" />
+    <polyline points="8 6 2 12 8 18" />
+  </NavIcon>
+);
+
+const IconCrown = () => (
+  <NavIcon>
+    <path d="M2 19h20M4 15l3-8 5 4 5-4 3 8H4z" />
+  </NavIcon>
+);
+
 /** Per-destination icon for the AI Team dropdown. */
 function AiMenuIcon({ to }: { to: string }) {
+  if (to === "/manager-agent") return <IconCrown />;
+  if (to === "/software-agent") return <IconCode />;
   if (to === "/product-agent") return <IconCart />;
   if (to === "/marketing-agent") return <IconDebates />;
   if (to === "/designer-agent") return <IconPalette />;

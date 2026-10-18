@@ -1,0 +1,343 @@
+{
+  "checkpoint": {
+    "v": 4,
+    "ts": "2026-10-17T15:43:43.034135+00:00",
+    "id": "1f1ca418-81ad-66e8-8010-e0dab36bddb2",
+    "channel_values": {
+      "merchant_id": "5f5cfd7c-4f77-4228-bd05-c9b272400d22",
+      "run_id": "reuse_bbf0478f",
+      "workflow_id": "e915cca7-770d-4eac-a9ea-648780bb640c",
+      "mode": "fast",
+      "objective": "Initial Run",
+      "window_days": 30,
+      "params": {
+        "objective": "Initial Run"
+      },
+      "generation": 2,
+      "current_step_index": 4,
+      "selected_specialists": [],
+      "agents_run": [
+        {
+          "agent_name": "GrowthMemoryAgent",
+          "step_key": "fast:000:GrowthMemoryAgent:load:6770345103642257f81197e0",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "memory_retrieve",
+            "memory_record"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "GrowthDiscoveryAgent",
+          "step_key": "fast:001:GrowthDiscoveryAgent:-:83ec23d526bc8f2a98c41b2f",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "growth_radar",
+            "opportunity_upsert",
+            "opportunity_scoring"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "PaymentRecoveryAgent",
+          "step_key": "fast:002:PaymentRecoveryAgent:-:441a89a1cb340f0ca3470568",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "failed_payment_scan",
+            "recovery_simulation",
+            "phase4_propose",
+            "failed_payment_scan"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "OpportunityPrioritizationAgent",
+          "step_key": "fast:003:OpportunityPrioritizationAgent:-:931b0b25bda6e37ef9c89ef5",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "opportunity_scoring"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "GrowthMemoryAgent",
+          "step_key": "fast:000:GrowthMemoryAgent:load:6770345103642257f81197e0",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "memory_retrieve",
+            "memory_record"
+          ],
+          "errors": [],
+          "reused": true
+        },
+        {
+          "agent_name": "GrowthDiscoveryAgent",
+          "step_key": "fast:001:GrowthDiscoveryAgent:-:83ec23d526bc8f2a98c41b2f",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "growth_radar",
+            "opportunity_upsert",
+            "opportunity_scoring"
+          ],
+          "errors": [],
+          "reused": true
+        },
+        {
+          "agent_name": "PaymentRecoveryAgent",
+          "step_key": "fast:002:PaymentRecoveryAgent:-:441a89a1cb340f0ca3470568",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "failed_payment_scan",
+            "recovery_simulation",
+            "phase4_propose",
+            "failed_payment_scan"
+          ],
+          "errors": [],
+          "reused": true
+        },
+        {
+          "agent_name": "OpportunityPrioritizationAgent",
+          "step_key": "fast:003:OpportunityPrioritizationAgent:-:931b0b25bda6e37ef9c89ef5",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "opportunity_scoring"
+          ],
+          "errors": [],
+          "reused": true
+        }
+      ],
+      "resumed_steps": [
+        {
+          "step_index": 0,
+          "step_key": "fast:000:GrowthMemoryAgent:load:6770345103642257f81197e0",
+          "agent": "GrowthMemoryAgent",
+          "phase": "load"
+        },
+        {
+          "step_index": 1,
+          "step_key": "fast:001:GrowthDiscoveryAgent:-:83ec23d526bc8f2a98c41b2f",
+          "agent": "GrowthDiscoveryAgent",
+          "phase": null
+        },
+        {
+          "step_index": 2,
+          "step_key": "fast:002:PaymentRecoveryAgent:-:441a89a1cb340f0ca3470568",
+          "agent": "PaymentRecoveryAgent",
+          "phase": null
+        },
+        {
+          "step_index": 3,
+          "step_key": "fast:003:OpportunityPrioritizationAgent:-:931b0b25bda6e37ef9c89ef5",
+          "agent": "OpportunityPrioritizationAgent",
+          "phase": null
+        }
+      ],
+      "needs_reconciliation": [],
+      "opportunities": [],
+      "ranked_opportunities": [],
+      "findings": [],
+      "actions_proposed": [],
+      "tool_records": [],
+      "shared_memory": {
+        "rag_context": {
+          "merchant_id": "5f5cfd7c-4f77-4228-bd05-c9b272400d22",
+          "query": "Initial Run",
+          "status": "insufficient_data",
+          "data_sufficiency": {
+            "status": "insufficient_data",
+            "message": "No real Razorpay test data available. Create test orders/payments via Checkout to view growth metrics.",
+            "minimum_required": 3,
+            "available": 0
+          },
+          "verified_facts": [
+            {
+              "fact": "captured_revenue",
+              "value": 0.0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "captured_transactions",
+              "value": 0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "successful_payments",
+              "value": 0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "failed_payments",
+              "value": 0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "total_customers",
+              "value": 0,
+              "verified": true,
+              "source": "customers"
+            },
+            {
+              "fact": "total_orders",
+              "value": 0,
+              "verified": true,
+              "source": "orders"
+            }
+          ],
+          "derived_metrics": {
+            "average_order_value": 0.0,
+            "signals": []
+          },
+          "retrieved_context": [
+            {
+              "source_type": "growth_radar",
+              "source_id": "5f5cfd7c-4f77-4228-bd05-c9b272400d22",
+              "document_id": "5f5cfd7c-4f77-4228-bd05-c9b272400d22",
+              "chunk_id": "radar-30",
+              "similarity": null,
+              "content_preview": "Captured revenue INR 0.00; captured transactions 0; customers 0; orders 0.",
+              "metadata": {
+                "verified": true,
+                "window_days": 30,
+                "signals": []
+              }
+            }
+          ],
+          "inference_allowed": false
+        },
+        "langchain_adapter": "<backend.app.ai.langchain_adapter.adapter.LangChainAgentAdapter object at 0x000001DD843835D0>",
+        "memories": [],
+        "ranked_opportunities": []
+      },
+      "errors": [],
+      "status": "completed",
+      "cancelled": false,
+      "cancelled_at_step": null,
+      "totals": {
+        "opportunities_created": 0,
+        "actions_proposed": 0,
+        "signals_detected": 0,
+        "insights_generated": 0,
+        "experiments_proposed": 0,
+        "failed_agents": 0,
+        "reused_steps": 4,
+        "agents_completed": 8
+      },
+      "debate_id": null,
+      "action_plan": null,
+      "terminal_outcome": {
+        "status": "completed",
+        "totals": {
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "signals_detected": 0,
+          "insights_generated": 0,
+          "experiments_proposed": 0,
+          "failed_agents": 0,
+          "reused_steps": 4,
+          "agents_completed": 8
+        },
+        "errors": []
+      }
+    },
+    "channel_versions": {
+      "__start__": 11,
+      "merchant_id": 11,
+      "run_id": 11,
+      "workflow_id": 11,
+      "mode": 11,
+      "objective": 11,
+      "window_days": 11,
+      "params": 11,
+      "generation": 11,
+      "current_step_index": 17,
+      "selected_specialists": 11,
+      "agents_run": 17,
+      "resumed_steps": 17,
+      "needs_reconciliation": 11,
+      "opportunities": 11,
+      "ranked_opportunities": 11,
+      "findings": 11,
+      "actions_proposed": 11,
+      "tool_records": 11,
+      "shared_memory": 13,
+      "errors": 11,
+      "status": 18,
+      "cancelled": 12,
+      "cancelled_at_step": 11,
+      "totals": 18,
+      "debate_id": 11,
+      "action_plan": 11,
+      "terminal_outcome": 18,
+      "branch:to:validate_request": 12,
+      "branch:to:load_context": 13,
+      "branch:to:fast_memory_load": 14,
+      "branch:to:fast_discovery": 15,
+      "branch:to:fast_payment_recovery": 16,
+      "branch:to:fast_prioritization": 17,
+      "branch:to:finalize_workflow": 18
+    },
+    "versions_seen": {
+      "__input__": {},
+      "__start__": {
+        "__start__": 10
+      },
+      "validate_request": {
+        "branch:to:validate_request": 11
+      },
+      "load_context": {
+        "branch:to:load_context": 12
+      },
+      "fast_memory_load": {
+        "branch:to:fast_memory_load": 13
+      },
+      "fast_discovery": {
+        "branch:to:fast_discovery": 14
+      },
+      "fast_payment_recovery": {
+        "branch:to:fast_payment_recovery": 15
+      },
+      "fast_prioritization": {
+        "branch:to:fast_prioritization": 16
+      },
+      "finalize_workflow": {
+        "branch:to:finalize_workflow": 17
+      }
+    },
+    "updated_channels": [
+      "status",
+      "terminal_outcome",
+      "totals"
+    ]
+  },
+  "metadata": {
+    "source": "loop",
+    "step": 16,
+    "parents": {}
+  },
+  "channel_versions": {
+    "status": 18,
+    "totals": 18,
+    "terminal_outcome": 18,
+    "branch:to:finalize_workflow": 18
+  }
+}

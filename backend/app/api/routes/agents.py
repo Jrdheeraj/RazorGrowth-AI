@@ -139,6 +139,83 @@ def get_agent_run(
     }
 
 
+@router.get("/agents/active-run")
+def get_active_run(
+    stale_after_seconds: int = Query(default=900, ge=5, le=86400),
+    db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(merchant_ctx),
+) -> Any:
+    """
+    Authoritative, READ-ONLY answer to "is an analysis really running?".
+
+    This is what the dashboard's mount and poll paths call. It exists because
+    the previous behaviour inferred liveness from the mere PRESENCE of a
+    ``running`` row, which a crashed worker leaves behind -- so a dead run was
+    reported as active forever and the page showed "ANALYZING..." indefinitely.
+
+    Three guarantees:
+
+    * **Read-only.** It never creates, mutates or cancels anything. Opening the
+      page, refreshing, remounting under StrictMode and polling all call this and
+      all are safe, which is precisely why the staleness bound can live here
+      instead of being faked in the client.
+    * **Liveness-bounded.** A row counts as active only while its heartbeat (or,
+      for pre-tracking rows, its last update) is inside the staleness window.
+    * **Tenant-scoped.** Another tenant's cycle is indistinguishable from none.
+
+    Returns ``{"active": false, "idle_reason": ...}`` when nothing is running,
+    which is the correct answer for a freshly opened dashboard.
+    """
+    from backend.app.services.workflow_run_service import active_run_report
+
+    return active_run_report(
+        db, merchant_id=ctx.merchant_id, stale_after_seconds=stale_after_seconds
+    ).to_dict()
+
+
+@router.post("/agents/runs/{run_id}/cancel")
+def cancel_agent_run(
+    run_id: str,
+    db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(operator_ctx),
+) -> Any:
+    """
+    Request cancellation of a specific analysis cycle.
+
+    Stops the orchestrator starting any further step, terminalises the cycle as
+    ``cancelled`` immediately, and closes out the step that was in flight.
+
+    Scope is exactly one run: the run id in the path, resolved within the
+    caller's merchant. A cycle belonging to another tenant is a 404, not a 403,
+    so this endpoint leaks no existence information.
+
+    A cycle that has already finished is returned unchanged. Terminal really
+    means terminal -- a late cancellation cannot rewrite a completed outcome.
+    """
+    from backend.app.services.workflow_run_service import (
+        StaleLeaseError,
+        WorkflowNotFound,
+        request_cancel,
+    )
+
+    try:
+        row = request_cancel(db, merchant_id=ctx.merchant_id, run_id=run_id)
+    except WorkflowNotFound:
+        raise HTTPException(status_code=404, detail="RUN_NOT_FOUND")
+    except StaleLeaseError as exc:
+        # The cycle moved under us (a takeover). Report honestly rather than
+        # pretending the cancellation landed.
+        raise HTTPException(status_code=409, detail="RUN_SUPERSEDED")
+    return {
+        "orchestrator_run_id": row.run_id,
+        "status": str(getattr(row.status, "value", row.status)),
+        "cancel_requested_at": (
+            row.cancel_requested_at.isoformat() if row.cancel_requested_at else None
+        ),
+        "cancelled": str(getattr(row.status, "value", row.status)) == "cancelled",
+    }
+
+
 @router.post("/agents/run", response_model=OrchestratorRunResponse)
 def run_agents(
     request: AgentRunRequest,
@@ -205,9 +282,61 @@ def run_agents(
     # the identical cycle id BEFORE the sequential plan starts.
     cycle_id: str | None = None
     if request.mode == "team":
+        # ── duplicate-start guard (server side) ──────────────────────────
+        # The browser guards double-clicks with React state, which is advisory:
+        # two tabs, a retry, or a refresh mid-request all bypass it. Here the
+        # database is the authority. If this merchant already has a live cycle,
+        # that cycle is RETURNED rather than a second one created -- an explicit
+        # Start therefore yields exactly one run, and a repeated Start is
+        # idempotent instead of doubling the work.
+        #
+        # Deliberately keyed on the merchant's own cycles only, so independent
+        # merchants are entirely unaffected.
+        from backend.app.services.workflow_run_service import active_run_report
+
+        existing = active_run_report(db, merchant_id=merchant_id)
+        if existing.active and existing.run_id:
+            log.info(
+                "Start Analysis for merchant %s joined existing live cycle %s "
+                "instead of creating a duplicate",
+                merchant_id, existing.run_id,
+            )
+            response.status_code = 202
+            return {
+                "orchestrator_run_id": existing.run_id,
+                "merchant_id": str(merchant_id),
+                "mode": request.mode,
+                "status": "running",
+                "totals": {
+                    "opportunities_created": 0,
+                    "actions_proposed": 0,
+                    "signals_detected": 0,
+                    "insights_generated": 0,
+                    "experiments_proposed": 0,
+                    "failed_agents": 0,
+                    "reused_steps": 0,
+                },
+                "agents": [],
+                "ranked_opportunities": [],
+                "resumed": True,
+                "deduplicated": True,
+            }
+
         cycle_id = uuid.uuid4().hex
+        from backend.app.services.workflow_run_service import WorkflowRunService
+        from backend.app.agents.orchestrator import AI_TEAM_PLAN
+
+        wf = WorkflowRunService(db)
+        workflow_row, _ = wf.start_workflow(
+            merchant_id=merchant_id,
+            run_id=cycle_id,
+            mode="team",
+            plan=AI_TEAM_PLAN,
+        )
+        db.commit()
+
         try:
-            _start_team_marketing_agent(db, merchant_id, params, cycle_id)
+            _start_team_marketing_agent(db, merchant_id, params, cycle_id, workflow_id=workflow_row.id)
         except Exception:
             # Isolation boundary (defense in depth — the helper already
             # contains its own failures): Start Analysis never fails
@@ -221,7 +350,7 @@ def run_agents(
         # alongside the Marketing Agent above, never in front of it: both
         # are dispatched and neither waits for the other.
         try:
-            _start_team_product_agent(db, merchant_id, params, cycle_id)
+            _start_team_product_agent(db, merchant_id, params, cycle_id, workflow_id=workflow_row.id)
         except Exception:
             log.exception("AI Team Product Agent startup failed (isolated)")
             try:
@@ -313,8 +442,9 @@ def _run_team_orchestrator_worker(
     a crash best-effort marks still-running rows FAILED instead of
     leaving them stuck.
     """
-    db: Session = session_factory()
+    db: Session | None = None
     try:
+        db = session_factory()
         from backend.app.agents.orchestrator import (
             GrowthAgentOrchestrator as _GAO,
         )
@@ -349,43 +479,67 @@ def _run_team_orchestrator_worker(
             db.rollback()
     except Exception:
         log.exception("Team orchestrator worker crashed for cycle %s", cycle_id)
-        try:
-            db.rollback()
-        except Exception:
-            pass
-        try:
-            from datetime import datetime, timezone
-
-            from sqlalchemy import select as _select
-
-            from backend.app.models.agent_run import AgentRun
-            from backend.app.models.enums import AgentRunStatus
-
-            stuck = list(
-                db.scalars(
-                    _select(AgentRun).where(
-                        AgentRun.merchant_id == merchant_id,
-                        AgentRun.orchestrator_run_id == cycle_id,
-                        AgentRun.status == AgentRunStatus.running,
-                    )
-                ).all()
-            )
-            for row in stuck:
-                row.status = AgentRunStatus.failed
-                row.completed_at = datetime.now(timezone.utc)
-                row.errors = list(row.errors or []) + ["worker_crashed"]
-            db.commit()
-        except Exception:
-            log.error("Team worker: could not persist failure state for %s", cycle_id)
+        if db is not None:
             try:
                 db.rollback()
             except Exception:
                 pass
+            try:
+                from datetime import datetime, timezone
+
+                from sqlalchemy import select as _select
+
+                from backend.app.agents.marketing_agi.cycle import (
+                    MARKETING_AGI_AGENT_NAME,
+                )
+                from backend.app.agents.product_agi.cycle import (
+                    PRODUCT_AGENT_AGENT_NAME,
+                )
+                from backend.app.models.agent_run import AgentRun
+                from backend.app.models.agent_workflow import AgentWorkflowRun
+                from backend.app.models.enums import AgentRunStatus, WorkflowStatus
+
+                # Fail only orchestrator-owned agent runs that were mid-flight.
+                # MarketingAGI and ProductAGI are independent parallel workers
+                # with their own isolated error handlers.
+                stuck = list(
+                    db.scalars(
+                        _select(AgentRun).where(
+                            AgentRun.merchant_id == merchant_id,
+                            AgentRun.orchestrator_run_id == cycle_id,
+                            AgentRun.status == AgentRunStatus.running,
+                            AgentRun.agent_name.notin_([MARKETING_AGI_AGENT_NAME, PRODUCT_AGENT_AGENT_NAME]),
+                        )
+                    ).all()
+                )
+                for row in stuck:
+                    row.status = AgentRunStatus.failed
+                    row.completed_at = datetime.now(timezone.utc)
+                    row.errors = list(row.errors or []) + ["worker_crashed"]
+
+                wf_row = db.scalar(
+                    _select(AgentWorkflowRun).where(
+                        AgentWorkflowRun.merchant_id == merchant_id,
+                        AgentWorkflowRun.run_id == cycle_id,
+                    )
+                )
+                if wf_row and wf_row.status == WorkflowStatus.running.value:
+                    wf_row.status = WorkflowStatus.failed.value
+                    wf_row.completed_at = datetime.now(timezone.utc)
+                    wf_row.errors = list(wf_row.errors or []) + ["worker_crashed"]
+                db.commit()
+            except Exception:
+                log.error("Team worker: could not persist failure state for %s", cycle_id)
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
     finally:
-        try:
-            db.close()
-        except Exception:
-            pass
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass
 
 
 def _start_team_marketing_agent(
@@ -393,6 +547,7 @@ def _start_team_marketing_agent(
     merchant_id: uuid.UUID,
     params: dict[str, Any],
     cycle_id: str,
+    workflow_id: uuid.UUID | None = None,
 ) -> None:
     """Start the Marketing Agent as part of an AI Team analysis cycle.
 
@@ -424,6 +579,7 @@ def _start_team_marketing_agent(
             orchestrator_run_id=cycle_id,
             mode="team",
             input_summary={"objective": objective[:200]},
+            workflow_id=workflow_id,
         )
         db.flush()
         from backend.app.db.session import get_session_factory
@@ -457,6 +613,7 @@ def _start_team_product_agent(
     merchant_id: uuid.UUID,
     params: dict[str, Any],
     cycle_id: str,
+    workflow_id: uuid.UUID | None = None,
 ) -> None:
     """Start the Product Agent as part of an AI Team analysis cycle.
 
@@ -492,6 +649,7 @@ def _start_team_product_agent(
             orchestrator_run_id=cycle_id,
             mode="team",
             input_summary={"objective": objective[:200]},
+            workflow_id=workflow_id,
         )
         db.flush()
         from backend.app.db.session import get_session_factory

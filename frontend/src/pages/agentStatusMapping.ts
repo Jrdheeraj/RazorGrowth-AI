@@ -82,8 +82,11 @@ export interface ProductSlot {
   progress: number | null;
 }
 
-export function productAgentOfficeSlot(productRun: ProductAgentRun | null): ProductSlot {
-  if (!productRun) {
+export function productAgentOfficeSlot(
+  productRun: ProductAgentRun | null,
+  isWorking: boolean = true,
+): ProductSlot {
+  if (!productRun || (!isWorking && (productRun.status === "running" || productRun.status === "queued" || productRun.status === "executing"))) {
     return {
       live: "IDLE",
       chip: "IDLE",
@@ -236,12 +239,13 @@ export function productAgentOfficeSlot(productRun: ProductAgentRun | null): Prod
 export function marketingAgentOfficeSlot(
   magiRun: MarketingAGIRun | null,
   magiCampaigns: MarketingAGICampaign[],
+  isWorking: boolean = true,
 ): MagiSlot {
   const tools: string[] = magiRun
     ? Array.from(new Set((magiRun.state?.tool_calls ?? []).map((c) => c.tool)))
     : [];
   const latestCampaign = magiCampaigns[0] ?? null;
-  if (!magiRun) {
+  if (!magiRun || (!isWorking && (magiRun.status === "running" || magiRun.status === "queued"))) {
     return {
       live: "IDLE",
       chip: "IDLE",

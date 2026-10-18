@@ -256,6 +256,35 @@ class ExecutionResponse(BaseModel):
     message: str
 
 
+class ActionDeleteResponse(BaseModel):
+    """Response schema for action deletion."""
+
+    deleted: bool = True
+    action_id: str
+    message: str = "Action deleted successfully"
+
+
+class ActionBulkDeleteDetail(BaseModel):
+    """Item detail in a bulk action deletion."""
+
+    action_id: str
+    status: str
+    result: str | None = None
+    reason: str | None = None
+    error: str | None = None
+
+
+class ActionBulkDeleteResponse(BaseModel):
+    """Response schema for bulk action deletion."""
+
+    eligible: int
+    deleted: int
+    skipped: int
+    failed: int
+    message: str
+    details: list[dict[str, Any]] = []
+
+
 class AuditEventResponse(BaseModel):
     """Response schema for an audit event."""
 

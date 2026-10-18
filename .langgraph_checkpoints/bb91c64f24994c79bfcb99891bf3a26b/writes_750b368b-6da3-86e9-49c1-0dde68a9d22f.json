@@ -1,0 +1,102 @@
+[
+  [
+    "current_step_index",
+    1
+  ],
+  [
+    "agents_run",
+    [
+      {
+        "agent_name": "GrowthMemoryAgent",
+        "step_key": "growth_team:000:GrowthMemoryAgent:load:7e5f6a209b6f29398b2f3869",
+        "status": "completed",
+        "opportunities_created": 0,
+        "actions_proposed": 0,
+        "tools_used": [
+          "memory_retrieve",
+          "memory_record"
+        ],
+        "errors": []
+      }
+    ]
+  ],
+  [
+    "shared_memory",
+    {
+      "rag_context": {
+        "merchant_id": "f84f4354-77df-4836-ac64-db4214bf36c5",
+        "query": "Improve overall growth",
+        "status": "insufficient_data",
+        "data_sufficiency": {
+          "status": "insufficient_data",
+          "message": "No real Razorpay test data available. Create test orders/payments via Checkout to view growth metrics.",
+          "minimum_required": 3,
+          "available": 0
+        },
+        "verified_facts": [
+          {
+            "fact": "captured_revenue",
+            "value": 0.0,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "captured_transactions",
+            "value": 0,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "successful_payments",
+            "value": 0,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "failed_payments",
+            "value": 0,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "total_customers",
+            "value": 0,
+            "verified": true,
+            "source": "customers"
+          },
+          {
+            "fact": "total_orders",
+            "value": 0,
+            "verified": true,
+            "source": "orders"
+          }
+        ],
+        "derived_metrics": {
+          "average_order_value": 0.0,
+          "signals": []
+        },
+        "retrieved_context": [
+          {
+            "source_type": "growth_radar",
+            "source_id": "f84f4354-77df-4836-ac64-db4214bf36c5",
+            "document_id": "f84f4354-77df-4836-ac64-db4214bf36c5",
+            "chunk_id": "radar-30",
+            "similarity": null,
+            "content_preview": "Captured revenue INR 0.00; captured transactions 0; customers 0; orders 0.",
+            "metadata": {
+              "verified": true,
+              "window_days": 30,
+              "signals": []
+            }
+          }
+        ],
+        "inference_allowed": false
+      },
+      "langchain_adapter": "<backend.app.ai.langchain_adapter.adapter.LangChainAgentAdapter object at 0x000002D01764F250>"
+    }
+  ],
+  [
+    "branch:to:growth_team_manager_plan",
+    null
+  ]
+]

@@ -1,0 +1,41 @@
+[
+  [
+    "status",
+    "cancelled"
+  ],
+  [
+    "totals",
+    {
+      "opportunities_created": 0,
+      "actions_proposed": 0,
+      "signals_detected": 0,
+      "insights_generated": 0,
+      "experiments_proposed": 0,
+      "failed_agents": 0,
+      "reused_steps": 0,
+      "agents_completed": 0
+    }
+  ],
+  [
+    "terminal_outcome",
+    {
+      "status": "cancelled",
+      "totals": {
+        "opportunities_created": 0,
+        "actions_proposed": 0,
+        "signals_detected": 0,
+        "insights_generated": 0,
+        "experiments_proposed": 0,
+        "failed_agents": 0,
+        "reused_steps": 0,
+        "agents_completed": 0
+      },
+      "errors": [
+        "GrowthMemoryAgent cancelled before execution",
+        "GrowthDiscoveryAgent cancelled before execution",
+        "PaymentRecoveryAgent cancelled before execution",
+        "OpportunityPrioritizationAgent cancelled before execution"
+      ]
+    }
+  ]
+]

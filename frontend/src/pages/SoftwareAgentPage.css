@@ -1,0 +1,140 @@
+/* Software Agent Workstation — Autonomous Technical Feasibility & Automation */
+
+.software-shell {
+  position: relative;
+  z-index: 1;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.software-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.software-hero__title {
+  font-family: var(--font-display, "Archivo Variable", sans-serif);
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--ink, #180f0b);
+  margin: 0 0 8px;
+}
+
+.software-hero__desc {
+  font-size: 1rem;
+  color: var(--ink-muted, #5c4033);
+  max-width: 640px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.software-hero__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #c8e6c9;
+}
+
+.software-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+.software-card {
+  background: var(--paper-bright, #fffdfa);
+  border: 1px solid var(--line, #e2d7c5);
+  border-radius: var(--radius-window, 10px);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 2px 4px rgba(42, 24, 16, 0.04);
+}
+
+.software-card__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.software-card__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: #e0f2f1;
+  color: #00796b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.software-card__title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink, #180f0b);
+  margin: 0;
+}
+
+.software-card__desc {
+  font-size: 0.875rem;
+  color: var(--ink-muted, #5c4033);
+  margin: 0;
+  line-height: 1.45;
+}
+
+.software-card__status {
+  margin-top: auto;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.75rem;
+  color: #00796b;
+  font-weight: 600;
+}
+
+.software-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.software-table th {
+  padding: 10px 14px;
+  background: var(--paper, #f7ebd7);
+  color: var(--ink-faint, #7a5e4d);
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.72rem;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--line, #e2d7c5);
+}
+
+.software-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line, #e2d7c5);
+  color: var(--ink, #180f0b);
+}
+
+.software-table tr:last-child td {
+  border-bottom: none;
+}
+
+.software-empty {
+  padding: 36px 20px;
+  text-align: center;
+  color: var(--ink-faint, #7a5e4d);
+  font-style: italic;
+}

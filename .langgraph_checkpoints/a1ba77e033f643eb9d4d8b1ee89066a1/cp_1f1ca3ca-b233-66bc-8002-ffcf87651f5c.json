@@ -1,0 +1,169 @@
+{
+  "checkpoint": {
+    "v": 4,
+    "ts": "2026-10-17T15:08:54.325625+00:00",
+    "id": "1f1ca3ca-b233-66bc-8002-ffcf87651f5c",
+    "channel_values": {
+      "merchant_id": "d11dbaa1-0d72-444d-9746-55f0697351d0",
+      "run_id": "a1ba77e033f643eb9d4d8b1ee89066a1",
+      "workflow_id": "f028755b-d8ba-4316-ac76-fd978c9f4acb",
+      "mode": "fast",
+      "objective": "t",
+      "window_days": 30,
+      "params": {
+        "objective": "t",
+        "window_days": 30
+      },
+      "generation": 1,
+      "current_step_index": 0,
+      "selected_specialists": [],
+      "agents_run": [],
+      "resumed_steps": [],
+      "needs_reconciliation": [],
+      "opportunities": [],
+      "ranked_opportunities": [],
+      "findings": [],
+      "actions_proposed": [],
+      "tool_records": [],
+      "shared_memory": {
+        "rag_context": {
+          "merchant_id": "d11dbaa1-0d72-444d-9746-55f0697351d0",
+          "query": "t",
+          "status": "insufficient_data",
+          "data_sufficiency": {
+            "status": "insufficient_data",
+            "message": "No real Razorpay test data available. Create test orders/payments via Checkout to view growth metrics.",
+            "minimum_required": 3,
+            "available": 0
+          },
+          "verified_facts": [
+            {
+              "fact": "captured_revenue",
+              "value": 0.0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "captured_transactions",
+              "value": 0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "successful_payments",
+              "value": 0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "failed_payments",
+              "value": 0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "total_customers",
+              "value": 0,
+              "verified": true,
+              "source": "customers"
+            },
+            {
+              "fact": "total_orders",
+              "value": 0,
+              "verified": true,
+              "source": "orders"
+            }
+          ],
+          "derived_metrics": {
+            "average_order_value": 0.0,
+            "signals": []
+          },
+          "retrieved_context": [
+            {
+              "source_type": "growth_radar",
+              "source_id": "d11dbaa1-0d72-444d-9746-55f0697351d0",
+              "document_id": "d11dbaa1-0d72-444d-9746-55f0697351d0",
+              "chunk_id": "radar-30",
+              "similarity": null,
+              "content_preview": "Captured revenue INR 0.00; captured transactions 0; customers 0; orders 0.",
+              "metadata": {
+                "verified": true,
+                "window_days": 30,
+                "signals": []
+              }
+            }
+          ],
+          "inference_allowed": false
+        }
+      },
+      "errors": [],
+      "status": "running",
+      "cancelled": false,
+      "cancelled_at_step": null,
+      "totals": {},
+      "debate_id": null,
+      "action_plan": null,
+      "terminal_outcome": {},
+      "branch:to:fast_memory_load": null
+    },
+    "channel_versions": {
+      "__start__": 2,
+      "merchant_id": 2,
+      "run_id": 2,
+      "workflow_id": 2,
+      "mode": 2,
+      "objective": 2,
+      "window_days": 2,
+      "params": 2,
+      "generation": 2,
+      "current_step_index": 3,
+      "selected_specialists": 2,
+      "agents_run": 2,
+      "resumed_steps": 2,
+      "needs_reconciliation": 2,
+      "opportunities": 2,
+      "ranked_opportunities": 2,
+      "findings": 2,
+      "actions_proposed": 2,
+      "tool_records": 2,
+      "shared_memory": 4,
+      "errors": 2,
+      "status": 3,
+      "cancelled": 3,
+      "cancelled_at_step": 2,
+      "totals": 2,
+      "debate_id": 2,
+      "action_plan": 2,
+      "terminal_outcome": 2,
+      "branch:to:validate_request": 3,
+      "branch:to:load_context": 4,
+      "branch:to:fast_memory_load": 4
+    },
+    "versions_seen": {
+      "__input__": {},
+      "__start__": {
+        "__start__": 1
+      },
+      "validate_request": {
+        "branch:to:validate_request": 2
+      },
+      "load_context": {
+        "branch:to:load_context": 3
+      }
+    },
+    "updated_channels": [
+      "branch:to:fast_memory_load",
+      "shared_memory"
+    ]
+  },
+  "metadata": {
+    "source": "loop",
+    "step": 2,
+    "parents": {}
+  },
+  "channel_versions": {
+    "shared_memory": 4,
+    "branch:to:load_context": 4,
+    "branch:to:fast_memory_load": 4
+  }
+}

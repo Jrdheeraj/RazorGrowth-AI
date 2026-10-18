@@ -1,0 +1,510 @@
+{
+  "checkpoint": {
+    "v": 4,
+    "ts": "2026-10-18T05:07:01.794993+00:00",
+    "id": "1f1cab1c-0ce1-66eb-800c-6d313ad6cb09",
+    "channel_values": {
+      "merchant_id": "19e2f150-1ee5-4d22-9895-825cebfed8dc",
+      "run_id": "88a1abe7ffa24954be950449ce9e86c3",
+      "workflow_id": "02a0511c-4018-467a-831e-6fba5ac10aeb",
+      "mode": "deep",
+      "objective": "Improve overall growth",
+      "window_days": 30,
+      "params": {},
+      "generation": 1,
+      "current_step_index": 9,
+      "selected_specialists": [],
+      "agents_run": [
+        {
+          "agent_name": "GrowthMemoryAgent",
+          "step_key": "deep:000:GrowthMemoryAgent:load:8248cc9f51fe41e0b6153bbe",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "memory_retrieve",
+            "memory_record"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "GrowthDiscoveryAgent",
+          "step_key": "deep:001:GrowthDiscoveryAgent:-:2f1a7ab9eeee71a8e4635aee",
+          "status": "completed",
+          "opportunities_created": 4,
+          "actions_proposed": 0,
+          "tools_used": [
+            "growth_radar",
+            "opportunity_upsert",
+            "opportunity_scoring"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "CustomerIntelligenceAgent",
+          "step_key": "deep:002:CustomerIntelligenceAgent:-:497d1885f565adc854513cc4",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "customer_metrics",
+            "segment_classification",
+            "churn_engine"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "PaymentRecoveryAgent",
+          "step_key": "deep:003:PaymentRecoveryAgent:-:1e89e139cbfcb2e0d4220780",
+          "status": "completed",
+          "opportunities_created": 1,
+          "actions_proposed": 2,
+          "tools_used": [
+            "failed_payment_scan",
+            "recovery_simulation",
+            "phase4_propose",
+            "failed_payment_scan",
+            "recovery_simulation",
+            "phase4_propose"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "CampaignStrategistAgent",
+          "step_key": "deep:004:CampaignStrategistAgent:-:23a449a808e51d22dc6282a7",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "segment_lookup",
+            "campaign_simulation",
+            "phase4_propose"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "RevenueOptimizationAgent",
+          "step_key": "deep:005:RevenueOptimizationAgent:-:b4035f6fb56d33b1af9f7b73",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "opportunity_ranking",
+            "what_if_simulation",
+            "phase4_propose"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "ExperimentAgent",
+          "step_key": "deep:006:ExperimentAgent:-:cbb01c2f8e881f61ac44fa5e",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "experiment_design"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "OpportunityPrioritizationAgent",
+          "step_key": "deep:007:OpportunityPrioritizationAgent:-:954dae6aa4fe90a941f8ebe1",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "opportunity_scoring"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "GrowthMemoryAgent",
+          "step_key": "deep:008:GrowthMemoryAgent:persist:1ea4693acdc4263f5e1ec5ff",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "memory_retrieve",
+            "memory_record"
+          ],
+          "errors": []
+        }
+      ],
+      "resumed_steps": [],
+      "needs_reconciliation": [],
+      "opportunities": [],
+      "ranked_opportunities": [
+        {
+          "opportunity_id": "e140a663-d5dc-48dd-9007-da0ace2a4441",
+          "score": 0.11,
+          "title": "2 payment failures worth \u20b910000.00 in the last 30 days"
+        },
+        {
+          "opportunity_id": "00116ad6-a219-444f-aacc-2d3fc4d2acc7",
+          "score": 0.11,
+          "title": "Recoverable failed-payment revenue of \u20b910000.00"
+        },
+        {
+          "opportunity_id": "38444c05-7a98-47c6-bd43-56adf5acce69",
+          "score": 0.0,
+          "title": "Revenue changed -100.00% over the last 30 days"
+        },
+        {
+          "opportunity_id": "4184dd64-4753-462b-b5d9-c02226a64e62",
+          "score": 0.0,
+          "title": "Order volume shifted -50.00% versus the prior window"
+        },
+        {
+          "opportunity_id": "22030d5a-ed1a-48eb-9582-7f69f9069bb0",
+          "score": 0.0,
+          "title": "Recover 2 retryable of 2 failed payments (10000.00 INR)"
+        }
+      ],
+      "findings": [],
+      "actions_proposed": [],
+      "tool_records": [],
+      "shared_memory": {
+        "rag_context": {
+          "merchant_id": "19e2f150-1ee5-4d22-9895-825cebfed8dc",
+          "query": "Improve overall growth",
+          "status": "insufficient_data",
+          "data_sufficiency": {
+            "status": "insufficient_data",
+            "message": "More real captured transactions are required to generate a reliable growth signal (0 recorded, 3 required).",
+            "minimum_required": 3,
+            "available": 0
+          },
+          "verified_facts": [
+            {
+              "fact": "captured_revenue",
+              "value": 0.0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "captured_transactions",
+              "value": 0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "successful_payments",
+              "value": 0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "failed_payments",
+              "value": 2,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "total_customers",
+              "value": 4,
+              "verified": true,
+              "source": "customers"
+            },
+            {
+              "fact": "total_orders",
+              "value": 2,
+              "verified": true,
+              "source": "orders"
+            }
+          ],
+          "derived_metrics": {
+            "average_order_value": 0.0,
+            "signals": [
+              {
+                "signal": "revenue_drop",
+                "title": "Revenue changed -100.00% over the last 30 days",
+                "observed_data": {
+                  "current_window": {
+                    "captured_payments": 0
+                  },
+                  "previous_window": {
+                    "captured_payments": 4
+                  },
+                  "threshold_pct": -10.0
+                },
+                "calculated_metric": "captured_revenue_inr",
+                "opportunity": "Revenue recovery opportunity",
+                "confidence": 0.344,
+                "reason": "Observed captured_revenue_inr from 30-day PostgreSQL payment/order data.",
+                "recommended_action": "Investigate the real revenue decline and target retention or recovery work."
+              },
+              {
+                "signal": "unusual_order_behavior",
+                "title": "Order volume shifted -50.00% versus the prior window",
+                "observed_data": {
+                  "band_pct": 40.0
+                },
+                "calculated_metric": "order_count",
+                "opportunity": "Growth opportunity",
+                "confidence": 0.366,
+                "reason": "Observed order_count from 30-day PostgreSQL payment/order data.",
+                "recommended_action": "Review the recorded evidence with the merchant team."
+              },
+              {
+                "signal": "payment_failures",
+                "title": "2 payment failures worth \u20b910000.00 in the last 30 days",
+                "observed_data": {
+                  "failed_count": 2,
+                  "source": "payments.status='failed'"
+                },
+                "calculated_metric": "failed_payment_value_inr",
+                "opportunity": "Payment recovery opportunity",
+                "confidence": 0.322,
+                "reason": "Observed failed_payment_value_inr from 30-day PostgreSQL payment/order data.",
+                "recommended_action": "Review failed transactions and offer a compliant payment-recovery path."
+              },
+              {
+                "signal": "payment_recovery_opportunity",
+                "title": "Recoverable failed-payment revenue of \u20b910000.00",
+                "observed_data": {
+                  "failed_count": 2
+                },
+                "calculated_metric": "recoverable_revenue_inr",
+                "opportunity": "Recover failed-payment revenue",
+                "confidence": 0.322,
+                "reason": "Observed recoverable_revenue_inr from 30-day PostgreSQL payment/order data.",
+                "recommended_action": "Follow up on the recorded failed payments using an approved recovery workflow."
+              }
+            ]
+          },
+          "retrieved_context": [
+            {
+              "source_type": "growth_radar",
+              "source_id": "19e2f150-1ee5-4d22-9895-825cebfed8dc",
+              "document_id": "19e2f150-1ee5-4d22-9895-825cebfed8dc",
+              "chunk_id": "radar-30",
+              "similarity": null,
+              "content_preview": "Captured revenue INR 0.00; captured transactions 0; customers 4; orders 2.",
+              "metadata": {
+                "verified": true,
+                "window_days": 30,
+                "signals": [
+                  {
+                    "signal": "revenue_drop",
+                    "title": "Revenue changed -100.00% over the last 30 days",
+                    "observed_data": {
+                      "current_window": {
+                        "captured_payments": 0
+                      },
+                      "previous_window": {
+                        "captured_payments": 4
+                      },
+                      "threshold_pct": -10.0
+                    },
+                    "calculated_metric": "captured_revenue_inr",
+                    "opportunity": "Revenue recovery opportunity",
+                    "confidence": 0.344,
+                    "reason": "Observed captured_revenue_inr from 30-day PostgreSQL payment/order data.",
+                    "recommended_action": "Investigate the real revenue decline and target retention or recovery work."
+                  },
+                  {
+                    "signal": "unusual_order_behavior",
+                    "title": "Order volume shifted -50.00% versus the prior window",
+                    "observed_data": {
+                      "band_pct": 40.0
+                    },
+                    "calculated_metric": "order_count",
+                    "opportunity": "Growth opportunity",
+                    "confidence": 0.366,
+                    "reason": "Observed order_count from 30-day PostgreSQL payment/order data.",
+                    "recommended_action": "Review the recorded evidence with the merchant team."
+                  },
+                  {
+                    "signal": "payment_failures",
+                    "title": "2 payment failures worth \u20b910000.00 in the last 30 days",
+                    "observed_data": {
+                      "failed_count": 2,
+                      "source": "payments.status='failed'"
+                    },
+                    "calculated_metric": "failed_payment_value_inr",
+                    "opportunity": "Payment recovery opportunity",
+                    "confidence": 0.322,
+                    "reason": "Observed failed_payment_value_inr from 30-day PostgreSQL payment/order data.",
+                    "recommended_action": "Review failed transactions and offer a compliant payment-recovery path."
+                  },
+                  {
+                    "signal": "payment_recovery_opportunity",
+                    "title": "Recoverable failed-payment revenue of \u20b910000.00",
+                    "observed_data": {
+                      "failed_count": 2
+                    },
+                    "calculated_metric": "recoverable_revenue_inr",
+                    "opportunity": "Recover failed-payment revenue",
+                    "confidence": 0.322,
+                    "reason": "Observed recoverable_revenue_inr from 30-day PostgreSQL payment/order data.",
+                    "recommended_action": "Follow up on the recorded failed payments using an approved recovery workflow."
+                  }
+                ]
+              }
+            }
+          ],
+          "inference_allowed": false
+        },
+        "langchain_adapter": "<backend.app.ai.langchain_adapter.adapter.LangChainAgentAdapter object at 0x0000021ACBA5D890>",
+        "memories": [],
+        "ranked_opportunities": [
+          {
+            "opportunity_id": "e140a663-d5dc-48dd-9007-da0ace2a4441",
+            "score": 0.11,
+            "title": "2 payment failures worth \u20b910000.00 in the last 30 days"
+          },
+          {
+            "opportunity_id": "00116ad6-a219-444f-aacc-2d3fc4d2acc7",
+            "score": 0.11,
+            "title": "Recoverable failed-payment revenue of \u20b910000.00"
+          },
+          {
+            "opportunity_id": "38444c05-7a98-47c6-bd43-56adf5acce69",
+            "score": 0.0,
+            "title": "Revenue changed -100.00% over the last 30 days"
+          },
+          {
+            "opportunity_id": "4184dd64-4753-462b-b5d9-c02226a64e62",
+            "score": 0.0,
+            "title": "Order volume shifted -50.00% versus the prior window"
+          },
+          {
+            "opportunity_id": "22030d5a-ed1a-48eb-9582-7f69f9069bb0",
+            "score": 0.0,
+            "title": "Recover 2 retryable of 2 failed payments (10000.00 INR)"
+          }
+        ]
+      },
+      "errors": [],
+      "status": "completed",
+      "cancelled": false,
+      "cancelled_at_step": null,
+      "totals": {
+        "opportunities_created": 5,
+        "actions_proposed": 2,
+        "signals_detected": 0,
+        "insights_generated": 0,
+        "experiments_proposed": 0,
+        "failed_agents": 0,
+        "reused_steps": 0,
+        "agents_completed": 9
+      },
+      "debate_id": null,
+      "action_plan": null,
+      "terminal_outcome": {
+        "status": "completed",
+        "totals": {
+          "opportunities_created": 5,
+          "actions_proposed": 2,
+          "signals_detected": 0,
+          "insights_generated": 0,
+          "experiments_proposed": 0,
+          "failed_agents": 0,
+          "reused_steps": 0,
+          "agents_completed": 9
+        },
+        "errors": []
+      }
+    },
+    "channel_versions": {
+      "__start__": 2,
+      "merchant_id": 2,
+      "run_id": 2,
+      "workflow_id": 2,
+      "mode": 2,
+      "objective": 2,
+      "window_days": 2,
+      "params": 2,
+      "generation": 2,
+      "current_step_index": 13,
+      "selected_specialists": 2,
+      "agents_run": 13,
+      "resumed_steps": 2,
+      "needs_reconciliation": 2,
+      "opportunities": 2,
+      "ranked_opportunities": 13,
+      "findings": 2,
+      "actions_proposed": 2,
+      "tool_records": 2,
+      "shared_memory": 13,
+      "errors": 2,
+      "status": 14,
+      "cancelled": 3,
+      "cancelled_at_step": 2,
+      "totals": 14,
+      "debate_id": 2,
+      "action_plan": 2,
+      "terminal_outcome": 14,
+      "branch:to:validate_request": 3,
+      "branch:to:load_context": 4,
+      "branch:to:deep_memory_load": 5,
+      "branch:to:deep_discovery": 6,
+      "branch:to:deep_customer_intel": 7,
+      "branch:to:deep_payment_recovery": 8,
+      "branch:to:deep_campaign_strategist": 9,
+      "branch:to:deep_revenue_opt": 10,
+      "branch:to:deep_experiment": 11,
+      "branch:to:deep_prioritization": 12,
+      "branch:to:deep_memory_persist": 13,
+      "branch:to:finalize_workflow": 14
+    },
+    "versions_seen": {
+      "__input__": {},
+      "__start__": {
+        "__start__": 1
+      },
+      "validate_request": {
+        "branch:to:validate_request": 2
+      },
+      "load_context": {
+        "branch:to:load_context": 3
+      },
+      "deep_memory_load": {
+        "branch:to:deep_memory_load": 4
+      },
+      "deep_discovery": {
+        "branch:to:deep_discovery": 5
+      },
+      "deep_customer_intel": {
+        "branch:to:deep_customer_intel": 6
+      },
+      "deep_payment_recovery": {
+        "branch:to:deep_payment_recovery": 7
+      },
+      "deep_campaign_strategist": {
+        "branch:to:deep_campaign_strategist": 8
+      },
+      "deep_revenue_opt": {
+        "branch:to:deep_revenue_opt": 9
+      },
+      "deep_experiment": {
+        "branch:to:deep_experiment": 10
+      },
+      "deep_prioritization": {
+        "branch:to:deep_prioritization": 11
+      },
+      "deep_memory_persist": {
+        "branch:to:deep_memory_persist": 12
+      },
+      "finalize_workflow": {
+        "branch:to:finalize_workflow": 13
+      }
+    },
+    "updated_channels": [
+      "status",
+      "terminal_outcome",
+      "totals"
+    ]
+  },
+  "metadata": {
+    "source": "loop",
+    "step": 12,
+    "parents": {}
+  },
+  "channel_versions": {
+    "status": 14,
+    "totals": 14,
+    "terminal_outcome": 14,
+    "branch:to:finalize_workflow": 14
+  }
+}

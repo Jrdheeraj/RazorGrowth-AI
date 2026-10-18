@@ -294,6 +294,194 @@ class GrowthMemoryResponse(BaseModel):
     memories: list[MemoryEntryOut]
 
 
+# ── Manager Agent: goal intake, validated plan, workflow report ─────────────
+#
+# Planning is deliberately SEPARATE from execution. Creating a plan validates
+# and freezes the delegation decision but never runs an agent, never creates
+# an action and never approves anything. Execution goes through the existing
+# orchestrator modes afterwards.
+
+
+class ManagerPlanRequest(BaseModel):
+    """Merchant goal intake for the central Manager Agent."""
+
+    objective: str = Field(min_length=3, max_length=500)
+    window_days: int = Field(default=30, ge=1, le=365)
+    merchant_id: uuid.UUID | None = None
+    #: Optional constraints the merchant stated explicitly. They are recorded
+    #: verbatim; they can never widen a guardrail.
+    constraints: list[str] = Field(default_factory=list, max_length=12)
+    budget: float | None = Field(default=None, ge=0)
+    deadline: str | None = Field(default=None, max_length=64)
+    #: Untrusted, model-shaped task proposals. Every field is validated
+    #: deterministically server-side; unknown agents, duplicate ids, circular
+    #: dependencies, unregistered tools and model-issued permissions are
+    #: rejected rather than executed.
+    proposed_tasks: list[dict[str, Any]] | None = None
+
+
+class ManagerGoalOut(BaseModel):
+    goal: str
+    themes: list[str] = Field(default_factory=list)
+    constraints: list[str] = Field(default_factory=list)
+    time_horizon_days: int = 30
+    evidence_status: str = "unknown"
+    success_criteria: list[str] = Field(default_factory=list)
+    requires_human_approval: bool = True
+    blocked_reasons: list[str] = Field(default_factory=list)
+    selection_rationale: str | None = None
+
+
+class ManagerAgentSelectionOut(BaseModel):
+    agent_id: str
+    reason: str
+    matched_tools: list[str] = Field(default_factory=list)
+
+
+class ManagerTaskOut(BaseModel):
+    task_id: str
+    agent_id: str
+    description: str
+    expected_output: str
+    depends_on: list[str] = Field(default_factory=list)
+    required_inputs: list[str] = Field(default_factory=list)
+    tools: list[str] = Field(default_factory=list)
+    priority: str = "normal"
+    approval_required: bool = True
+    completion_criteria: list[str] = Field(default_factory=list)
+
+
+class ManagerPlanValidationOut(BaseModel):
+    valid: bool
+    rejections: list[str] = Field(default_factory=list)
+    validated_at: str
+
+
+class ManagerUnavailableSpecialistOut(BaseModel):
+    """An on-topic specialist that exposes no implemented catalog tool.
+
+    Disclosed rather than dropped, so a goal is never silently narrowed.
+    """
+
+    agent_id: str
+    reason: str
+    unimplemented_tools: list[str] = Field(default_factory=list)
+    detail: list[dict[str, Any]] = Field(default_factory=list)
+    reachable_via: str = "its own workspace endpoint, not the agent tool catalog"
+
+
+class ManagerPlanLimitsOut(BaseModel):
+    max_steps: int
+    max_retries: int
+    max_replan: int
+    max_agents: int
+
+
+class ManagerPlanResponse(BaseModel):
+    model_config = {"extra": "allow"}
+
+    workflow_id: str
+    merchant_id: str
+    goal: ManagerGoalOut
+    selected_agents: list[str] = Field(default_factory=list)
+    tasks: list[ManagerTaskOut] = Field(default_factory=list)
+    limits: ManagerPlanLimitsOut
+    validation: ManagerPlanValidationOut
+    #: On-topic specialists that could not be selected, with the reason. A
+    #: disclosed limitation, never a silent narrowing of the plan.
+    limitations: list[ManagerUnavailableSpecialistOut] = Field(default_factory=list)
+    status: str
+    #: The plan is a proposal only. Execution is a separate, explicit step.
+    executed: bool = False
+    requires_human_approval_for_actions: bool = True
+
+
+class ManagerRosterEntryOut(BaseModel):
+    agent_id: str
+    description: str
+    permissions: list[str] = Field(default_factory=list)
+    tools: list[str] = Field(default_factory=list)
+    unimplemented_tools: list[str] = Field(default_factory=list)
+    fully_implemented: bool = False
+    selectable: bool = False
+    can_approve: bool = False
+    can_execute: bool = False
+    #: Per-tool explanation for why each unresolved name is unresolved.
+    unavailable_reasons: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ManagerRosterResponse(BaseModel):
+    """Live registry contents. The count is never hardcoded."""
+
+    agent_count: int
+    agents: list[ManagerRosterEntryOut]
+    main_growth_team: list[str] = Field(default_factory=list)
+    domain_specialists: list[str] = Field(default_factory=list)
+
+
+class ManagerAgentEvaluationOut(BaseModel):
+    agent_id: str
+    status: str
+    failure_kind: str | None = None
+    detail: str = ""
+    errors: list[str] = Field(default_factory=list)
+    actions_proposed: int = 0
+    latency_ms: int | None = None
+    tools_used: list[str] = Field(default_factory=list)
+    retryable: bool = False
+
+
+class ManagerWorkflowReportResponse(BaseModel):
+    """
+    Workflow status assembled from the REAL AgentRun audit rows.
+
+    Progress rows are reported as progress rows: they are evidence that a run
+    happened, not proof of crash-resumable checkpointing.
+    """
+
+    model_config = {"extra": "allow"}
+
+    workflow_id: str
+    merchant_id: str
+    mode: str | None = None
+    status: str = "unknown"
+    objective: str | None = None
+    agents_run: list[AgentRunSummary] = Field(default_factory=list)
+    totals: dict[str, int] = Field(default_factory=dict)
+    plan: ManagerPlanResponse | None = None
+    evaluation: dict[str, Any] = Field(default_factory=dict)
+    report: dict[str, Any] = Field(default_factory=dict)
+    #: Explicitly honest about what the store does and does not guarantee.
+    durable_checkpoint: bool = False
+    recoverable_after_restart: bool = False
+    recovery_note: str = (
+        "AgentRun rows are progress records. They are not a resumable checkpoint; "
+        "an interrupted cycle is not automatically continued after a process restart."
+    )
+
+
+class ManagerMetricsResponse(BaseModel):
+    """Every figure is computed from real rows, or reported as null."""
+
+    merchant_id: str
+    agents_coordinated: int
+    tasks_completed: int
+    awaiting_approval: int
+    active_workflows: int
+    total_workflows: int
+    window_days: int = 30
+    metrics_available: bool = True
+    unavailable_reasons: list[str] = Field(default_factory=list)
+
+
+class ManagerActionsResponse(BaseModel):
+    """Pending proposals with their real originating agent and workflow."""
+
+    merchant_id: str
+    actions: list[dict[str, Any]] = Field(default_factory=list)
+    pending_count: int = 0
+
+
 # ── growth brief ────────────────────────────────────────────────────────────
 
 

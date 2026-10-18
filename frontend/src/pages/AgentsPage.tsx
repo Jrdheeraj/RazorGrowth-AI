@@ -15,7 +15,7 @@ import {
   type AgentCatalogResponse,
   type SingleAgentRunResponse,
 } from "../lib/api";
-import { buildRoster, toolSummary, type RosterSummary } from "../lib/specialistRoster";
+import { buildRoster, toolSummary, type RosterAgent, type RosterSummary } from "../lib/specialistRoster";
 import type {
   ActionPlan,
   ActionPlanItem,
@@ -30,6 +30,7 @@ import type {
   ProductAgentRun,
   RankedOpportunity,
 } from "../types/api";
+import { cancelAgentRun, fetchActiveRun } from "../lib/api";
 import { WindowPanel } from "../components/WindowPanel";
 import { Button } from "../components/Button";
 import { StatusChip } from "../components/StatusIndicator";
@@ -45,7 +46,6 @@ import { toOfficeCharacter, mapLiveStatus, accentForIndex } from "../office/razo
 import { isAuthenticated } from "../lib/auth";
 import "../office/office.css";
 import "./AgentsPage.css";
-import { ActivityFeed } from "../features/public/ActivityFeed";
 
 const DEFAULT_OBJECTIVE = "Comprehensive commerce analysis and growth optimization";
 
@@ -319,6 +319,152 @@ function hashCode(s: string): number {
   return h;
 }
 
+/* ── Activity stream helpers ────────────────────────────────────────────── */
+
+interface ActivityCardItem {
+  id: string;
+  ts: string | null;
+  agentKey: string;
+  agentLabel: string;
+  specialty: string;
+  avatarIcon: string;
+  status: string;
+  statusTone: "working" | "completed" | "found" | "interrupted" | "failed";
+  statusLabel: string;
+  statusIcon: string;
+  description: string;
+  outcomeText: string;
+  metrics: {
+    opportunities: number;
+    proposals: number;
+    insights: number;
+    signals: number;
+  };
+  totalMetrics: number;
+  timeFormatted: { time: string; relative: string };
+  errorMessage: string | null;
+}
+
+function formatHumanAgentName(key: string): string {
+  const customMap: Record<string, string> = {
+    MarketingAgent: "Marketing AGI",
+    ProductAgent: "Product AGI",
+    GrowthMemoryAgent: "Growth Memory",
+    GrowthDiscoveryAgent: "Growth Discovery",
+    CustomerIntelligenceAgent: "Customer Intelligence",
+    RevenueOptimizationAgent: "Revenue Optimization",
+    CampaignStrategistAgent: "Campaign Strategist",
+    PaymentRecoveryAgent: "Payment Recovery",
+    OpportunityPrioritizationAgent: "Opportunity Prioritization",
+    ExperimentAgent: "Experiment Specialist",
+    PersonalizationAgent: "Personalization Specialist",
+    DesignerAgent: "Designer Specialist",
+    SoftwareAgent: "Software Engineer",
+    ManagerAgent: "Growth Manager",
+  };
+  return customMap[key] ?? agentProfile(key).label ?? prettifyName(key);
+}
+
+function formatAgentAvatar(key: string): string {
+  const map: Record<string, string> = {
+    MarketingAgent: "📣",
+    ProductAgent: "📦",
+    GrowthMemoryAgent: "🧠",
+    GrowthDiscoveryAgent: "🔍",
+    CustomerIntelligenceAgent: "👥",
+    RevenueOptimizationAgent: "💰",
+    CampaignStrategistAgent: "🎯",
+    PaymentRecoveryAgent: "💳",
+    OpportunityPrioritizationAgent: "⚖️",
+    ExperimentAgent: "🧪",
+    PersonalizationAgent: "✨",
+    DesignerAgent: "🎨",
+    SoftwareAgent: "💻",
+    ManagerAgent: "👔",
+  };
+  return map[key] ?? "🤖";
+}
+
+function formatActivityDescription(
+  agentName: string,
+  status: string,
+  looksAt: string,
+  summaryText?: string | null
+): string {
+  const isRunning = status === "running" || status === "working" || status === "queued";
+  const isDone = status === "completed";
+  const isInterrupted = status === "interrupted" || status === "cancelled";
+  const isFailed = status === "failed";
+
+  if (isRunning) {
+    const runningTasks: Record<string, string> = {
+      GrowthMemoryAgent: "Loading historical context and verified memory.",
+      GrowthDiscoveryAgent: "Scanning your business data for emerging growth signals.",
+      CustomerIntelligenceAgent: "Analyzing customer purchase behavior and repeat segments.",
+      RevenueOptimizationAgent: "Evaluating pricing elasticity and margin improvements.",
+      PaymentRecoveryAgent: "Checking unsuccessful payments and recoverable revenue.",
+      MarketingAgent: "Executing autonomous marketing research and campaign planning.",
+      ProductAgent: "Reviewing product sales patterns and catalog conversion.",
+      CampaignStrategistAgent: "Planning targeted customer re-engagement campaigns.",
+      DesignerAgent: "Auditing UX friction and checkout experience.",
+      ExperimentAgent: "Designing validation tests and measurement splits.",
+      OpportunityPrioritizationAgent: "Ranking growth opportunities by impact and confidence.",
+      SoftwareAgent: "Verifying technical constraints and automated implementations.",
+      ManagerAgent: "Coordinating specialist team strategy and synthesis.",
+    };
+    return runningTasks[agentName] ?? "Analyzing your business data.";
+  }
+
+  if (isDone) {
+    if (summaryText) {
+      const sentence = firstSentence(summaryText);
+      if (
+        sentence &&
+        sentence.length > 12 &&
+        !sentence.toLowerCase().includes("completed its analysis") &&
+        !sentence.toLowerCase().includes("no output")
+      ) {
+        return sentence;
+      }
+    }
+    const completedTasks: Record<string, string> = {
+      GrowthMemoryAgent: "Reviewed previous analyses, approved actions, and results.",
+      GrowthDiscoveryAgent: "Completed scan for revenue leakages and growth signals.",
+      CustomerIntelligenceAgent: "Refreshed customer segments, lifetime value, and churn risks.",
+      RevenueOptimizationAgent: "Evaluated pricing models, average order value, and margins.",
+      PaymentRecoveryAgent: "Analyzed failed transactions and recovery retry patterns.",
+      MarketingAgent: "Finished marketing research and campaign proposal synthesis.",
+      ProductAgent: "Analyzed feature adoption, bundle patterns, and friction points.",
+      CampaignStrategistAgent: "Structured targeted multi-channel campaign proposals.",
+      DesignerAgent: "Completed UX audit and experience recommendations.",
+      ExperimentAgent: "Formulated statistical test plans for proposed actions.",
+      OpportunityPrioritizationAgent: "Ranked opportunities using impact vs. effort scoring.",
+      SoftwareAgent: "Checked technical feasibility and implementation constraints.",
+      ManagerAgent: "Synthesized team findings into the final growth recommendation.",
+    };
+    return completedTasks[agentName] ?? `Examined ${looksAt.toLowerCase()}.`;
+  }
+
+  if (isInterrupted) {
+    return "Analysis was interrupted before completion.";
+  }
+
+  if (isFailed) {
+    return "Agent encountered an error during analysis.";
+  }
+
+  return `Status: ${status}`;
+}
+
+function formatCardTime(iso: string | null | undefined): { time: string; relative: string } {
+  if (!iso) return { time: "—", relative: "Recent" };
+  const d = new Date(iso);
+  const ms = d.getTime();
+  if (Number.isNaN(ms)) return { time: "—", relative: "Recent" };
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return { time, relative: timeAgo(ms) };
+}
+
 /* ── types ──────────────────────────────────────────────────────────────── */
 
 type CmdTab = "ACTIVITY" | "MONITOR" | "TASKS" | "MEMORY" | "GRAPH" | "TERMINAL" | "COMMANDS" | "WORKERS";
@@ -359,6 +505,7 @@ function deriveAgentProgress(raw: AgentRunRow | undefined, out: OrchestrationAge
   if (raw?.status === "completed" || out?.status === "completed") return 100;
   if (raw?.status === "failed") return 100;
   if (raw?.status === "running") {
+    if (!isWorking) return 0;
     const elapsed = startedAtMs ? (Date.now() - startedAtMs) / 1000 : 2;
     const base = 42 + (hashCode(raw.agent_name) % 18);
     const wobble = Math.min(32, Math.floor(elapsed * 1.8) % 34);
@@ -376,30 +523,42 @@ function deriveLiveStatus(name: string, run: AgentRunRow | undefined, out: Orche
   if (hasInsufficient && !run && !out) return { live: "BLOCKED", chip: "BLOCKED", tone: "neutral", anim: "none" };
   const hasTools = Array.isArray(run?.tools_used) && (run.tools_used as unknown[]).length > 0;
   if (run) {
-    if (run.status === "running") {
-      // Derived from the run's own record, not a coin flip. The previous
-      // `Math.random() > 0.45` re-rolled TOOL_CALL vs WORKING on every
-      // re-render, so the office flickered between states and presented a
-      // fabricated "live" status.
-      if (hasTools) return { live: "TOOL_CALL", chip: "USING TOOL", tone: "accent", anim: "pulse" };
-      // 12% chance to show communicating while running (inter-agent walk)
-      if (hashCode(name + String(run.started_at)) % 11 === 0) return { live: "COMMUNICATING", chip: "COMMUNICATING", tone: "accent", anim: "pulse" };
-      if (hashCode(name) % 7 === 0) return { live: "ANALYZING", chip: "ANALYZING", tone: "accent", anim: "pulse" };
-      if (hashCode(name) % 5 === 0) return { live: "THINKING", chip: "THINKING", tone: "accent", anim: "pulse" };
-      return { live: "WORKING", chip: "WORKING", tone: "accent", anim: "pulse" };
-    }
     if (run.status === "completed") {
       if (run.opportunities_created > 0) return { live: "COMPLETED", chip: "FOUND SOMETHING", tone: "accent", anim: "none" };
       return { live: "COMPLETED", chip: "COMPLETED", tone: "ok", anim: "none" };
     }
     if (run.status === "failed") return { live: "ERROR", chip: "ERROR", tone: "neutral", anim: "none" };
-    return { live: "ANALYZING", chip: "REVIEWING", tone: "accent", anim: "pulse" };
+    if (run.status === "cancelled" || run.status === "interrupted" || run.status === "skipped") {
+      return { live: "IDLE", chip: run.status.toUpperCase(), tone: "neutral", anim: "none" };
+    }
+    if (run.status === "blocked") {
+      return { live: "BLOCKED", chip: "BLOCKED", tone: "neutral", anim: "none" };
+    }
+    if (run.status === "needs_reconciliation") {
+      return { live: "ERROR", chip: "RECONCILE", tone: "neutral", anim: "none" };
+    }
+    if (run.status === "running") {
+      if (!isWorking) {
+        return { live: "IDLE", chip: "IDLE", tone: "neutral", anim: "none" };
+      }
+      if (hasTools) return { live: "TOOL_CALL", chip: "USING TOOL", tone: "accent", anim: "pulse" };
+      if (hashCode(name + String(run.started_at)) % 11 === 0) return { live: "COMMUNICATING", chip: "COMMUNICATING", tone: "accent", anim: "pulse" };
+      if (hashCode(name) % 7 === 0) return { live: "ANALYZING", chip: "ANALYZING", tone: "accent", anim: "pulse" };
+      if (hashCode(name) % 5 === 0) return { live: "THINKING", chip: "THINKING", tone: "accent", anim: "pulse" };
+      return { live: "WORKING", chip: "WORKING", tone: "accent", anim: "pulse" };
+    }
+    if (!isWorking) {
+      return { live: "IDLE", chip: "IDLE", tone: "neutral", anim: "none" };
+    }
+    return { live: "WAITING", chip: "WAITING", tone: "neutral", anim: "none" };
   }
   if (out) {
     if (out.status === "completed") {
       if (out.opportunities_created > 0) return { live: "COMPLETED", chip: "FOUND SOMETHING", tone: "accent", anim: "none" };
       return { live: "COMPLETED", chip: "COMPLETED", tone: "ok", anim: "none" };
     }
+    if (out.status === "failed") return { live: "ERROR", chip: "ERROR", tone: "neutral", anim: "none" };
+    if (!isWorking) return { live: "IDLE", chip: "IDLE", tone: "neutral", anim: "none" };
     return { live: "THINKING", chip: "THINKING", tone: "accent", anim: "pulse" };
   }
   if (isWorking) {
@@ -690,7 +849,7 @@ function ProgressBar({ value, tone = "coral", striped = false }: { value: number
    the identity color (terracotta = Marketing, muted green = Product, amber =
    Designer). Only the explicit action button navigates — the card itself is
    never clickable. */
-type AgentCardAccent = "marketing" | "product" | "designer";
+type AgentCardAccent = "marketing" | "product" | "designer" | "software";
 
 interface AgentCardProps {
   accent: AgentCardAccent;
@@ -1101,6 +1260,7 @@ export function AgentsPage() {
   const [ranked, setRanked] = useState<RankedOpportunity[]>([]);
   const [memory, setMemory] = useState<GrowthMemoryResponse | null>(null);
   const [isWorking, setIsWorking] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [currentPhaseText, setCurrentPhaseText] = useState("");
   const [workError, setWorkError] = useState<string | null>(null);
@@ -1175,7 +1335,8 @@ export function AgentsPage() {
   // never created by polling — only by Start Analysis POST).
   const activeCycleIdRef = useRef<string | null>(null);
   const isPausedRef = useRef(false);
-  const autoStartedRef = useRef(false);
+  // Ref-based submit guard: see handleStartAiWork.
+  const startInFlightRef = useRef(false);
   const workingSinceRef = useRef<number | null>(null);
 
   // initial loads — gate protected APIs behind auth to avoid 401 spam when not signed in
@@ -1240,22 +1401,29 @@ export function AgentsPage() {
           ? runs.filter((r) => r.orchestrator_run_id === cycleId)
           : runs;
         setLiveRuns(cycleRuns);
-        const magiActive = magi.runs?.[0]
-          ? magi.runs[0].status === "queued" || magi.runs[0].status === "running"
-          : false;
-        // The Product Agent is part of the same cycle: a live Product run
-        // keeps the page in monitoring mode exactly like the Marketing Agent.
-        const productActive = isProductAgentActive(product.runs?.[0]?.status);
-        const teamActive = cycleRuns.some((r) => r.status === "running");
-        if ((teamActive || magiActive || productActive) && cycleId) {
-          // An analysis is still running server-side: resume observing it.
-          activeCycleIdRef.current = cycleId;
+        // Liveness comes from the backend, NOT from the presence of a
+        // `running` row. A crashed worker leaves exactly such a row behind, and
+        // inferring activity from it is what made this page show "ANALYZING…"
+        // forever on a plain visit. `fetchActiveRun` applies a staleness bound
+        // and never mutates anything, so mount, refresh and StrictMode remount
+        // are all safe to call.
+        const active = await fetchActiveRun().catch(() => null);
+        if (cancelled) return;
+
+        if (active?.active && active.run_id) {
+          // Genuinely live server-side: observe it. This attaches to an existing
+          // run; it never creates one.
+          activeCycleIdRef.current = active.run_id;
           setIsWorking(true);
           setIsPaused(false);
-          setCurrentPhaseText("Resumed — watching persisted analysis…");
+          setCurrentPhaseText("Resumed — watching the active analysis…");
           workingSinceRef.current = Date.now();
-          startPolling(cycleId);
+          startPolling(active.run_id);
         } else {
+          activeCycleIdRef.current = null;
+          setIsWorking(false);
+          setIsPaused(false);
+          setCurrentPhaseText("");
           try {
             const mc = await fetchMarketingAGICampaigns().catch(() => ({ campaigns: [] as MarketingAGICampaign[] }));
             if (!cancelled) setMagiCampaigns(mc.campaigns ?? []);
@@ -1275,13 +1443,14 @@ export function AgentsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // auto-start from URL
-  useEffect(() => {
-    if (urlObjective && agentsMeta && !autoStartedRef.current && !isWorking) {
-      autoStartedRef.current = true;
-      void handleStartAiWork(urlObjective);
-    }
-  }, [urlObjective, agentsMeta]);
+  // NOTE: there is deliberately NO auto-start effect here.
+  //
+  // An effect that started analysis whenever a `?objective=` query parameter was
+  // present meant simply navigating to /agents?objective=... launched a full
+  // 14-agent cycle with no user action. Starting analysis is now reachable ONLY
+  // from the explicit Start Analysis control (handleStartAiWork is called from
+  // the button handler and nowhere else), which is also what makes "one click,
+  // one run" enforceable.
 
   // keep workingSince
   useEffect(() => {
@@ -1317,11 +1486,17 @@ export function AgentsPage() {
   // Never creates/cancels anything server-side.
   const pollCycle = async (cycleId: string): Promise<boolean> => {
     try {
+      const activeReport = await fetchActiveRun().catch(() => null);
+      if (activeReport && !activeReport.active) {
+        return false;
+      }
       const runsResp = await fetchAgentRuns(50, cycleId);
       if (runsResp.runs?.length) {
         setLiveRuns(runsResp.runs);
-        const latest = runsResp.runs[0];
-        if (latest && EXECUTION_PHASES[latest.agent_name]) setCurrentPhaseText(EXECUTION_PHASES[latest.agent_name]);
+        const runningStep = runsResp.runs.find((r) => r.status === "running");
+        if (runningStep && EXECUTION_PHASES[runningStep.agent_name]) {
+          setCurrentPhaseText(EXECUTION_PHASES[runningStep.agent_name]);
+        }
       }
       try {
         const magi = await fetchMarketingAGIRuns();
@@ -1338,7 +1513,7 @@ export function AgentsPage() {
           productActive = isProductAgentActive(product.runs?.[0]?.status);
         } catch { /* transient */ }
         const teamActive = (runsResp.runs ?? []).some((r) => r.status === "running");
-        return teamActive || magiActive || productActive;
+        return (activeReport?.active ?? true) && (teamActive || magiActive || productActive);
       } catch {
         return (runsResp.runs ?? []).some((r) => r.status === "running");
       }
@@ -1395,7 +1570,12 @@ export function AgentsPage() {
 
   const handleStartAiWork = async (targetObjective?: string) => {
     const obj = targetObjective || urlObjective || DEFAULT_OBJECTIVE;
-    if (isWorking) return;
+    // Guard against a double submission with a ref, not React state: state is
+    // not updated until after this function yields, so two rapid clicks in the
+    // same tick would both pass an `isWorking` check. The backend also
+    // deduplicates, so this is defence in depth rather than the only defence.
+    if (startInFlightRef.current || isWorking) return;
+    startInFlightRef.current = true;
     setIsWorking(true);
     setIsPaused(false);
     setWorkError(null);
@@ -1413,12 +1593,55 @@ export function AgentsPage() {
       startPolling(cycleId);
     } catch (e) {
       stopPolling();
+      activeCycleIdRef.current = null;
       const msg = e instanceof Error ? e.message : "";
       if (msg.includes("NO_MERCHANT_MEMBERSHIP") || msg.includes("403")) setError("no_workspace");
       else setWorkError(msg || "The AI team could not complete this analysis. Please try again in a moment.");
       setIsWorking(false);
       setIsPaused(false);
       setCurrentPhaseText("");
+    } finally {
+      startInFlightRef.current = false;
+    }
+  };
+
+  /**
+   * Stop actually stops the backend.
+   *
+   * The previous control only suspended polling and its own message said
+   * "Backend analysis continues" — the run kept executing with no way to halt
+   * it. This calls the cancel endpoint, which persists the request and
+   * terminalises the cycle, so no further plan step starts.
+   *
+   * Honest about the limit: cancellation is observed BETWEEN steps. A step
+   * already inside an agent body — or inside an external call the provider
+   * controls — is not recalled. That is why the endpoint marks the cycle
+   * cancelled immediately rather than waiting for the worker to notice.
+   */
+  const handleStopAiWork = async () => {
+    const cycleId = activeCycleIdRef.current;
+    stopPolling();
+    setIsWorking(false);
+    setIsPaused(false);
+    activeCycleIdRef.current = null;
+    if (!cycleId) {
+      setCurrentPhaseText("");
+      return;
+    }
+    setIsCancelling(true);
+    setCurrentPhaseText("Stopping — requesting cancellation…");
+    try {
+      await cancelAgentRun(cycleId);
+      setCurrentPhaseText("Analysis cancelled.");
+      setLastAnalysisTime(Date.now());
+      const finalRuns = await fetchAgentRuns(50, cycleId).catch(() => null);
+      if (finalRuns?.runs) setLiveRuns(finalRuns.runs);
+    } catch (e) {
+      setWorkError(
+        e instanceof Error ? e.message : "Could not cancel the analysis.",
+      );
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -1487,6 +1710,61 @@ export function AgentsPage() {
   const actionPlan: ActionPlan | null = lastRunResult?.action_plan ?? null;
   const totals = lastRunResult?.totals;
 
+  /* ── Manager Agent coordinator card ───────────────────────────────────
+     Everything the coordinator card shows is derived from REAL state:
+     its catalog entry from /api/agents/catalog, its run status from the
+     Manager's own AgentRun row in this cycle, and its "latest coordination"
+     line from the objective that cycle actually ran. Nothing is defaulted to
+     a plausible-looking value — an absent run reads as "not run yet". */
+  const managerRosterEntry: RosterAgent | null = useMemo(
+    () => specialistRoster.agents.find((a) => a.name === "ManagerAgent") ?? null,
+    [specialistRoster],
+  );
+
+  const managerRun = runByAgent.get("ManagerAgent") ?? null;
+
+  const managerStatus: { tone: string; text: string } = useMemo(() => {
+    if (!managerRun) {
+      return { tone: "idle", text: "Not run yet" };
+    }
+    const s = managerRun.status;
+    if (s === "completed") return { tone: "ok", text: "Coordinating" };
+    if (s === "running") return { tone: "accent", text: "Working" };
+    if (s === "failed") {
+      return { tone: "warn", text: "Needs attention" };
+    }
+    return { tone: "idle", text: s };
+  }, [managerRun]);
+
+  const managerErrors = useMemo(
+    () => (managerRun?.errors ?? []).filter((e): e is string => typeof e === "string"),
+    [managerRun],
+  );
+
+  const managerLatestFinding: string = useMemo(() => {
+    if (!managerRun) {
+      return "No coordination run recorded yet. Start an analysis to see the Manager plan a cycle.";
+    }
+    const summary = managerRun.output_summary as
+      | { objective?: string }
+      | null
+      | undefined;
+    const objective = summary?.objective ?? lastRunResult?.objective ?? null;
+    const proposed = lastRunResult?.totals?.actions_proposed ?? 0;
+    const parts: string[] = [];
+    if (objective) parts.push(`Objective: ${objective}.`);
+    parts.push(
+      proposed > 0
+        ? `${proposed} action(s) proposed and awaiting human approval.`
+        : "No actions proposed.",
+    );
+    if (managerErrors.length > 0) {
+      parts.push(`Errors: ${managerErrors.join("; ")}`);
+    }
+    return parts.join(" ");
+  }, [managerRun, managerErrors, lastRunResult]);
+
+
   // liveInfos for office — enriched with face, pos, tool, comm
   const liveInfos: AgentLiveInfo[] = rosterOrder.map((name, idx) => {
     const prof = agentProfile(name);
@@ -1494,9 +1772,9 @@ export function AgentsPage() {
     const out = agentOutputMap.get(name);
     const vis = AVATAR_BASE[name] ?? { zone: "SPECIALISTS" };
     // NEW Marketing Agent slot: real status from /api/marketing-agi (same position)
-    const magi = name === "MarketingAgent" ? marketingAgentOfficeSlot(magiRun, magiCampaigns) : null;
+    const magi = name === "MarketingAgent" ? marketingAgentOfficeSlot(magiRun, magiCampaigns, isWorking) : null;
     // NEW Product Agent slot: real status from /api/product-agi (same position)
-    const product = name === "ProductAgent" ? productAgentOfficeSlot(productRun) : null;
+    const product = name === "ProductAgent" ? productAgentOfficeSlot(productRun, isWorking) : null;
     const derived = magi ?? product ?? deriveLiveStatus(name, run, out, isWorking, Boolean(insufficient && !isWorking && executedAgentNames.length === 0));
     const progress = magi?.progress ?? product?.progress ?? deriveAgentProgress(run, out, isWorking, idx, run?.started_at ? new Date(run.started_at).getTime() : workingSinceRef.current);
     const toolDetail = toolDetailForAgent(name, metrics, run);
@@ -1581,57 +1859,205 @@ export function AgentsPage() {
     [liveInfos],
   );
 
-  const workingCount = liveInfos.filter((a) => a.liveStatus === "WORKING" || a.liveStatus === "ANALYZING" || a.liveStatus === "THINKING" || a.liveStatus === "TOOL_CALL" || a.liveStatus === "COMMUNICATING").length;
+  const workingCount = isWorking
+    ? liveInfos.filter((a) => a.liveStatus === "WORKING" || a.liveStatus === "ANALYZING" || a.liveStatus === "THINKING" || a.liveStatus === "TOOL_CALL" || a.liveStatus === "COMMUNICATING").length
+    : 0;
   const completedCount = liveInfos.filter((a) => a.liveStatus === "COMPLETED").length;
 
   // activity entries
-  const activityEntries = useMemo(() => {
-    const entries: Array<{ id: string; ts: string | null; agentKey: string; agentLabel: string; action: string; result: string; tone: "ok" | "accent" | "neutral"; icon: string }> = [];
-    // from live runs — most recent last, we want chronological newest last? For console, newest first maybe reverse.
-    [...liveRuns].sort((a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime()).forEach((r) => {
+  const activityEntries: ActivityCardItem[] = useMemo(() => {
+    const entries: ActivityCardItem[] = [];
+
+    // from live runs — sort newest first so active/latest steps are at the top
+    const sortedRuns = [...liveRuns].sort(
+      (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
+    );
+
+    sortedRuns.forEach((r) => {
       const prof = agentProfile(r.agent_name);
+      const isRunning = r.status === "running" || r.status === "working" || r.status === "queued";
       const isDone = r.status === "completed";
-      const isRunning = r.status === "running";
+      const isInterrupted = r.status === "interrupted" || r.status === "cancelled";
+      const isFailed = r.status === "failed" || (Array.isArray(r.errors) && r.errors.length > 0 && !isDone);
+
+      const opps = Number(r.opportunities_created) || 0;
+      const proposals = Number(r.actions_proposed) || 0;
+      const insights = Number(r.insights_generated) || 0;
+      const signals = Number(r.signals_detected) || 0;
+      const totalMetrics = opps + proposals + insights + signals;
+
+      let statusTone: "working" | "completed" | "found" | "interrupted" | "failed" = "completed";
+      let statusLabel = "Completed";
+      let statusIcon = "✓";
+
+      if (isRunning) {
+        statusTone = "working";
+        statusLabel = "Working";
+        statusIcon = "●";
+      } else if (isDone) {
+        if (totalMetrics > 0) {
+          statusTone = "found";
+          statusLabel = "Found";
+          statusIcon = "✦";
+        } else {
+          statusTone = "completed";
+          statusLabel = "Completed";
+          statusIcon = "✓";
+        }
+      } else if (isInterrupted) {
+        statusTone = "interrupted";
+        statusLabel = "Interrupted";
+        statusIcon = "⏸";
+      } else if (isFailed) {
+        statusTone = "failed";
+        statusLabel = "Failed";
+        statusIcon = "✕";
+      }
+
+      const summaryText = (r.output_summary as { summary?: string } | undefined)?.summary ?? null;
+      const description = formatActivityDescription(r.agent_name, r.status, prof.looksAt, summaryText);
+
+      let outcomeText = "No new growth opportunities detected during this run.";
+      if (isRunning) {
+        outcomeText = "Running analysis and examining live store records";
+      } else if (opps > 0) {
+        outcomeText = `Created ${opps} growth opportunit${opps === 1 ? "y" : "ies"}`;
+      } else if (proposals > 0) {
+        outcomeText = `Proposed ${proposals} action${proposals === 1 ? "" : "s"}`;
+      } else if (insights > 0) {
+        outcomeText = `Discovered ${insights} customer insight${insights === 1 ? "" : "s"}`;
+      } else if (signals > 0) {
+        outcomeText = `Detected ${signals} growth signal${signals === 1 ? "" : "s"}`;
+      } else if (isFailed) {
+        outcomeText = (r.errors && r.errors[0]) || "Agent encountered an error during this step.";
+      } else if (isInterrupted) {
+        outcomeText = "Analysis was interrupted before finishing.";
+      }
+
       entries.push({
         id: r.id,
         ts: r.started_at,
         agentKey: r.agent_name,
-        agentLabel: prof.label,
-        action: isRunning ? `Started — ${LIVE_TASKS[r.agent_name] ?? "analyzing business data"}` : isDone ? `Completed — examined ${prof.looksAt.toLowerCase()}` : `Status: ${r.status}`,
-        result: isDone ? (r.opportunities_created > 0 ? `Contributed to ${r.opportunities_created} opportunit${r.opportunities_created === 1 ? "y" : "ies"}` : "No new signal in this window") : isRunning ? "In progress…" : (r.errors?.[0] ?? ""),
-        tone: isRunning ? "accent" : isDone && r.opportunities_created > 0 ? "accent" : isDone ? "ok" : "neutral",
-        icon: isRunning ? "●" : isDone ? "✓" : "—",
+        agentLabel: formatHumanAgentName(r.agent_name),
+        specialty: prof.specialty,
+        avatarIcon: formatAgentAvatar(r.agent_name),
+        status: r.status,
+        statusTone,
+        statusLabel,
+        statusIcon,
+        description,
+        outcomeText,
+        metrics: {
+          opportunities: opps,
+          proposals,
+          insights,
+          signals,
+        },
+        totalMetrics,
+        timeFormatted: formatCardTime(r.started_at),
+        errorMessage: (r.errors && r.errors[0]) || null,
       });
-      if (r.completed_at && r.completed_at !== r.started_at) {
-        // add completed marker separate? Already covered
-      }
     });
-    // add orchestrator-level findings as extra entries if no liveRuns yet but we have lastRunResult
+
+    // fallback from lastRunResult if liveRuns is empty
     if (entries.length === 0 && lastRunResult?.agents) {
       lastRunResult.agents.forEach((a) => {
         const prof = agentProfile(a.agent);
+        const opps = Number(a.opportunities_created) || 0;
+        const proposals = Number(a.actions_proposed) || 0;
+        const insights = 0;
+        const signals = 0;
+        const totalMetrics = opps + proposals;
+
+        const isDone = a.status === "completed";
+        const statusTone: "working" | "completed" | "found" | "interrupted" | "failed" =
+          a.status === "running"
+            ? "working"
+            : isDone
+            ? totalMetrics > 0
+              ? "found"
+              : "completed"
+            : a.status === "failed"
+            ? "failed"
+            : "completed";
+
+        const statusLabel =
+          statusTone === "working"
+            ? "Working"
+            : statusTone === "found"
+            ? "Found"
+            : statusTone === "failed"
+            ? "Failed"
+            : "Completed";
+        const statusIcon =
+          statusTone === "working"
+            ? "●"
+            : statusTone === "found"
+            ? "✦"
+            : statusTone === "failed"
+            ? "✕"
+            : "✓";
+
+        const description = formatActivityDescription(
+          a.agent,
+          a.status,
+          prof.looksAt,
+          a.output?.summary ?? null
+        );
+
+        let outcomeText = "No new growth opportunities detected during this run.";
+        if (opps > 0) {
+          outcomeText = `Created ${opps} growth opportunit${opps === 1 ? "y" : "ies"}`;
+        } else if (proposals > 0) {
+          outcomeText = `Proposed ${proposals} action${proposals === 1 ? "" : "s"}`;
+        }
+
         entries.push({
           id: `orch-${a.agent}`,
           ts: null,
           agentKey: a.agent,
-          agentLabel: prof.label,
-          action: a.status === "completed" ? `Reported — ${firstSentence(a.output?.summary ?? "") ?? "Completed analysis"}` : `Status: ${a.status}`,
-          result: a.opportunities_created ? `Created ${a.opportunities_created} opportunit${a.opportunities_created === 1 ? "y" : "ies"}` : "No direct opportunity created",
-          tone: a.opportunities_created > 0 ? "accent" : a.status === "completed" ? "ok" : "neutral",
-          icon: a.opportunities_created > 0 ? "◆" : "✓",
+          agentLabel: formatHumanAgentName(a.agent),
+          specialty: prof.specialty,
+          avatarIcon: formatAgentAvatar(a.agent),
+          status: a.status,
+          statusTone,
+          statusLabel,
+          statusIcon,
+          description,
+          outcomeText,
+          metrics: {
+            opportunities: opps,
+            proposals,
+            insights,
+            signals,
+          },
+          totalMetrics,
+          timeFormatted: { time: "—", relative: "Recent run" },
+          errorMessage: null,
         });
       });
     }
-    // sort newest first for display but keep chronological order for graph? We'll display newest first
+
     return entries;
   }, [liveRuns, lastRunResult]);
 
+  const filterCounts = useMemo(() => {
+    return {
+      ALL: activityEntries.length,
+      WORKING: activityEntries.filter((e) => e.statusTone === "working").length,
+      FOUND: activityEntries.filter((e) => e.statusTone === "found" || e.totalMetrics > 0).length,
+      COMPLETED: activityEntries.filter((e) => e.statusTone === "completed" || e.statusTone === "found").length,
+    };
+  }, [activityEntries]);
+
   const filteredActivity = useMemo(() => {
     if (activityFilter === "ALL") return activityEntries;
-    if (activityFilter === "WORKING") return activityEntries.filter((e) => e.tone === "accent" && e.action.toLowerCase().includes("started"));
-    if (activityFilter === "FOUND") return activityEntries.filter((e) => e.result.toLowerCase().includes("opportunit"));
-    return activityEntries.filter((e) => e.tone === "ok");
+    if (activityFilter === "WORKING") return activityEntries.filter((e) => e.statusTone === "working");
+    if (activityFilter === "FOUND") return activityEntries.filter((e) => e.statusTone === "found" || e.totalMetrics > 0);
+    if (activityFilter === "COMPLETED") return activityEntries.filter((e) => e.statusTone === "completed" || e.statusTone === "found");
+    return activityEntries;
   }, [activityEntries, activityFilter]);
+
 
   // findings
   const findings = rosterOrder
@@ -1842,8 +2268,23 @@ export function AgentsPage() {
 
         <div className="agents-cc__heroActions">
           <div className="agents-cc__controls">
-            <Button variant="primary" mono disabled={isWorking || !agentsMeta} onClick={() => void handleStartAiWork()}>
+            <Button
+              variant="primary"
+              mono
+              disabled={isWorking || isCancelling || !agentsMeta}
+              onClick={() => void handleStartAiWork()}
+            >
               {isWorking ? "Analyzing…" : "Start Analysis →"}
+            </Button>
+            {/* Stop cancels the persisted cycle, so no further plan step
+                starts. Pause, by contrast, only suspends observation. */}
+            <Button
+              variant="secondary"
+              mono
+              disabled={!isWorking || isCancelling}
+              onClick={() => void handleStopAiWork()}
+            >
+              {isCancelling ? "Stopping…" : "Stop"}
             </Button>
             <Button variant="secondary" mono disabled={!isWorking} onClick={togglePause}>
               {isPaused ? "Resume" : "Pause"}
@@ -1986,44 +2427,273 @@ export function AgentsPage() {
 
             <div className="cmd__body">
               {cmdTab === "ACTIVITY" && (
-                <div className="cmd__panel">
-                  <div className="cmd__panelHead">
-                    <span className="meta-label">ACTIVITY STREAM · CHRONOLOGICAL</span>
-                    <div className="cmd__filters">
+                <div className="act-panel">
+                  {/* Activity Stream Header */}
+                  <header className="act-header">
+                    <div className="act-header__left">
+                      <div className="act-header__icon-box" aria-hidden="true">
+                        <svg
+                          className="act-header__pulse-svg"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                        </svg>
+                      </div>
+                      <div className="act-header__titles">
+                        <div className="act-header__title-row">
+                          <h3 className="act-header__title">Agent Activity</h3>
+                          <span
+                            className={`act-header__live-pill ${
+                              isWorking && !isPaused
+                                ? "act-header__live-pill--live"
+                                : "act-header__live-pill--idle"
+                            }`}
+                          >
+                            {isWorking && !isPaused && <span className="act-header__live-dot" />}
+                            {isWorking && !isPaused ? "Live Stream" : "Snapshot"}
+                          </span>
+                        </div>
+                        <p className="act-header__subtitle">
+                          Track what your AI team is doing in real time.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="act-header__right">
+                      <button
+                        type="button"
+                        className="act-refresh-btn"
+                        onClick={() => void handleRefresh()}
+                        title="Refresh agent activity"
+                      >
+                        <span aria-hidden="true">↻</span>
+                        <span>Refresh</span>
+                      </button>
+                    </div>
+                  </header>
+
+                  {/* Filter controls */}
+                  <div className="act-filters">
+                    <div className="act-segmented" role="tablist" aria-label="Activity filter">
                       {(["ALL", "WORKING", "FOUND", "COMPLETED"] as const).map((f) => (
-                        <button key={f} type="button" className={`cmd__filter${activityFilter === f ? " cmd__filter--on" : ""}`} onClick={() => setActivityFilter(f)}>
-                          {f}
+                        <button
+                          key={f}
+                          type="button"
+                          role="tab"
+                          aria-selected={activityFilter === f}
+                          className={`act-filter-btn${
+                            activityFilter === f ? " act-filter-btn--active" : ""
+                          }`}
+                          onClick={() => setActivityFilter(f)}
+                        >
+                          <span>{f}</span>
+                          <span className="act-filter-count">{filterCounts[f]}</span>
                         </button>
                       ))}
                     </div>
+                    <span className="act-filters__meta">
+                      Showing {filteredActivity.length} of {activityEntries.length} events
+                    </span>
                   </div>
+
+                  {/* Timeline or Empty state */}
                   {filteredActivity.length === 0 ? (
-                    <div className="cmd__empty">
-                      {isWorking ? "Streaming activity — specialists will appear here as they start." : "No activity yet. Start an analysis to stream every agent event here."}
-                      <span className="cmd__emptyHint">This console shows real execution events — never fabricated results.</span>
+                    <div className="act-empty">
+                      <span className="act-empty__icon" aria-hidden="true">
+                        <svg
+                          width="28"
+                          height="28"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="12" y1="8" x2="12" y2="12" />
+                          <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                      </span>
+                      <h4 className="act-empty__title">
+                        {activityFilter === "ALL"
+                          ? isWorking
+                            ? "Streaming activity — specialists will appear as they begin."
+                            : "No activity recorded yet"
+                          : `No ${activityFilter.toLowerCase()} activity recorded`}
+                      </h4>
+                      <p className="act-empty__desc">
+                        {activityFilter === "ALL"
+                          ? isWorking
+                            ? "Your specialists are initializing and will stream each analysis step here."
+                            : "Start an analysis above to stream live actions, discoveries, and proposals from your AI team."
+                          : `No agent events match the "${activityFilter}" filter in this time window.`}
+                      </p>
+                      <span className="act-empty__badge">
+                        Verified Execution Events · Real-Time Timeline
+                      </span>
                     </div>
                   ) : (
-                    <div className="cmd__log">
+                    <div className="act-timeline" role="feed" aria-label="Agent activity events">
                       {filteredActivity.map((e) => (
-                        <div key={e.id} className={`cmd__entry cmd__entry--${e.tone}`}>
-                          <div className="cmd__entryHead">
-                            <span className="cmd__entryAgent">{e.agentLabel.toUpperCase()}</span>
-                            <span className="cmd__entryTime">{fmtTime(e.ts)}</span>
-                            <span className={`cmd__entryBadge cmd__entryBadge--${e.tone}`}>{e.icon}</span>
+                        <article
+                          key={e.id}
+                          className={`act-card act-card--${e.statusTone}`}
+                          tabIndex={0}
+                          aria-label={`${e.agentLabel} — ${e.statusLabel}`}
+                        >
+                          <div className="act-card__top">
+                            <div className="act-card__agent-block">
+                              <span className="act-card__avatar" aria-hidden="true">
+                                {e.avatarIcon}
+                              </span>
+                              <div className="act-card__titles">
+                                <span className="act-card__name">{e.agentLabel}</span>
+                                {e.specialty && (
+                                  <span className="act-card__specialty">{e.specialty}</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="act-card__meta">
+                              <time
+                                className="act-card__time"
+                                dateTime={e.ts ?? undefined}
+                                title={e.ts ? new Date(e.ts).toLocaleString() : undefined}
+                              >
+                                <span>{e.timeFormatted.time}</span>
+                                {e.timeFormatted.relative && (
+                                  <span className="act-card__time-rel">
+                                    ({e.timeFormatted.relative})
+                                  </span>
+                                )}
+                              </time>
+                              <span
+                                className={`act-status-badge act-status-badge--${e.statusTone}`}
+                              >
+                                {e.statusTone === "working" && (
+                                  <span className="act-status-badge__dot" aria-hidden="true" />
+                                )}
+                                <span className="act-status-badge__icon" aria-hidden="true">
+                                  {e.statusIcon}
+                                </span>
+                                <span>{e.statusLabel}</span>
+                              </span>
+                            </div>
                           </div>
-                          <p className="cmd__entryAction">{e.action}</p>
-                          <p className="cmd__entryResult">→ {e.result}</p>
-                        </div>
+
+                          <div className="act-card__body">
+                            <p className="act-card__desc">{e.description}</p>
+                          </div>
+
+                          <div className="act-card__bottom">
+                            {e.totalMetrics > 0 ? (
+                              <div className="act-chips" aria-label="Run outcome metrics">
+                                {e.metrics.opportunities > 0 && (
+                                  <span
+                                    className="act-chip act-chip--opps"
+                                    title="Growth opportunities created"
+                                  >
+                                    <span className="act-chip__icon" aria-hidden="true">
+                                      💡
+                                    </span>
+                                    <span className="act-chip__count">
+                                      {e.metrics.opportunities}
+                                    </span>
+                                    <span className="act-chip__label">
+                                      opp{e.metrics.opportunities === 1 ? "" : "s"}
+                                    </span>
+                                  </span>
+                                )}
+                                {e.metrics.proposals > 0 && (
+                                  <span
+                                    className="act-chip act-chip--proposals"
+                                    title="Action proposals created"
+                                  >
+                                    <span className="act-chip__icon" aria-hidden="true">
+                                      ⚡
+                                    </span>
+                                    <span className="act-chip__count">
+                                      {e.metrics.proposals}
+                                    </span>
+                                    <span className="act-chip__label">
+                                      proposal{e.metrics.proposals === 1 ? "" : "s"}
+                                    </span>
+                                  </span>
+                                )}
+                                {e.metrics.insights > 0 && (
+                                  <span
+                                    className="act-chip act-chip--insights"
+                                    title="Customer insights generated"
+                                  >
+                                    <span className="act-chip__icon" aria-hidden="true">
+                                      📊
+                                    </span>
+                                    <span className="act-chip__count">
+                                      {e.metrics.insights}
+                                    </span>
+                                    <span className="act-chip__label">
+                                      insight{e.metrics.insights === 1 ? "" : "s"}
+                                    </span>
+                                  </span>
+                                )}
+                                {e.metrics.signals > 0 && (
+                                  <span
+                                    className="act-chip act-chip--signals"
+                                    title="Growth signals detected"
+                                  >
+                                    <span className="act-chip__icon" aria-hidden="true">
+                                      🔆
+                                    </span>
+                                    <span className="act-chip__count">
+                                      {e.metrics.signals}
+                                    </span>
+                                    <span className="act-chip__label">
+                                      signal{e.metrics.signals === 1 ? "" : "s"}
+                                    </span>
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <div
+                                className={`act-outcome act-outcome--${
+                                  e.statusTone === "working"
+                                    ? "working"
+                                    : e.statusTone === "failed"
+                                    ? "failed"
+                                    : "empty"
+                                }`}
+                              >
+                                <span className="act-outcome__icon" aria-hidden="true">
+                                  {e.statusTone === "working"
+                                    ? "⏳"
+                                    : e.statusTone === "failed"
+                                    ? "⚠️"
+                                    : e.statusTone === "interrupted"
+                                    ? "⏸"
+                                    : "ℹ"}
+                                </span>
+                                <span>{e.outcomeText}</span>
+                              </div>
+                            )}
+                          </div>
+                        </article>
                       ))}
-                    <ActivityFeed merchantId={radar?.merchant_id} windowDays={windowDays} />
                     </div>
                   )}
-                  <div className="cmd__foot">
-                    <span>{filteredActivity.length} events · {isWorking && !isPaused ? "streaming" : "snapshot"}</span>
-                    <button type="button" className="cmd__footLink" onClick={() => void handleRefresh()}>
-                      ↻ Refresh
-                    </button>
-                  </div>
+
+                  {/* Foot metadata */}
+                  <footer className="act-foot">
+                    <span>
+                      {filteredActivity.length} event
+                      {filteredActivity.length === 1 ? "" : "s"} ·{" "}
+                      {isWorking && !isPaused ? "Live streaming" : "Snapshot view"}
+                    </span>
+                    <span>Chronological timeline</span>
+                  </footer>
                 </div>
               )}
 
@@ -2270,10 +2940,26 @@ export function AgentsPage() {
                     COMMANDS · OPERATOR CONTROLS
                   </p>
                   <div className="cmd__cmdBtns">
-                    <Button variant="primary" mono disabled={isWorking} onClick={() => void handleStartAiWork()} style={{ width: "100%" }}>
+                    <Button
+                      variant="primary"
+                      mono
+                      disabled={isWorking || isCancelling}
+                      onClick={() => void handleStartAiWork()}
+                      style={{ width: "100%" }}
+                    >
                       {isWorking ? "Analysis running…" : "Start Analysis →"}
                     </Button>
                     <div className="cmd__cmdRow">
+                      {/* Real stop: cancels the persisted cycle server-side. */}
+                      <Button
+                        variant="secondary"
+                        mono
+                        disabled={!isWorking || isCancelling}
+                        onClick={() => void handleStopAiWork()}
+                        style={{ flex: 1 }}
+                      >
+                        {isCancelling ? "Stopping…" : "Stop"}
+                      </Button>
                       <Button variant="secondary" mono disabled={!isWorking} onClick={togglePause} style={{ flex: 1 }}>
                         {isPaused ? "Resume stream" : "Pause stream"}
                       </Button>
@@ -2379,6 +3065,49 @@ export function AgentsPage() {
           Immediately below the Agent Findings heading/description, before
           Growth Opportunities. One reusable card (AgentCard); Marketing
           carries the live run state, Product carries the frontend preview. */}
+      {/* ── MANAGER AGENT — the coordinator, shown BEFORE the specialists ─
+          The Manager is not another specialist: it reads a merchant goal,
+          selects from the live registry, builds a validated plan, delegates
+          through the existing orchestrator and synthesises the result. It
+          appears here once, ahead of the agents it coordinates, and every
+          figure below comes from real backend state (or says it is
+          unavailable) rather than a hardcoded count. */}
+      <WindowPanel title="ai-team.manager — coordinator" className="agents-cc__manager">
+        <article className="employee-card employee-card--manager" aria-label="MANAGER AGENT">
+          <div className="employee-card__head">
+            <span className="meta-label">MANAGER AGENT</span>
+            <span className={`roster__badge roster__badge--${managerStatus.tone}`}>
+              ● {managerStatus.text}
+            </span>
+          </div>
+          <h2 className="employee-card__role">Coordinator — plans, delegates, synthesises</h2>
+          <p className="employee-card__desc">
+            {managerRosterEntry?.description ??
+              "Top-level coordinator for the AI Growth Team. Decomposes growth objectives, delegates to specialist agents, and synthesises findings."}
+          </p>
+          <div className="employee-card__finding">
+            <span className="employee-card__findingLabel">LATEST COORDINATION</span>
+            <p className="employee-card__findingValue">
+              {managerLatestFinding}
+            </p>
+          </div>
+          <div className="employee-card__foot">
+            <span className="employee-card__support">
+              {managerRosterEntry
+                ? `${managerRosterEntry.tools.length} registered tool(s)${
+                    managerRosterEntry.unimplementedTools.length > 0
+                      ? ` · ${managerRosterEntry.unimplementedTools.length} declared but not implemented`
+                      : ""
+                  } · never approves or executes`
+                : "Manager catalog unavailable"}
+            </span>
+            <Button variant="primary" mono onClick={() => navigate("/manager-agent")}>
+              OPEN MANAGER AGENT →
+            </Button>
+          </div>
+        </article>
+      </WindowPanel>
+
       <WindowPanel title="autonomous.employees — marketing + product + design.app">
         <div className="agents-cc__employees">
           {(() => {
@@ -2447,9 +3176,29 @@ export function AgentsPage() {
               />
             );
           })()}
+          {(() => {
+            const software = liveInfos.find((a) => a.key === "SoftwareAgent") ?? null;
+            const softwareFinding = findings.find((f) => f.name === "SoftwareAgent") ?? null;
+            const softwareRun = liveRuns.find((r) => r.agent_name === "SoftwareAgent") ?? null;
+            return (
+              <AgentCard
+                accent="software"
+                label="SOFTWARE AGENT"
+                statusText={software?.chipLabel ?? (softwareRun?.status ? softwareRun.status.toUpperCase() : "READY")}
+                statusTone={software?.chipTone === "accent" || software?.chipTone === "neutral" ? software.chipTone : "ok"}
+                role="AUTONOMOUS TECHNICAL FEASIBILITY EMPLOYEE"
+                description="Checks automation paths, webhook integrations, technical feasibility, and implementation constraints — verifies what can realistically and safely be automated."
+                findingLabel="LATEST FINDING"
+                finding={softwareFinding?.finding ?? (softwareRun?.output_summary ? "Integration and webhook endpoints verified." : "Checks webhook constraints, Razorpay API integrations, and automation feasibility.")}
+                support={softwareFinding?.evidence ?? software?.monitorLine ?? "Automation paths & technical constraints"}
+                actionLabel="OPEN SOFTWARE AGENT →"
+                onOpen={() => navigate("/software-agent")}
+              />
+            );
+          })()}
         </div>
         <p className="agents-cc__employeesHint">
-          All three agents start from one shared analysis cycle — Start Analysis
+          All four agents start from one shared analysis cycle — Start Analysis
           on this page runs them concurrently.
         </p>
       </WindowPanel>

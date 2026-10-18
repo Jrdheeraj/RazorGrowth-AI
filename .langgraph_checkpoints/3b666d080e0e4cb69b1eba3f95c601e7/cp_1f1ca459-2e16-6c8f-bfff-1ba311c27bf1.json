@@ -1,0 +1,58 @@
+{
+  "checkpoint": {
+    "v": 4,
+    "ts": "2026-10-17T16:12:39.099713+00:00",
+    "id": "1f1ca459-2e16-6c8f-bfff-1ba311c27bf1",
+    "channel_values": {
+      "__start__": {
+        "merchant_id": "9fe64bbb-e4b8-4c2b-82f6-8672ba47cb10",
+        "run_id": "3b666d080e0e4cb69b1eba3f95c601e7",
+        "workflow_id": "5cf1bab6-c8cd-453d-9174-6e83b40dbfe9",
+        "mode": "team",
+        "objective": "recover failed payments",
+        "window_days": 30,
+        "params": {
+          "objective": "recover failed payments",
+          "window_days": 30
+        },
+        "generation": 1,
+        "current_step_index": 0,
+        "selected_specialists": [],
+        "agents_run": [],
+        "resumed_steps": [],
+        "needs_reconciliation": [],
+        "opportunities": [],
+        "ranked_opportunities": [],
+        "findings": [],
+        "actions_proposed": [],
+        "tool_records": [],
+        "shared_memory": {},
+        "errors": [],
+        "status": "running",
+        "cancelled": false,
+        "cancelled_at_step": null,
+        "totals": {},
+        "debate_id": null,
+        "action_plan": null,
+        "terminal_outcome": {}
+      }
+    },
+    "channel_versions": {
+      "__start__": 1
+    },
+    "versions_seen": {
+      "__input__": {}
+    },
+    "updated_channels": [
+      "__start__"
+    ]
+  },
+  "metadata": {
+    "source": "input",
+    "step": -1,
+    "parents": {}
+  },
+  "channel_versions": {
+    "__start__": 1
+  }
+}

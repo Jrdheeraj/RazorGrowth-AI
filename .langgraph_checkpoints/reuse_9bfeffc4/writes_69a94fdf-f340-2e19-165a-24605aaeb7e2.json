@@ -1,0 +1,38 @@
+[
+  [
+    "current_step_index",
+    4
+  ],
+  [
+    "agents_run",
+    [
+      {
+        "agent_name": "OpportunityPrioritizationAgent",
+        "step_key": "fast:003:OpportunityPrioritizationAgent:-:931b0b25bda6e37ef9c89ef5",
+        "status": "completed",
+        "opportunities_created": 0,
+        "actions_proposed": 0,
+        "tools_used": [
+          "opportunity_scoring"
+        ],
+        "errors": [],
+        "reused": true
+      }
+    ]
+  ],
+  [
+    "resumed_steps",
+    [
+      {
+        "step_index": 3,
+        "step_key": "fast:003:OpportunityPrioritizationAgent:-:931b0b25bda6e37ef9c89ef5",
+        "agent": "OpportunityPrioritizationAgent",
+        "phase": null
+      }
+    ]
+  ],
+  [
+    "branch:to:finalize_workflow",
+    null
+  ]
+]

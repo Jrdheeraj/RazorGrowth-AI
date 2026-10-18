@@ -41,6 +41,7 @@ from backend.app.agents.permissions import (
     READ_ORDERS,
     READ_PAYMENTS,
     READ_PRODUCTS,
+    SIMULATE,
 )
 
 log = logging.getLogger(__name__)
@@ -186,6 +187,37 @@ class ProposeActionInput(BaseModel):
     requested_by: str = Field(default="catalog", max_length=64)
 
 
+class SimulationInput(BaseModel):
+    """
+    Arguments for the deterministic what-if engine.
+
+    Bounds are declared here so an out-of-range scenario is refused by
+    schema validation rather than reaching the arithmetic. Scenario-specific
+    requirements are checked in the handler, which reports a missing-input
+    error instead of inventing a default.
+
+    NOTE: this tool is deliberately READ-ONLY. ``SimulationEngine.persist()``
+    is never called here, so invoking it cannot create a Simulation row, an
+    AgentAction or any other merchant-visible artefact. Persistence stays with
+    the existing ``/api/simulations`` endpoint, which is behind the ordinary
+    authenticated write path.
+    """
+
+    merchant_id: uuid.UUID
+    scenario_type: str = Field(pattern="^(discount|campaign|payment_recovery)$")
+    # discount / campaign
+    discount_percentage: float | None = Field(default=None, ge=0, le=100)
+    target_customers: int = Field(default=0, ge=0, le=10_000_000)
+    expected_conversion: float | None = Field(default=None, ge=0, le=1)
+    avg_order_value: float | None = Field(default=None, ge=0)
+    cost_per_target: float | None = Field(default=None, ge=0)
+    # payment_recovery
+    failed_payment_value: float | None = Field(default=None, ge=0)
+    recovery_rate: float | None = Field(default=None, ge=0, le=1)
+    cost_per_contact: float | None = Field(default=None, ge=0)
+    contacts: int = Field(default=0, ge=0, le=10_000_000)
+
+
 # --------------------------------------------------------------------------- #
 # Tool handlers — thin adapters over services that already exist.
 # These deliberately contain no business logic; they normalise arguments and
@@ -264,6 +296,97 @@ def _handle_payment_failures(payload: MerchantWindowInput, db: Any) -> ToolResul
     return ToolResult(
         data=data,
         source="agents.marketing_agi.tools.analytics_tools.get_failed_payment_analytics",
+    )
+
+
+def _handle_what_if_simulation(payload: SimulationInput, db: Any) -> ToolResult:
+    """
+    Real deterministic what-if arithmetic from ``SimulationEngine``.
+
+    Read-only: ``simulate()`` computes and returns, ``persist()`` is never
+    called, so this cannot create rows.
+
+    Missing scenario inputs are reported as ``missing_input`` warnings rather
+    than defaulted, and ``is_estimate`` is carried through unchanged so a
+    projection can never be read as measured revenue.
+    """
+    from backend.app.services.simulation import SimulationEngine, SimulationValidationError
+
+    scenario = payload.scenario_type
+    kwargs: dict[str, Any] = {}
+    missing: list[str] = []
+
+    if scenario == "discount":
+        if payload.discount_percentage is None:
+            missing.append("discount_percentage")
+        if payload.expected_conversion is None:
+            missing.append("expected_conversion")
+        if payload.avg_order_value is None:
+            missing.append("avg_order_value")
+        kwargs = {
+            "discount_percentage": payload.discount_percentage,
+            "target_customers": payload.target_customers,
+            "expected_conversion": payload.expected_conversion,
+            "avg_order_value": payload.avg_order_value,
+        }
+    elif scenario == "campaign":
+        if payload.expected_conversion is None:
+            missing.append("expected_conversion")
+        if payload.avg_order_value is None:
+            missing.append("avg_order_value")
+        kwargs = {
+            "target_customers": payload.target_customers,
+            "expected_conversion": payload.expected_conversion,
+            "avg_order_value": payload.avg_order_value,
+            "cost_per_target": payload.cost_per_target or 0,
+        }
+    else:  # payment_recovery
+        if payload.failed_payment_value is None:
+            missing.append("failed_payment_value")
+        if payload.recovery_rate is None:
+            missing.append("recovery_rate")
+        kwargs = {
+            "failed_payment_value": payload.failed_payment_value,
+            "recovery_rate": payload.recovery_rate,
+            "cost_per_contact": payload.cost_per_contact or 0,
+            "contacts": payload.contacts,
+        }
+
+    if missing:
+        # Honest refusal: no default is invented for a required input.
+        return ToolResult(
+            status="error",
+            data={"scenario_type": scenario},
+            warnings=[f"missing_input:{','.join(sorted(missing))}"],
+            source="services.simulation.SimulationEngine.simulate",
+        )
+
+    try:
+        result = SimulationEngine(db).simulate(scenario, **kwargs)
+    except SimulationValidationError as exc:
+        return ToolResult(
+            status="error",
+            data={"scenario_type": scenario},
+            warnings=[f"scenario_refused:{exc}"],
+            source="services.simulation.SimulationEngine.simulate",
+        )
+
+    return ToolResult(
+        data={
+            # ``is_estimate`` is preserved deliberately: every number here is a
+            # projection, and a downstream consumer must be able to tell.
+            "scenario_type": result.scenario_type,
+            "estimated_revenue": result.estimated_revenue,
+            "estimated_cost": result.estimated_cost,
+            "estimated_profit": result.estimated_profit,
+            "expected_roi": result.expected_roi,
+            "confidence_low": result.confidence_low,
+            "confidence_high": result.confidence_high,
+            "assumptions": result.assumptions,
+            "is_estimate": result.is_estimate,
+        },
+        warnings=["estimate_only:not_measured_revenue"],
+        source="services.simulation.SimulationEngine.simulate",
     )
 
 
@@ -525,6 +648,23 @@ _SPECS: tuple[ToolSpec, ...] = (
         source="agents.marketing_agi.tools.analytics_tools.get_failed_payment_analytics",
     ),
     ToolSpec(
+        tool_id="commerce.what_if_simulation",
+        summary=(
+            "Deterministic what-if projection over this merchant's own scenario "
+            "inputs (discount, campaign or payment recovery). Read-only: computes "
+            "an ESTIMATE with explicit assumptions and a confidence range, and "
+            "persists nothing."
+        ),
+        input_model=SimulationInput,
+        output_model=ToolResult,
+        handler=_handle_what_if_simulation,
+        # SIMULATE, matching the capability BaseGrowthAgent._simulate() requires.
+        # Not a write permission: the tool mutates nothing.
+        required_permission=SIMULATE,
+        read_only=True,
+        source="services.simulation.SimulationEngine.simulate",
+    ),
+    ToolSpec(
         tool_id="opportunities.rank",
         summary="Deterministic best-first ranking of open growth opportunities.",
         input_model=MerchantWindowInput,
@@ -632,18 +772,51 @@ def get_tool(tool_id: str) -> ToolSpec:
 
 
 def tool_ids_for_agent(agent_name: str) -> tuple[str, ...]:
-    """Resolve the tools an agent declares, preserving declaration order."""
+    """Resolve the IMPLEMENTED tools an agent declares, in declaration order.
+
+    Only ids that are genuinely registered are returned. A declared name with
+    no implementation is excluded rather than passed through, because a caller
+    would reasonably feed the result straight into ``get_tool()`` /
+    ``invoke()``, and both raise ``ToolNotFoundError`` for an unregistered id.
+
+    This matches ``registry.agent_catalog()`` and
+    ``ManagerAgent.discover_registered_agents()``, which filter the same way and
+    report the excluded names separately under ``unimplemented_tools``. Use
+    ``unimplemented_tool_ids_for_agent()`` or ``DOCUMENTED_UNAVAILABLE_TOOLS``
+    to read the gap.
+    """
     from backend.app.agents.registry import AGENT_INSTANCES
 
     agent = AGENT_INSTANCES.get(agent_name)
     if agent is None:
         return ()
     resolved: list[str] = []
-    for declared in getattr(agent, "TOOLS", ()):  # noqa: B009 - agent protocol
+    for declared in getattr(agent, "TOOLS", ()) or ():  # noqa: B009 - agent protocol
         # Legacy agents still list bare service names; they are mapped so the
         # catalog stays the single source of truth.
-        resolved.append(LEGACY_TOOL_ALIASES.get(declared, declared))
+        mapped = LEGACY_TOOL_ALIASES.get(declared, declared)
+        if mapped in TOOL_REGISTRY and mapped not in resolved:
+            resolved.append(mapped)
     return tuple(resolved)
+
+
+def unimplemented_tool_ids_for_agent(agent_name: str) -> tuple[str, ...]:
+    """The inverse of ``tool_ids_for_agent``: declared-but-unimplemented names.
+
+    Exposed so a caller that needs the gap reads it directly instead of
+    re-deriving it, which is how the two halves drift apart.
+    """
+    from backend.app.agents.registry import AGENT_INSTANCES
+
+    agent = AGENT_INSTANCES.get(agent_name)
+    if agent is None:
+        return ()
+    out: list[str] = []
+    for declared in getattr(agent, "TOOLS", ()) or ():  # noqa: B009 - agent protocol
+        if LEGACY_TOOL_ALIASES.get(declared, declared) not in TOOL_REGISTRY:
+            if declared not in out:
+                out.append(declared)
+    return tuple(out)
 
 
 def catalog_payload() -> list[dict[str, Any]]:
@@ -686,6 +859,153 @@ LEGACY_TOOL_ALIASES: dict[str, str] = {
     "automation_design": "experiments.design",  # designs workflow experiments
     "feasibility_assessment": "opportunities.rank",  # assesses opportunity feasibility
     "spec_creation": "experiments.design",  # creates experiment specs
+    #
+    # MarketingAgent (in-scope).
+    # `segment_analysis` is served by the same service the agent actually
+    # calls in _run_investigation(): CustomerIntelligenceService.list_insights,
+    # whose catalog entry aggregates the identical per-segment rows.
+    "segment_analysis": "customer.insights",
+    # Deterministic what-if arithmetic, gated by the SIMULATE capability the
+    # agent already holds. Read-only; never persists.
+    "simulation": "commerce.what_if_simulation",
+    #
+    # ProductAgent (in-scope). commerce.catalog_intelligence returns
+    # `bundle_opportunities`, i.e. the basket affinity this declaration names.
+    "upsell_cross_sell_detection": "commerce.catalog_intelligence",
+    #
+    # ManagerAgent (in-scope). Both map onto capabilities the Manager already
+    # exercises through existing services:
+    #   - _run() reads opportunities via GrowthOpportunityService, which is
+    #     what opportunities.rank reports on;
+    #   - cross-agent delegation is recorded through handoff_service, exactly
+    #     what collaboration.request_handoff wraps. That handler only RECORDS a
+    #     request; dispatch stays behind the operator-gated dispatch endpoint,
+    #     so the alias cannot execute a specialist or recurse.
+    "opportunity_lookup": "opportunities.rank",
+    "agent_delegation": "collaboration.request_handoff",
+    #
+    # ManagerAgent names deliberately NOT aliased — see
+    # DOCUMENTED_UNAVAILABLE_TOOLS below for why each is unsafe to expose.
+}
+
+
+#: Declared tool names that are intentionally NOT mapped, each with the reason
+#: and the remediation. This is the counterpart to ``LEGACY_TOOL_ALIASES``: the
+#: alias map says "this label is really that service"; this map says "this label
+#: has no safe catalog implementation yet, and here is exactly why".
+#:
+#: Agents whose names appear here are reported under ``unimplemented_tools``
+#: rather than being quietly given a plausible-looking tool. Making them
+#: "resolve" would either require inventing a handler or — worse — exposing an
+#: already-authoritative, approval-gated path as a general agent capability.
+#:
+#: Categories:
+#:   * ``second_orchestration`` — the capability IS the orchestrator's job.
+#:     Exposing it as a callable tool would let an agent fabricate delegation
+#:     or run specialists outside GrowthAgentOrchestrator.
+#:   * ``approval_bypass`` — the write lands in a human-gated workflow. A
+#:     catalog tool would create a second route past the approver role.
+#:   * ``missing_service`` — no service implements this; a handler would have
+#:     to fabricate output.
+DOCUMENTED_UNAVAILABLE_TOOLS: dict[str, dict[str, str]] = {
+    # ── ManagerAgent: coordination is the orchestrator's responsibility ──
+    "task_decomposition": {
+        "category": "second_orchestration",
+        "reason": (
+            "Decomposing an objective into AgentTask rows is what "
+            "GrowthAgentOrchestrator does when it builds a plan. A callable "
+            "tool would let any agent write delegation records that no "
+            "orchestrator step backs."
+        ),
+        "remediation": "ManagerAgent._create_tasks via the orchestrator plan.",
+    },
+    "debate_orchestration": {
+        "category": "second_orchestration",
+        "reason": (
+            "Creating, advancing and concluding a debate is a state machine "
+            "driven by the orchestrator in growth_team mode. Exposing it would "
+            "let an agent drive debate rounds outside that flow."
+        ),
+        "remediation": "AgentDebateService under GrowthAgentOrchestrator.",
+    },
+    "synthesis": {
+        "category": "second_orchestration",
+        "reason": (
+            "Writing a debate's synthesis injects free text into the record "
+            "that drives the merchant-facing recommendation. It must come from "
+            "the Manager's own evidence-bounded run, not an arbitrary caller."
+        ),
+        "remediation": "ManagerAgent._synthesize_findings in the synthesize phase.",
+    },
+    # ── MarketingAgent ────────────────────────────────────────────────────
+    "campaign_design": {
+        "category": "missing_service",
+        "reason": (
+            "Campaign creation lives in the isolated Marketing AGI module "
+            "(MarketingAGICampaign + AgentAction) behind its own approval "
+            "path. The catalog has no campaign-creation tool, and "
+            "experiments.design would misrepresent an A/B experiment as a "
+            "campaign."
+        ),
+        "remediation": "Marketing AGI module via /api/marketing-agi, approval-gated.",
+    },
+    "messaging_strategy": {
+        "category": "missing_service",
+        "reason": (
+            "No messaging or copy-generation service exists in the catalog. A "
+            "handler would have to invent message content. Declared by both "
+            "MarketingAgent and DesignerAgent, so one entry covers both."
+        ),
+        "remediation": "Requires a real copy-generation service before it can be claimed.",
+    },
+    # ── MarketingAgent + ProductAgent (shared declaration) ───────────────
+    "finding_creation": {
+        "category": "approval_bypass",
+        "reason": (
+            "AgentFinding rows are the evidence set behind the final "
+            "recommendation. Letting any agent write them would allow findings "
+            "that no agent actually investigated."
+        ),
+        "remediation": "Agents record findings inside their own bounded run only.",
+    },
+    # ── DesignerAgent: the Designer workspace stays authoritative ─────────
+    "creative_concept": {
+        "category": "missing_service",
+        "reason": (
+            "Designer capabilities are reached through DesignerService via the "
+            "/api/designer workspace, which enforces brief validation and "
+            "human review. There is no standalone concept service."
+        ),
+        "remediation": "/api/designer/projects + DesignerService.store_brief.",
+    },
+    "creative_brief": {
+        "category": "approval_bypass",
+        "reason": (
+            "store_brief persists a CreativeBrief into pending_review as part "
+            "of the versioned designer workspace. Exposing it as a general tool "
+            "creates a second write path that skips project and version "
+            "bookkeeping."
+        ),
+        "remediation": "DesignerService.store_brief through the designer routes.",
+    },
+    "experiment_variants": {
+        "category": "missing_service",
+        "reason": (
+            "The Designer workspace records variants as DesignAsset rows "
+            "tied to a brief, not as experiments. Mapping this to "
+            "experiments.design would claim a capability the designer path "
+            "does not use."
+        ),
+        "remediation": "DesignerService variant assets within the workspace.",
+    },
+    "ux_recommendations": {
+        "category": "missing_service",
+        "reason": (
+            "UX findings are attached to a stored CreativeBrief; there is no "
+            "standalone recommendation service to call."
+        ),
+        "remediation": "DesignerService brief UX findings.",
+    },
 }
 
 
@@ -754,6 +1074,7 @@ def invoke(
 
 
 __all__ = [
+    "DOCUMENTED_UNAVAILABLE_TOOLS",
     "ExperimentInput",
     "ExperimentResultInput",
     "HandoffInput",
@@ -764,6 +1085,7 @@ __all__ = [
     "MerchantWindowInput",
     "ProposeActionInput",
     "ResearchInput",
+    "SimulationInput",
     "TOOL_REGISTRY",
     "ToolHandler",
     "ToolInputError",
@@ -776,4 +1098,5 @@ __all__ = [
     "invoke",
     "resolve_invocation",
     "tool_ids_for_agent",
+    "unimplemented_tool_ids_for_agent",
 ]

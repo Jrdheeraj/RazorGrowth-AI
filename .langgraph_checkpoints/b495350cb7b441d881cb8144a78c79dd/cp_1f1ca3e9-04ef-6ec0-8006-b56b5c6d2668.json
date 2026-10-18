@@ -1,0 +1,243 @@
+{
+  "checkpoint": {
+    "v": 4,
+    "ts": "2026-10-17T15:22:28.307526+00:00",
+    "id": "1f1ca3e9-04ef-6ec0-8006-b56b5c6d2668",
+    "channel_values": {
+      "merchant_id": "a9ecad64-de23-4901-a2d3-87c18d12f433",
+      "run_id": "b495350cb7b441d881cb8144a78c79dd",
+      "workflow_id": "a29031a5-1836-4ded-8883-7f2a43ce7f08",
+      "mode": "team",
+      "objective": "Test 14-agent team pipeline",
+      "window_days": 30,
+      "params": {
+        "objective": "Test 14-agent team pipeline",
+        "window_days": 30
+      },
+      "generation": 1,
+      "current_step_index": 4,
+      "selected_specialists": [],
+      "agents_run": [
+        {
+          "agent_name": "GrowthMemoryAgent",
+          "step_key": "team:000:GrowthMemoryAgent:load:632fb95926da5f442aeb7b73",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "memory_retrieve",
+            "memory_record"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "GrowthDiscoveryAgent",
+          "step_key": "team:001:GrowthDiscoveryAgent:-:fb6e9ae0f6da4d64111f919f",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "growth_radar",
+            "opportunity_upsert",
+            "opportunity_scoring"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "CustomerIntelligenceAgent",
+          "step_key": "team:002:CustomerIntelligenceAgent:-:c62f7498086a51a414a55169",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "customer_metrics",
+            "segment_classification",
+            "churn_engine"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "RevenueOptimizationAgent",
+          "step_key": "team:003:RevenueOptimizationAgent:-:14a79b6aeebf52a02a0afbf7",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "opportunity_ranking",
+            "what_if_simulation",
+            "phase4_propose"
+          ],
+          "errors": []
+        }
+      ],
+      "resumed_steps": [],
+      "needs_reconciliation": [],
+      "opportunities": [],
+      "ranked_opportunities": [],
+      "findings": [],
+      "actions_proposed": [],
+      "tool_records": [],
+      "shared_memory": {
+        "rag_context": {
+          "merchant_id": "a9ecad64-de23-4901-a2d3-87c18d12f433",
+          "query": "Test 14-agent team pipeline",
+          "status": "insufficient_data",
+          "data_sufficiency": {
+            "status": "insufficient_data",
+            "message": "No real Razorpay test data available. Create test orders/payments via Checkout to view growth metrics.",
+            "minimum_required": 3,
+            "available": 0
+          },
+          "verified_facts": [
+            {
+              "fact": "captured_revenue",
+              "value": 0.0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "captured_transactions",
+              "value": 0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "successful_payments",
+              "value": 0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "failed_payments",
+              "value": 0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "total_customers",
+              "value": 0,
+              "verified": true,
+              "source": "customers"
+            },
+            {
+              "fact": "total_orders",
+              "value": 0,
+              "verified": true,
+              "source": "orders"
+            }
+          ],
+          "derived_metrics": {
+            "average_order_value": 0.0,
+            "signals": []
+          },
+          "retrieved_context": [
+            {
+              "source_type": "growth_radar",
+              "source_id": "a9ecad64-de23-4901-a2d3-87c18d12f433",
+              "document_id": "a9ecad64-de23-4901-a2d3-87c18d12f433",
+              "chunk_id": "radar-30",
+              "similarity": null,
+              "content_preview": "Captured revenue INR 0.00; captured transactions 0; customers 0; orders 0.",
+              "metadata": {
+                "verified": true,
+                "window_days": 30,
+                "signals": []
+              }
+            }
+          ],
+          "inference_allowed": false
+        },
+        "langchain_adapter": "<backend.app.ai.langchain_adapter.adapter.LangChainAgentAdapter object at 0x000001A7A00AC1D0>",
+        "memories": []
+      },
+      "errors": [],
+      "status": "running",
+      "cancelled": false,
+      "cancelled_at_step": null,
+      "totals": {},
+      "debate_id": null,
+      "action_plan": null,
+      "terminal_outcome": {},
+      "branch:to:team_payment_recovery": null
+    },
+    "channel_versions": {
+      "__start__": 2,
+      "merchant_id": 2,
+      "run_id": 2,
+      "workflow_id": 2,
+      "mode": 2,
+      "objective": 2,
+      "window_days": 2,
+      "params": 2,
+      "generation": 2,
+      "current_step_index": 8,
+      "selected_specialists": 2,
+      "agents_run": 8,
+      "resumed_steps": 2,
+      "needs_reconciliation": 2,
+      "opportunities": 2,
+      "ranked_opportunities": 2,
+      "findings": 2,
+      "actions_proposed": 2,
+      "tool_records": 2,
+      "shared_memory": 8,
+      "errors": 2,
+      "status": 3,
+      "cancelled": 3,
+      "cancelled_at_step": 2,
+      "totals": 2,
+      "debate_id": 2,
+      "action_plan": 2,
+      "terminal_outcome": 2,
+      "branch:to:validate_request": 3,
+      "branch:to:load_context": 4,
+      "branch:to:team_memory_load": 5,
+      "branch:to:team_discovery": 6,
+      "branch:to:team_customer_intel": 7,
+      "branch:to:team_revenue_opt": 8,
+      "branch:to:team_payment_recovery": 8
+    },
+    "versions_seen": {
+      "__input__": {},
+      "__start__": {
+        "__start__": 1
+      },
+      "validate_request": {
+        "branch:to:validate_request": 2
+      },
+      "load_context": {
+        "branch:to:load_context": 3
+      },
+      "team_memory_load": {
+        "branch:to:team_memory_load": 4
+      },
+      "team_discovery": {
+        "branch:to:team_discovery": 5
+      },
+      "team_customer_intel": {
+        "branch:to:team_customer_intel": 6
+      },
+      "team_revenue_opt": {
+        "branch:to:team_revenue_opt": 7
+      }
+    },
+    "updated_channels": [
+      "agents_run",
+      "branch:to:team_payment_recovery",
+      "current_step_index",
+      "shared_memory"
+    ]
+  },
+  "metadata": {
+    "source": "loop",
+    "step": 6,
+    "parents": {}
+  },
+  "channel_versions": {
+    "current_step_index": 8,
+    "agents_run": 8,
+    "shared_memory": 8,
+    "branch:to:team_revenue_opt": 8,
+    "branch:to:team_payment_recovery": 8
+  }
+}

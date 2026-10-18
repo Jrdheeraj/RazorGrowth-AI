@@ -1,0 +1,1862 @@
+/* ==========================================================================
+   Manager Agent Dashboard Styles — Pixel-Accurate Implementation
+   ========================================================================== */
+
+.mgr-world {
+  position: relative;
+  min-height: 100vh;
+  color: var(--ink, #180f0b);
+  overflow-x: hidden;
+}
+
+.mgr-shell {
+  position: relative;
+  z-index: 2;
+  width: min(1920px, calc(100% - 80px));
+  max-width: none;
+  margin-inline: auto;
+  padding-inline: 0;
+  padding-block: 18px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+@media (max-width: 1100px) {
+  .mgr-shell {
+    width: min(1920px, calc(100% - 48px));
+  }
+}
+
+@media (max-width: 640px) {
+  .mgr-shell {
+    width: min(1920px, calc(100% - 32px));
+  }
+}
+
+/* ── Hero Section: Premium AI Command Center ─────────────────────────────── */
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+}
+
+.mgr-hero {
+  position: relative;
+  background: var(--paper-bright, #fffcf6);
+  border: 1.5px solid var(--line, #2a1810);
+  border-radius: var(--radius-window, 4px);
+  box-shadow: 6px 6px 0 rgba(42, 24, 16, 0.08);
+  padding: clamp(24px, 2.8vw, 36px) clamp(22px, 2.6vw, 34px);
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  align-items: stretch;
+  gap: clamp(24px, 3.2vw, 40px);
+  overflow: hidden;
+}
+
+.mgr-hero::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--coral, #d97757) 0%, #f59e0b 50%, var(--coral, #d97757) 100%);
+  pointer-events: none;
+}
+
+/* ── Hero Left Column ────────────────────────────────────────────────────── */
+
+.mgr-hero__left {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  gap: 20px;
+}
+
+.mgr-hero__editorial {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mgr-hero__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #a94f38;
+  text-transform: uppercase;
+}
+
+.mgr-hero__eyebrowDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #d97757;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.mgr-hero__headline {
+  font-family: var(--font-display, "Archivo Variable", sans-serif);
+  font-size: clamp(2.3rem, 3.8vw, 3.1rem);
+  line-height: 1.08;
+  font-weight: 800;
+  color: #1a100a;
+  margin: 0;
+  letter-spacing: -0.025em;
+}
+
+.mgr-hero__headlineAccent {
+  color: #d97757;
+}
+
+.mgr-hero__desc {
+  font-size: 0.96rem;
+  line-height: 1.6;
+  color: #5c4033;
+  margin: 0;
+  max-width: 48ch;
+}
+
+/* 4-Step Workflow in Hero (One Horizontal Row) */
+.mgr-hero__workflow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+  padding: 10px 14px;
+  background: rgba(247, 235, 215, 0.6);
+  border: 1px solid rgba(42, 24, 16, 0.14);
+  border-radius: 6px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.mgr-hero__workflowStep {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.mgr-hero__workflowNum {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #d97757;
+  letter-spacing: 0.04em;
+}
+
+.mgr-hero__workflowIcon {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: rgba(217, 119, 87, 0.12);
+  color: #d97757;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mgr-hero__workflowLabel {
+  font-family: var(--font-display, "Archivo Variable", sans-serif);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #2a1810;
+}
+
+.mgr-hero__workflowSep {
+  width: 1px;
+  height: 16px;
+  background: rgba(42, 24, 16, 0.18);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+/* ── Hero Left Column: Performance & Telemetry Matrix (3 Stat Cards) ─────── */
+
+.mgr-hero__statsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.mgr-hero__statCard {
+  background: #ffffff;
+  border: 1px solid rgba(42, 24, 16, 0.15);
+  border-radius: 6px;
+  padding: clamp(12px, 1.2vw, 15px);
+  box-shadow: 2px 2px 0 rgba(42, 24, 16, 0.05);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.mgr-hero__statCard:hover {
+  transform: translateY(-2px);
+  border-color: #d97757;
+  box-shadow: 3px 3px 0 rgba(217, 119, 87, 0.12);
+}
+
+.mgr-hero__statTop {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mgr-hero__statHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.mgr-hero__statIcon {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: rgba(217, 119, 87, 0.12);
+  color: #d97757;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mgr-hero__statUnit {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #a94f38;
+  text-transform: uppercase;
+}
+
+.mgr-hero__statValue {
+  font-family: var(--font-display, "Archivo Variable", sans-serif);
+  font-size: clamp(1.25rem, 1.6vw, 1.45rem);
+  font-weight: 800;
+  color: #1a100a;
+  line-height: 1.1;
+  margin-top: 2px;
+  letter-spacing: -0.02em;
+}
+
+.mgr-hero__statTitle {
+  font-family: var(--font-display, "Archivo Variable", sans-serif);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #2a1810;
+  line-height: 1.2;
+}
+
+.mgr-hero__statDesc {
+  font-size: 0.7rem;
+  color: #6d5445;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.mgr-hero__statBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #2e6943;
+  background: #eef8f1;
+  border: 1px solid rgba(46, 105, 67, 0.2);
+  border-radius: 3px;
+  padding: 2px 6px;
+  width: fit-content;
+}
+
+.mgr-hero__statBadgeDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #16a34a;
+  display: inline-block;
+}
+
+/* ── Hero Right Column: AI Command Center ────────────────────────────────── */
+
+.mgr-hero__right {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+}
+
+.mgr-cmd-panel {
+  background: #ffffff;
+  border: 1.5px solid var(--line, #2a1810);
+  border-radius: 6px;
+  box-shadow: 4px 4px 0 rgba(42, 24, 16, 0.08);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Command Center Window Bar */
+.mgr-cmd__titleBar {
+  background: #2a1810;
+  color: #f7ebd7;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #1c0f0a;
+}
+
+.mgr-cmd__windowPips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mgr-cmd__pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.mgr-cmd__pip--coral {
+  background: #d97757;
+}
+
+.mgr-cmd__pip--amber {
+  background: #f59e0b;
+}
+
+.mgr-cmd__pip--green {
+  background: #70b88a;
+}
+
+.mgr-cmd__windowTitle {
+  margin-left: 8px;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: #f7ebd7;
+  opacity: 0.9;
+}
+
+.mgr-cmd__statusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #70b88a;
+  letter-spacing: 0.04em;
+}
+
+.mgr-cmd__pulseDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #70b88a;
+  box-shadow: 0 0 6px #70b88a;
+  animation: pulseGlow 2s infinite ease-in-out;
+}
+
+/* Command Center Identity Block */
+.mgr-cmd__identity {
+  padding: 12px 16px;
+  background: #fffdfa;
+  border-bottom: 1px solid rgba(42, 24, 16, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mgr-cmd__identityLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mgr-cmd__nexusIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: #ffedd5;
+  border: 1px solid rgba(217, 119, 87, 0.3);
+  color: #d97757;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mgr-cmd__agentNameRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mgr-cmd__agentName {
+  font-family: var(--font-display, "Archivo Variable", sans-serif);
+  font-size: 1rem;
+  font-weight: 800;
+  color: #1a100a;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.mgr-cmd__tag {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #d97757;
+  background: #fff3df;
+  border: 1px solid rgba(217, 119, 87, 0.25);
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+
+.mgr-cmd__identityMeta {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.68rem;
+  color: #8a6f5c;
+  margin: 2px 0 0;
+}
+
+.mgr-cmd__helpLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid rgba(42, 24, 16, 0.16);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.68rem;
+  color: #5c4033;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.mgr-cmd__helpLink:hover {
+  background: #f7ebd7;
+  border-color: #2a1810;
+  color: #1a100a;
+}
+
+/* Orchestration Progress Strip */
+.mgr-cmd__progressStrip {
+  padding: 8px 16px;
+  background: #faf5ed;
+  border-bottom: 1px solid rgba(42, 24, 16, 0.08);
+}
+
+.mgr-cmd__progressInfo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.66rem;
+}
+
+.mgr-cmd__progressLabel {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #8a6f5c;
+  text-transform: uppercase;
+}
+
+.mgr-cmd__progressStatus {
+  color: #2e7d32;
+  font-weight: 700;
+}
+
+.mgr-cmd__progressTrack {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.mgr-cmd__progressSegment {
+  padding: 4px 6px;
+  border-radius: 3px;
+  background: rgba(42, 24, 16, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  color: #8a6f5c;
+}
+
+.mgr-cmd__progressSegment.is-complete {
+  background: rgba(112, 184, 138, 0.18);
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.mgr-cmd__progressSegment.is-active {
+  background: rgba(217, 119, 87, 0.16);
+  color: #a94f38;
+  font-weight: 700;
+  border-left: 2px solid #d97757;
+}
+
+.mgr-cmd__segNum {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+.mgr-cmd__segText {
+  font-family: var(--font-display, sans-serif);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Specialist Queue List (5 Structured Rows) */
+.mgr-cmd__queue {
+  padding: 10px 16px;
+  background: #ffffff;
+}
+
+.mgr-cmd__queueHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.mgr-cmd__queueTitle {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a6f5c;
+}
+
+.mgr-cmd__queueMeta {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.65rem;
+  color: #a94f38;
+  font-weight: 600;
+}
+
+.mgr-cmd__specialistList {
+  display: flex;
+  flex-direction: column;
+}
+
+.mgr-cmd__specRow {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(42, 24, 16, 0.06);
+  transition: background 0.12s ease;
+}
+
+.mgr-cmd__specRow:last-child {
+  border-bottom: none;
+}
+
+.mgr-cmd__specRow:hover {
+  background: rgba(255, 248, 239, 0.7);
+}
+
+.mgr-cmd__specIcon {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mgr-cmd__specInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.mgr-cmd__specName {
+  font-family: var(--font-display, "Archivo Variable", sans-serif);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #1a100a;
+  line-height: 1.2;
+}
+
+.mgr-cmd__specTask {
+  font-size: 0.7rem;
+  color: #705849;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mgr-cmd__specBadgeWrap {
+  flex-shrink: 0;
+}
+
+.mgr-cmd__specBadge {
+  display: inline-block;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+}
+
+.mgr-cmd__specBadge--ready {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.mgr-cmd__specBadge--working {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+.mgr-cmd__specBadge--completed {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+/* Interactive Goal Dispatch Section */
+.mgr-cmd__dispatch {
+  padding: 12px 16px;
+  background: #fffcf8;
+  border-top: 1px solid rgba(42, 24, 16, 0.09);
+}
+
+.mgr-cmd__dispatchHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.mgr-cmd__dispatchLabel {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a6f5c;
+}
+
+.mgr-cmd__dispatchHint {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.64rem;
+  color: #8a6f5c;
+  opacity: 0.85;
+}
+
+.mgr-cmd__form {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  margin-bottom: 6px;
+}
+
+.mgr-cmd__inputWrap {
+  position: relative;
+  flex: 1;
+}
+
+.mgr-cmd__inputIcon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #8a6f5c;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mgr-cmd__input {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px 0 32px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  border: 1.5px solid #2a1810;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1a100a;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease;
+}
+
+.mgr-cmd__input:focus {
+  border-color: #d97757;
+}
+
+.mgr-cmd__submitBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 4px;
+  background: #d97757;
+  color: #ffffff;
+  border: 1.5px solid #2a1810;
+  font-family: var(--font-display, "Archivo Variable", sans-serif);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 #2a1810;
+  white-space: nowrap;
+  transition: all 0.12s ease;
+  flex-shrink: 0;
+}
+
+.mgr-cmd__submitBtn:hover:not(:disabled) {
+  background: #c85f43;
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 #2a1810;
+}
+
+.mgr-cmd__submitBtn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 #2a1810;
+}
+
+.mgr-cmd__submitBtn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.mgr-cmd__btnArrow {
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.mgr-cmd__statusMsg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  color: #0284c7;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin-bottom: 8px;
+}
+
+.mgr-cmd__statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #0284c7;
+  flex-shrink: 0;
+}
+
+.mgr-cmd__chipsRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.mgr-cmd__chipsLabel {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.68rem;
+  color: #8a6f5c;
+  font-weight: 600;
+}
+
+.mgr-cmd__chips {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.mgr-cmd__chip {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: #fff8ef;
+  border: 1px solid rgba(42, 24, 16, 0.16);
+  color: #2a1810;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.mgr-cmd__chip:hover:not(:disabled) {
+  background: #ffebd5;
+  border-color: #d97757;
+  color: #a94f38;
+}
+
+/* ── Section C: Growth Workspace & Key Metrics ───────────────────────────── */
+
+.mgr-workspace-metrics {
+  display: grid;
+  grid-template-columns: 1.45fr 1fr;
+  gap: 20px;
+}
+
+.mgr-workspace-panel,
+.mgr-metrics-panel,
+.mgr-roster-panel,
+.mgr-cap-panel,
+.mgr-table-panel {
+  background: #fffdfa;
+  border: 1.5px solid #2a1810;
+  border-radius: 12px;
+  box-shadow: 0 4px 0 #2a1810;
+}
+
+/* Left: Growth Workspace Inside */
+.mgr-ws__topBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.mgr-ws__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: #d97706;
+}
+
+.mgr-ws__coordinationBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: #059669;
+  color: #ffffff;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.mgr-ws__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.mgr-ws__main {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 20px;
+}
+
+.mgr-ws__content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mgr-ws__title {
+  font-family: var(--font-display, "Archivo Variable", sans-serif);
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: #1a100a;
+  margin: 0;
+}
+
+.mgr-ws__desc {
+  font-size: 0.86rem;
+  line-height: 1.48;
+  color: #5c4033;
+  margin: 0;
+}
+
+.mgr-ws__steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.mgr-ws__step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mgr-ws__stepIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #f7ebd7;
+  color: #d97706;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e0d0be;
+}
+
+.mgr-ws__stepText {
+  display: flex;
+  flex-direction: column;
+}
+
+.mgr-ws__stepText strong {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #1a100a;
+  line-height: 1.2;
+}
+
+.mgr-ws__stepText span {
+  font-size: 0.68rem;
+  color: #7a5e4d;
+  line-height: 1.2;
+}
+
+.mgr-ws__stepArrow {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  color: #d97706;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.mgr-ws__actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.mgr-ws__btnPrimary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: 8px;
+  background: #e05a36;
+  color: #ffffff;
+  border: 1.5px solid #b84323;
+  font-family: var(--font-display, "Archivo Variable", sans-serif);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 0 #943216;
+  transition: all 0.15s ease;
+}
+
+.mgr-ws__btnPrimary:hover {
+  background: #d44e2b;
+}
+
+.mgr-ws__btnSecondary {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 16px;
+  border-radius: 8px;
+  background: #fffdfa;
+  color: #1a100a;
+  border: 1.5px solid #2a1810;
+  font-family: var(--font-display, "Archivo Variable", sans-serif);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 0 #2a1810;
+  transition: all 0.15s ease;
+}
+
+.mgr-ws__btnSecondary:hover {
+  background: #f7ebd7;
+}
+
+.mgr-ws__art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Right: Key Metrics Inside (2x2 Grid) */
+.mgr-metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.mgr-metric-card {
+  background: #fff9f0;
+  border: 1px solid #ebd9c8;
+  border-radius: 8px;
+  padding: 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mgr-metric-card__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mgr-metric-card__icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mgr-metric-card__icon--coral {
+  background: #ffebe5;
+  color: #e05a36;
+}
+
+.mgr-metric-card__icon--green {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.mgr-metric-card__icon--amber {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.mgr-metric-card__icon--purple {
+  background: #f3e8ff;
+  color: #9333ea;
+}
+
+.mgr-metric-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 28px;
+  width: 34px;
+}
+
+.mgr-metric-chart span {
+  width: 6px;
+  border-radius: 2px 2px 0 0;
+}
+
+.mgr-metric-card__body {
+  display: flex;
+  flex-direction: column;
+}
+
+.mgr-metric-card__value {
+  font-family: var(--font-display, "Archivo Variable", sans-serif);
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: #1a100a;
+  line-height: 1.1;
+}
+
+.mgr-metric-card__label {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #5c4033;
+  margin-top: 2px;
+}
+
+.mgr-metric-card__trend {
+  font-size: 0.68rem;
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.mgr-metric-card__trend--green {
+  color: #16a34a;
+}
+
+.mgr-metric-card__trend--amber {
+  color: #d97706;
+}
+
+/* ── Section D: Agent Roster ─────────────────────────────────────────────── */
+
+.mgr-roster__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.mgr-roster__title {
+  font-family: var(--font-display, "Archivo Variable", sans-serif);
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #1a100a;
+  margin: 0;
+}
+
+.mgr-roster__desc {
+  font-size: 0.84rem;
+  color: #5c4033;
+  margin: 4px 0 0;
+}
+
+.mgr-roster__catalogBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: 1.5px solid #2a1810;
+  background: #fffdfa;
+  color: #1a100a;
+  font-family: var(--font-display, "Archivo Variable", sans-serif);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mgr-roster__catalogBtn:hover {
+  background: #f7ebd7;
+}
+
+.mgr-roster__grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.mgr-roster-card {
+  background: #fff9f0;
+  border: 1px solid #ebd9c8;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mgr-roster-card:hover {
+  border-color: #2a1810;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 0 #2a1810;
+}
+
+.mgr-roster-card__icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mgr-roster-card__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mgr-roster-card__name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #1a100a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Badges */
+.mgr-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.65rem;
+  font-weight: 600;
+  width: fit-content;
+}
+
+.mgr-badge--active,
+.mgr-badge--ready,
+.mgr-badge--synced {
+  background: #e6f4ea;
+  color: #137333;
+  border: 1px solid #ceead6;
+}
+
+.mgr-badge--working {
+  background: #e8f0fe;
+  color: #1a73e8;
+  border: 1px solid #d2e3fc;
+}
+
+.mgr-badge--guarded {
+  background: #fef7e0;
+  color: #b06000;
+  border: 1px solid #fce8b2;
+}
+
+.mgr-badge__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.mgr-badge__dot--pulse {
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.3; }
+  50% { opacity: 1; }
+  100% { opacity: 0.3; }
+}
+
+.mgr-roster__footerBanner {
+  background: #f7ebd7;
+  border: 1px solid #e5d5c0;
+  border-radius: 6px;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: #5c4033;
+}
+
+.mgr-roster__plus {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #1a100a;
+}
+
+/* ── Section E: Manager Capabilities ─────────────────────────────────────── */
+
+.mgr-cap__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.mgr-cap__title {
+  font-family: var(--font-display, "Archivo Variable", sans-serif);
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #1a100a;
+  margin: 0;
+}
+
+.mgr-cap__learnMore {
+  background: transparent;
+  border: none;
+  font-family: var(--font-display, "Archivo Variable", sans-serif);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #e05a36;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mgr-cap__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.mgr-cap-card {
+  background: #fff9f0;
+  border: 1px solid #ebd9c8;
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  gap: 12px;
+  transition: all 0.15s ease;
+}
+
+.mgr-cap-card:hover {
+  border-color: #2a1810;
+  box-shadow: 0 3px 0 #2a1810;
+  transform: translateY(-1px);
+}
+
+.mgr-cap-card__icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mgr-cap-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.mgr-cap-card__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mgr-cap-card__title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #1a100a;
+  margin: 0;
+}
+
+.mgr-cap-card__arrow {
+  font-size: 0.85rem;
+  color: #a89485;
+}
+
+.mgr-cap-card__desc {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #6b4e3d;
+  margin: 0;
+}
+
+.mgr-cap__expandedNotes {
+  margin-top: 14px;
+  padding: 12px 16px;
+  border-radius: 6px;
+  background: #f7ebd7;
+  font-size: 0.8rem;
+  color: #5c4033;
+}
+
+/* ── Split Row (Live Execution + Approvals, Decisions + Activity) ───────── */
+
+.mgr-split-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.mgr-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.mgr-panel-head__titleGroup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mgr-panel-head__playIcon,
+.mgr-panel-head__alertIcon,
+.mgr-panel-head__docIcon,
+.mgr-panel-head__usersIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mgr-panel-head__playIcon {
+  background: #ffebe5;
+  color: #e05a36;
+}
+
+.mgr-panel-head__alertIcon {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.mgr-panel-head__docIcon {
+  background: #ffedd5;
+  color: #ea580c;
+}
+
+.mgr-panel-head__usersIcon {
+  background: #e0f2fe;
+  color: #0284c7;
+}
+
+.mgr-panel-head__title {
+  font-family: var(--font-display, "Archivo Variable", sans-serif);
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #1a100a;
+  margin: 0;
+}
+
+.mgr-panel-head__sub {
+  font-size: 0.72rem;
+  color: #7a5e4d;
+  display: block;
+}
+
+.mgr-panel-head__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid #dcd0bf;
+  background: #fffdfa;
+  color: #1a100a;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mgr-panel-head__btn:hover {
+  background: #f7ebd7;
+}
+
+.mgr-panel-head__link {
+  background: transparent;
+  border: none;
+  font-family: var(--font-display, "Archivo Variable", sans-serif);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #e05a36;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Tables */
+.mgr-table-wrap {
+  overflow-x: auto;
+}
+
+.mgr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  text-align: left;
+}
+
+.mgr-table th {
+  padding: 8px 10px;
+  background: #f7ebd7;
+  color: #6b4e3d;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  border-bottom: 1.5px solid #ebd9c8;
+}
+
+.mgr-table td {
+  padding: 10px 10px;
+  border-bottom: 1px solid #f0e3d5;
+  color: #2c1710;
+  vertical-align: middle;
+}
+
+.mgr-table tr:last-child td {
+  border-bottom: none;
+}
+
+.mgr-table__colBold {
+  font-weight: 700;
+  color: #1a100a;
+}
+
+.mgr-table__colMuted {
+  color: #7a5e4d;
+  font-size: 0.75rem;
+}
+
+.mgr-table__actionIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.mgr-table__reviewBtn {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #dcd0bf;
+  background: #fffdfa;
+  color: #1a100a;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mgr-table__reviewBtn:hover {
+  background: #f7ebd7;
+  border-color: #2a1810;
+}
+
+.mgr-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.mgr-status-pill--completed {
+  background: #e6f4ea;
+  color: #137333;
+}
+
+.mgr-status-pill--progress {
+  background: #e8f0fe;
+  color: #1a73e8;
+}
+
+.mgr-status-pill--pending {
+  background: #f1f3f4;
+  color: #5f6368;
+}
+
+.mgr-status-pill--amber {
+  background: #fef7e0;
+  color: #b06000;
+}
+
+.mgr-status-pill__circle {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.mgr-status-pill__spinner {
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.mgr-decision-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mgr-decision-icon--success {
+  background: #e6f4ea;
+  color: #137333;
+}
+
+.mgr-decision-icon--info {
+  background: #e8f0fe;
+  color: #1a73e8;
+}
+
+.mgr-decision-icon--warning {
+  background: #fef7e0;
+  color: #b06000;
+}
+
+.mgr-activity-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #0284c7;
+}
+
+/* ── Responsive Adaptations ──────────────────────────────────────────────── */
+
+@media (max-width: 1199px) {
+  .mgr-hero {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .mgr-hero__right {
+    grid-column: span 1;
+  }
+  .mgr-roster__grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .mgr-cap__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .mgr-hero {
+    grid-template-columns: 1fr;
+    padding: 24px 20px;
+    gap: 24px;
+  }
+  .mgr-hero__right {
+    grid-column: span 1;
+  }
+  .mgr-workspace-metrics {
+    grid-template-columns: 1fr;
+  }
+  .mgr-split-row {
+    grid-template-columns: 1fr;
+  }
+  .mgr-roster__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .mgr-cap__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .mgr-hero {
+    padding: 20px 16px;
+    gap: 20px;
+  }
+  .mgr-hero__headline {
+    font-size: 2.1rem;
+  }
+  .mgr-hero__workflow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+  }
+  .mgr-hero__workflowSep {
+    display: none;
+  }
+  .mgr-cmd__titleBar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .mgr-cmd__identity {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .mgr-cmd__progressTrack {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .mgr-cmd__form {
+    flex-direction: column;
+  }
+  .mgr-cmd__submitBtn {
+    width: 100%;
+  }
+  .mgr-roster__grid {
+    grid-template-columns: 1fr;
+  }
+  .mgr-ws__steps {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .mgr-ws__stepArrow {
+    display: none;
+  }
+  .mgr-ws__art {
+    display: none;
+  }
+  .mgr-hero__statsGrid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
+
+
+/* ── Validated growth-plan inspector ──────────────────────────────────────
+   Rendered between the hero and the workspace metrics once the Manager has
+   returned a plan. The merchant reviews the delegation and its stated reason
+   before choosing to execute.
+
+   Rejections and blocked reasons are shown verbatim. An invalid plan offers
+   no execution button at all, so a rejected plan cannot be dispatched from
+   this view. */
+
+.mgr-plan {
+  margin: 24px auto 0;
+  width: min(1180px, calc(100% - 48px));
+  padding: 20px 22px 22px;
+  border: 1px solid var(--mgr-line, rgba(255, 255, 255, 0.14));
+  border-radius: 16px;
+  background: var(--mgr-panel, rgba(18, 20, 28, 0.72));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mgr-plan__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mgr-plan__id {
+  font-family: var(--mgr-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  opacity: 0.65;
+}
+
+.mgr-plan__rejections {
+  margin: 0;
+  padding: 12px 14px 12px 30px;
+  border-radius: 10px;
+  background: rgba(220, 80, 60, 0.12);
+  border: 1px solid rgba(220, 80, 60, 0.35);
+  font-size: 13px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mgr-plan__blocked {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #e8c07a;
+}
+
+.mgr-plan__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.mgr-plan__table th,
+.mgr-plan__table td {
+  text-align: left;
+  padding: 9px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  vertical-align: top;
+}
+
+.mgr-plan__table th {
+  font-family: var(--mgr-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.mgr-plan__result {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0.85;
+}
+
+.mgr-error {
+  margin: 16px auto 0;
+  width: min(1180px, calc(100% - 48px));
+  font-size: 13px;
+  color: #e8b4a0;
+}
+
+@media (max-width: 720px) {
+  .mgr-plan {
+    width: calc(100% - 32px);
+    padding: 16px;
+  }
+  .mgr-plan__table,
+  .mgr-plan__table thead,
+  .mgr-plan__table tbody,
+  .mgr-plan__table tr,
+  .mgr-plan__table th,
+  .mgr-plan__table td {
+    display: block;
+  }
+  .mgr-plan__table thead {
+    display: none;
+  }
+  .mgr-plan__table tr {
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .mgr-plan__table td {
+    border: none;
+    padding: 3px 0;
+  }
+}

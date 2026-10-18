@@ -1,0 +1,209 @@
+{
+  "checkpoint": {
+    "v": 4,
+    "ts": "2026-10-17T15:08:59.530087+00:00",
+    "id": "1f1ca3ca-e3d5-6a09-8004-2a52d2cc67ef",
+    "channel_values": {
+      "merchant_id": "6635ebb0-baa8-4d9a-b8fb-8cd766c85768",
+      "run_id": "0c499761c2c248b4b7e449a9d4427204",
+      "workflow_id": "160a3b63-8cb5-4896-9492-9d44b48c0167",
+      "mode": "fast",
+      "objective": "Test run_with_langgraph fast",
+      "window_days": 30,
+      "params": {
+        "objective": "Test run_with_langgraph fast",
+        "window_days": 30
+      },
+      "generation": 1,
+      "current_step_index": 2,
+      "selected_specialists": [],
+      "agents_run": [
+        {
+          "agent_name": "GrowthMemoryAgent",
+          "step_key": "fast:000:GrowthMemoryAgent:load:6770345103642257f81197e0",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "memory_retrieve",
+            "memory_record"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "GrowthDiscoveryAgent",
+          "step_key": "fast:001:GrowthDiscoveryAgent:-:83ec23d526bc8f2a98c41b2f",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "growth_radar",
+            "opportunity_upsert",
+            "opportunity_scoring"
+          ],
+          "errors": []
+        }
+      ],
+      "resumed_steps": [],
+      "needs_reconciliation": [],
+      "opportunities": [],
+      "ranked_opportunities": [],
+      "findings": [],
+      "actions_proposed": [],
+      "tool_records": [],
+      "shared_memory": {
+        "rag_context": {
+          "merchant_id": "6635ebb0-baa8-4d9a-b8fb-8cd766c85768",
+          "query": "Test run_with_langgraph fast",
+          "status": "insufficient_data",
+          "data_sufficiency": {
+            "status": "insufficient_data",
+            "message": "No real Razorpay test data available. Create test orders/payments via Checkout to view growth metrics.",
+            "minimum_required": 3,
+            "available": 0
+          },
+          "verified_facts": [
+            {
+              "fact": "captured_revenue",
+              "value": 0.0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "captured_transactions",
+              "value": 0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "successful_payments",
+              "value": 0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "failed_payments",
+              "value": 0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "total_customers",
+              "value": 0,
+              "verified": true,
+              "source": "customers"
+            },
+            {
+              "fact": "total_orders",
+              "value": 0,
+              "verified": true,
+              "source": "orders"
+            }
+          ],
+          "derived_metrics": {
+            "average_order_value": 0.0,
+            "signals": []
+          },
+          "retrieved_context": [
+            {
+              "source_type": "growth_radar",
+              "source_id": "6635ebb0-baa8-4d9a-b8fb-8cd766c85768",
+              "document_id": "6635ebb0-baa8-4d9a-b8fb-8cd766c85768",
+              "chunk_id": "radar-30",
+              "similarity": null,
+              "content_preview": "Captured revenue INR 0.00; captured transactions 0; customers 0; orders 0.",
+              "metadata": {
+                "verified": true,
+                "window_days": 30,
+                "signals": []
+              }
+            }
+          ],
+          "inference_allowed": false
+        },
+        "langchain_adapter": "<backend.app.ai.langchain_adapter.adapter.LangChainAgentAdapter object at 0x000001E1E20C1390>",
+        "memories": []
+      },
+      "errors": [],
+      "status": "running",
+      "cancelled": false,
+      "cancelled_at_step": null,
+      "totals": {},
+      "debate_id": null,
+      "action_plan": null,
+      "terminal_outcome": {},
+      "branch:to:fast_payment_recovery": null
+    },
+    "channel_versions": {
+      "__start__": 2,
+      "merchant_id": 2,
+      "run_id": 2,
+      "workflow_id": 2,
+      "mode": 2,
+      "objective": 2,
+      "window_days": 2,
+      "params": 2,
+      "generation": 2,
+      "current_step_index": 6,
+      "selected_specialists": 2,
+      "agents_run": 6,
+      "resumed_steps": 2,
+      "needs_reconciliation": 2,
+      "opportunities": 2,
+      "ranked_opportunities": 2,
+      "findings": 2,
+      "actions_proposed": 2,
+      "tool_records": 2,
+      "shared_memory": 6,
+      "errors": 2,
+      "status": 3,
+      "cancelled": 3,
+      "cancelled_at_step": 2,
+      "totals": 2,
+      "debate_id": 2,
+      "action_plan": 2,
+      "terminal_outcome": 2,
+      "branch:to:validate_request": 3,
+      "branch:to:load_context": 4,
+      "branch:to:fast_memory_load": 5,
+      "branch:to:fast_discovery": 6,
+      "branch:to:fast_payment_recovery": 6
+    },
+    "versions_seen": {
+      "__input__": {},
+      "__start__": {
+        "__start__": 1
+      },
+      "validate_request": {
+        "branch:to:validate_request": 2
+      },
+      "load_context": {
+        "branch:to:load_context": 3
+      },
+      "fast_memory_load": {
+        "branch:to:fast_memory_load": 4
+      },
+      "fast_discovery": {
+        "branch:to:fast_discovery": 5
+      }
+    },
+    "updated_channels": [
+      "agents_run",
+      "branch:to:fast_payment_recovery",
+      "current_step_index",
+      "shared_memory"
+    ]
+  },
+  "metadata": {
+    "source": "loop",
+    "step": 4,
+    "parents": {}
+  },
+  "channel_versions": {
+    "current_step_index": 6,
+    "agents_run": 6,
+    "shared_memory": 6,
+    "branch:to:fast_discovery": 6,
+    "branch:to:fast_payment_recovery": 6
+  }
+}

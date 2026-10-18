@@ -1,0 +1,57 @@
+{
+  "checkpoint": {
+    "v": 4,
+    "ts": "2026-10-17T15:43:43.332728+00:00",
+    "id": "1f1ca418-8486-66b3-bfff-8b204451ef40",
+    "channel_values": {
+      "__start__": {
+        "merchant_id": "84f66181-391a-4bb3-a431-b5dc269a336a",
+        "run_id": "cancel_8ee342ca",
+        "workflow_id": "52c95d2a-830c-4c55-a478-c712062327a8",
+        "mode": "fast",
+        "objective": "Cancellation check",
+        "window_days": 30,
+        "params": {
+          "objective": "Cancellation check"
+        },
+        "generation": 2,
+        "current_step_index": 0,
+        "selected_specialists": [],
+        "agents_run": [],
+        "resumed_steps": [],
+        "needs_reconciliation": [],
+        "opportunities": [],
+        "ranked_opportunities": [],
+        "findings": [],
+        "actions_proposed": [],
+        "tool_records": [],
+        "shared_memory": {},
+        "errors": [],
+        "status": "running",
+        "cancelled": false,
+        "cancelled_at_step": null,
+        "totals": {},
+        "debate_id": null,
+        "action_plan": null,
+        "terminal_outcome": {}
+      }
+    },
+    "channel_versions": {
+      "__start__": 1
+    },
+    "versions_seen": {
+      "__input__": {}
+    },
+    "updated_channels": [
+      "__start__"
+    ]
+  },
+  "metadata": {
+    "source": "input",
+    "step": -1,
+    "parents": {}
+  },
+  "channel_versions": {
+    "__start__": 1
+  }
+}

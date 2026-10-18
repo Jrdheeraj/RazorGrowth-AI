@@ -113,8 +113,7 @@ def _complete_audit_row(
     row.completed_at = datetime.now(timezone.utc)
     if output is not None:
         row.output_summary = output
-    if errors is not None:
-        row.errors = errors
+    row.errors = list(errors) if errors is not None else []
     db.flush()
 
 

@@ -31,6 +31,23 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+#: Maps ``AgentResult.status`` onto the durable ``AgentRunStatus`` vocabulary.
+#: Anything unrecognised degrades to ``failed`` rather than being optimistically
+#: upgraded -- an unknown outcome must never read as success.
+_RESULT_STATUS_MAP: dict[str, str] = {
+    "completed": AgentRunStatus.completed.value,
+    "partially_completed": AgentRunStatus.partially_completed.value,
+    "failed": AgentRunStatus.failed.value,
+    "blocked": AgentRunStatus.blocked.value,
+    "skipped": AgentRunStatus.skipped.value,
+}
+
+
+def _result_status(result_status: Any) -> str:
+    value = getattr(result_status, "value", result_status)
+    return _RESULT_STATUS_MAP.get(str(value), AgentRunStatus.failed.value)
+
+
 class AgentRunService:
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -45,6 +62,10 @@ class AgentRunService:
         orchestrator_run_id: str,
         mode: str = "deep",
         input_summary: dict[str, Any] | None = None,
+        workflow_id: uuid.UUID | None = None,
+        step_key: str | None = None,
+        step_index: int | None = None,
+        attempt: int = 1,
     ) -> AgentRun:
         settings = get_settings()
         # Stamp the audit row from the SAME shared resolver every call site
@@ -53,13 +74,21 @@ class AgentRunService:
         from backend.app.ai.llm.provider import resolve_llm_provider
 
         resolved = resolve_llm_provider(settings)
+        now = _utcnow()
         run = AgentRun(
             merchant_id=merchant_id,
+            workflow_id=workflow_id,
             orchestrator_run_id=orchestrator_run_id,
             agent_name=agent_name,
+            step_key=step_key,
+            step_index=step_index,
+            attempt=attempt,
             status=AgentRunStatus.running,
             mode=mode,
-            started_at=_utcnow(),
+            started_at=now,
+            # Heartbeat at start: a running row whose heartbeat has gone cold is
+            # how a crashed cycle becomes detectable.
+            heartbeat_at=now,
             input_summary=input_summary or {},
             llm_provider=resolved.name if resolved else None,
             llm_model=resolved.model if resolved else "not-configured",
@@ -68,17 +97,42 @@ class AgentRunService:
         self.db.flush()
         return run
 
-    def complete_run(self, run: AgentRun, result: Any) -> AgentRun:
-        from backend.app.models.enums import AgentRunStatus as S
+    def commit_start(self) -> None:
+        """
+        Make the pending ``running`` row durable WITHOUT touching agent writes.
 
-        run.status = (
-            S.completed if result.status == "completed" else S.failed
-        )
+        The orchestrator calls this immediately before the agent body runs, so
+        a crash during the agent leaves a recoverable record. It is safe at that
+        point precisely because the agent has not started: the transaction
+        holds the start row plus whatever earlier steps already committed, and
+        none of the current step's business writes yet.
+        """
+        self.db.commit()
+
+    def heartbeat(self, run: AgentRun) -> None:
+        """Refresh proof of life for a step that is still executing."""
+        run.heartbeat_at = _utcnow()
+        self.db.flush()
+
+    def complete_run(self, run: AgentRun, result: Any) -> AgentRun:
+        """
+        Record the real outcome, preserving status granularity.
+
+        Previously every non-``completed`` outcome collapsed into ``failed``,
+        so a degraded-but-productive step and a step that produced nothing were
+        indistinguishable in the audit trail -- which is exactly the signal a
+        resume needs in order to decide what is reusable.
+        """
+        run.status = _result_status(result.status)
         run.completed_at = _utcnow()
+        run.heartbeat_at = run.completed_at
         run.output_summary = dict(result.output) if result.output else {}
         run.tools_used = list(result.tools_used)
         run.opportunities_created = result.opportunities_created
         run.actions_proposed = result.actions_proposed
+        run.insights_generated = getattr(result, "insights_generated", 0)
+        run.signals_detected = result.signals_detected
+        run.experiments_proposed = getattr(result, "experiments_proposed", 0)
         run.errors = list(result.errors)
         run.total_latency_ms = int(result.total_ms)
         run.llm_latency_ms = int(result.llm_ms)

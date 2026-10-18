@@ -768,6 +768,29 @@ export interface ExecutionResponse {
   message: string;
 }
 
+export interface ActionDeleteResponse {
+  deleted: boolean;
+  action_id: string;
+  message?: string;
+}
+
+export interface ActionBulkDeleteDetail {
+  action_id: string;
+  status: string;
+  result?: string;
+  reason?: string;
+  error?: string;
+}
+
+export interface ActionBulkDeleteResponse {
+  eligible: number;
+  deleted: number;
+  skipped: number;
+  failed: number;
+  message: string;
+  details: ActionBulkDeleteDetail[];
+}
+
 export interface AuditEventRow {
   id: string;
   event_type: string;

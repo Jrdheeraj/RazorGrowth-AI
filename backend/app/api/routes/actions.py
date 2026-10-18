@@ -43,16 +43,22 @@ from backend.app.services.action_service import (
     approve_action,
     reject_action,
     execute_action,
+    delete_action,
+    delete_all_actions,
     get_action,
     list_actions_by_status,
     DEVELOPMENT_ACTOR,
     ActionNotFoundError,
     InvalidTransitionError,
+    ActionRunningConflictError,
+    BulkOperationConflictError,
 )
 from backend.app.schemas.action import (
     ActionResponse,
     ActionListResponse,
     ActionTransitionResponse,
+    ActionDeleteResponse,
+    ActionBulkDeleteResponse,
     AuditEventResponse,
     AuditEventListResponse,
     ExecutionResponse,
@@ -359,6 +365,106 @@ def execute_action_route(
 
 
 # -------------------------------------------------------------------------
+# DELETE /api/actions — delete all eligible actions for tenant
+# -------------------------------------------------------------------------
+
+
+@router.delete("", response_model=ActionBulkDeleteResponse)
+def delete_all_actions_route(
+    db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(operator_ctx),
+) -> Any:
+    """
+    Delete all eligible actions for the caller's tenant (tenant-isolated, operator+ role).
+
+    Safety and lifecycle:
+      - Authenticated and authorized via operator_ctx.
+      - Tenant-isolated server-side: scoped to ctx.merchant_id.
+      - Concurrency protection: duplicate concurrent bulk operations for the same tenant
+        are rejected with 409 Conflict.
+      - Running actions are safely skipped (and workflow cancellation requested if linked)
+        to prevent race conditions with executing workers.
+      - Awaiting, approved, completed, and failed/stopped actions are safely deleted,
+        preserving linked campaign and recommendation models and recording audit events.
+      - Returns authoritative summary of eligible, deleted, skipped, and failed counts.
+    """
+    mid = ctx.merchant_id
+    if mid is None:
+        raise HTTPException(status_code=400, detail="Merchant identity required")
+
+    try:
+        res = delete_all_actions(db, mid, actor=_actor_label(ctx))
+        db.commit()
+    except BulkOperationConflictError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc))
+    except Exception as exc:
+        db.rollback()
+        log.exception("Bulk delete failed for merchant %s", mid)
+        raise HTTPException(status_code=500, detail="Bulk delete operation failed")
+
+    return {
+        "eligible": res.eligible,
+        "deleted": res.deleted,
+        "skipped": res.skipped,
+        "failed": res.failed,
+        "message": f"Deletion finished: {res.deleted} removed, {res.skipped} skipped, {res.failed} failed.",
+        "details": res.details,
+    }
+
+
+# -------------------------------------------------------------------------
+# DELETE /api/actions/{action_id} — delete an action safely
+# -------------------------------------------------------------------------
+
+
+@router.delete("/{action_id}", response_model=ActionDeleteResponse)
+def delete_action_route(
+    action_id: str,
+    db: Session = Depends(get_db),
+    ctx: MerchantContext = Depends(operator_ctx),
+) -> Any:
+    """
+    Delete an individual action (tenant-isolated, operator+ role).
+
+    Running-action safety:
+      If the action is currently executing, deletion is refused with 409 Conflict.
+      In all other states (requested, approved, completed, failed, rejected),
+      the action is safely deleted while logging an immutable audit event
+      and safely nullifying references in linked marketing and product models.
+    """
+    aid = _parse_action_id(action_id)
+
+    action = get_action(db, aid)
+    if not action:
+        raise HTTPException(status_code=404, detail="ACTION_NOT_FOUND")
+    _verify_tenant_access(action, ctx)
+
+    try:
+        delete_action(db, aid, actor=_actor_label(ctx))
+    except ActionNotFoundError:
+        db.rollback()
+        raise HTTPException(status_code=404, detail="ACTION_NOT_FOUND")
+    except ActionRunningConflictError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc))
+    except InvalidTransitionError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        db.rollback()
+        log.exception("Failed to delete action %s", aid)
+        raise HTTPException(status_code=500, detail="Failed to delete action")
+
+    db.commit()
+    return {
+        "deleted": True,
+        "action_id": str(aid),
+        "message": "Action deleted successfully",
+    }
+
+
+# -------------------------------------------------------------------------
 # GET /api/actions/{action_id}/audit
 # -------------------------------------------------------------------------
 
@@ -372,19 +478,26 @@ def get_action_audit(
     """Retrieve the audit trail for an action (tenant-isolated)."""
     aid = _parse_action_id(action_id)
 
-    action = get_action(db, aid)
-    if not action:
-        raise HTTPException(status_code=404, detail="ACTION_NOT_FOUND")
-    _verify_tenant_access(action, ctx)
-
     from backend.app.models.audit_event import AuditEvent
+
+    action = get_action(db, aid)
+    if action:
+        _verify_tenant_access(action, ctx)
 
     stmt = (
         select(AuditEvent)
-        .where(AuditEvent.entity_id == str(aid))
-        .order_by(AuditEvent.created_at.desc())
+        .where(
+            AuditEvent.entity_type == "agent_action",
+            AuditEvent.entity_id == str(aid),
+        )
     )
+    if ctx.authenticated or ctx.explicit_merchant:
+        stmt = stmt.where(AuditEvent.merchant_id == ctx.merchant_id)
+    stmt = stmt.order_by(AuditEvent.created_at.desc())
     events = list(db.execute(stmt).scalars().all())
+
+    if not events and not action:
+        raise HTTPException(status_code=404, detail="ACTION_NOT_FOUND")
 
     return {
         "audit_events": [

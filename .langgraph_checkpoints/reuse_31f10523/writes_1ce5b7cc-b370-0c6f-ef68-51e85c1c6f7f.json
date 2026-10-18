@@ -1,0 +1,41 @@
+[
+  [
+    "current_step_index",
+    3
+  ],
+  [
+    "agents_run",
+    [
+      {
+        "agent_name": "PaymentRecoveryAgent",
+        "step_key": "fast:002:PaymentRecoveryAgent:-:441a89a1cb340f0ca3470568",
+        "status": "completed",
+        "opportunities_created": 0,
+        "actions_proposed": 0,
+        "tools_used": [
+          "failed_payment_scan",
+          "recovery_simulation",
+          "phase4_propose",
+          "failed_payment_scan"
+        ],
+        "errors": [],
+        "reused": true
+      }
+    ]
+  ],
+  [
+    "resumed_steps",
+    [
+      {
+        "step_index": 2,
+        "step_key": "fast:002:PaymentRecoveryAgent:-:441a89a1cb340f0ca3470568",
+        "agent": "PaymentRecoveryAgent",
+        "phase": null
+      }
+    ]
+  ],
+  [
+    "branch:to:fast_prioritization",
+    null
+  ]
+]

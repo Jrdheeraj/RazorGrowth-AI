@@ -40,6 +40,18 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _uuid_or_none(value: Any) -> uuid.UUID | None:
+    """Coerce a persisted-id string back to a UUID, or None."""
+    if value is None:
+        return None
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
 # ── AgentContext ──────────────────────────────────────────────────────
 
 @dataclass
@@ -119,6 +131,31 @@ class BaseGrowthAgent(ABC):
     max_retries: int = 3        # maximum transient failure retries
     max_replan: int = 2         # maximum replan attempts within one run
 
+    #: Cycle id for the workflow currently executing this agent, set by
+    #: execute(). Scopes Phase 4 proposal idempotency to one cycle. Declared
+    #: here (not per-run) because agents are long-lived registry singletons.
+    _workflow_run_id: uuid.UUID | None = None
+
+    def get_langchain_adapter(self, ctx: AgentContext) -> Any:
+        """Retrieve or construct the LangChainAgentAdapter for this agent."""
+        adapter = ctx.shared.get("langchain_adapter")
+        if adapter is not None and getattr(adapter, "agent_name", None) == self.NAME:
+            return adapter
+        from backend.app.ai.langchain_adapter.adapter import LangChainAgentAdapter
+
+        new_adapter = LangChainAgentAdapter(
+            agent_name=self.NAME,
+            db=ctx.db,
+            merchant_id=ctx.merchant_id,
+            llm=ctx.llm,
+        )
+        ctx.shared["langchain_adapter"] = new_adapter
+        return new_adapter
+
+    def get_langchain_tools(self, ctx: AgentContext) -> list[Any]:
+        """Retrieve authorized LangChain BaseTool instances for this agent."""
+        return self.get_langchain_adapter(ctx).tools
+
     # ── public entry point (never raises) ─────────────────────────────
 
     def execute(self, ctx: AgentContext) -> AgentResult:
@@ -130,6 +167,10 @@ class BaseGrowthAgent(ABC):
         )
         rag_context = ctx.shared.get("rag_context")
         result.output["objective"] = ctx.params.get("objective")
+        # Stash the cycle id so a Phase 4 proposal can be idempotency-scoped to
+        # this workflow. A step executed outside a workflow leaves it None and
+        # keeps the previous, unscoped behaviour.
+        self._workflow_run_id = _uuid_or_none(ctx.params.get("workflow_run_id"))
         if rag_context:
             result.output["evidence_context"] = {
                 "status": rag_context.get("status"),
@@ -282,6 +323,13 @@ class BaseGrowthAgent(ABC):
         the resulting action still faces both guardrail evaluations and a
         mandatory human approval before anything happens. Agents can
         propose; only humans can approve.
+
+        The proposal is idempotent within its workflow cycle. A retried or
+        resumed step re-proposing the same action returns the EXISTING row
+        instead of filling the merchant's queue with a duplicate -- which is
+        the failure the crash-recovery test observed. The key is derived
+        deterministically from (merchant, type, payload, workflow), so a
+        genuinely new proposal still creates a new row.
         """
         self._require(PROPOSE_ACTION)
         t0 = time.perf_counter()
@@ -291,9 +339,38 @@ class BaseGrowthAgent(ABC):
             action_type=action_type,
             input_payload=payload,
             requested_by=f"agent:{self.NAME}",
+            idempotency_key=self._action_idempotency_key(
+                merchant_id=merchant_id,
+                action_type=action_type,
+                payload=payload,
+            ),
         )
         self._last_tool_ms = int((time.perf_counter() - t0) * 1000)
         return action
+
+    def _action_idempotency_key(
+        self,
+        *,
+        merchant_id: uuid.UUID,
+        action_type: str,
+        payload: dict[str, Any],
+    ) -> str:
+        """
+        Idempotency key for one proposal inside the current workflow cycle.
+
+        Scoped to the cycle when the orchestrator stamped one, so two separate
+        analyses of the same merchant may each legitimately raise the same
+        proposal, while a retry WITHIN a cycle does not duplicate it.
+        """
+        from backend.app.services.action_service import action_idempotency_key
+
+        workflow_run_id = self._workflow_run_id
+        return action_idempotency_key(
+            merchant_id=merchant_id,
+            action_type=action_type,
+            input_payload=payload,
+            workflow_run_id=workflow_run_id,
+        )
 
     @staticmethod
     def _timed(fn, *args, **kwargs):
@@ -337,12 +414,11 @@ class BaseGrowthAgent(ABC):
             default=str,
             indent=2,
         )
-        generated, llm_ms = self._timed(
-            ctx.llm.generate,
-            system_prompt,
-            user_prompt,
+        adapter = self.get_langchain_adapter(ctx)
+        generated, llm_ms = adapter.execute_text_reasoning(
+            system_instruction=system_prompt,
+            user_instruction=user_prompt,
             temperature=0.35,
-            max_tokens=220,
         )
         result.llm_ms += llm_ms
         content = generated.strip()

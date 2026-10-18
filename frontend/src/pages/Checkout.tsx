@@ -134,6 +134,15 @@ export function Checkout() {
   const [query, setQuery] = useState("");
   const [cat, setCat] = useState<string>("all");
   const [sort, setSort] = useState<SortKey>("recommended");
+  const [copiedCard, setCopiedCard] = useState(false);
+
+  const handleCopyCard = (cardNum = "4100 2800 0000 1007") => {
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(cardNum);
+      setCopiedCard(true);
+      setTimeout(() => setCopiedCard(false), 2000);
+    }
+  };
 
   /* Load the real merchant catalog. (PRESERVED) */
   useEffect(() => {
@@ -217,6 +226,14 @@ export function Checkout() {
       description: selected.name,
       order_id: session.razorpay_order_id,
       theme: { color: "#21130e" },
+      prefill: {
+        name: "AI Buyer",
+        email: "ai-buyer@razorgrowth.test",
+        contact: "9999999999",
+      },
+      notes: {
+        payment_card: "4100 2800 0000 1007",
+      },
       handler: async (response: any) => {
         // Success path — verify server-side before claiming success.
         try {
@@ -307,7 +324,10 @@ export function Checkout() {
       <section className="rgco-hero" aria-labelledby="checkout-heading">
         <div className="rgco-hero__inner">
           <div className="rgco-hero__copy">
-            <p className="rgco-eyebrow">AI BUYER · RAZORPAY TEST MODE</p>
+            <p className="rgco-eyebrow">
+              <span className="rgco-eyebrow__dot" aria-hidden="true" />
+              AI BUYER · RAZORPAY TEST MODE
+            </p>
             <h1 id="checkout-heading" className="rgco-hero__title">AI Buyer Checkout</h1>
             <p className="rgco-hero__lead">
               An AI buyer reads this merchant&apos;s real product catalog, selects a product,
@@ -376,8 +396,22 @@ export function Checkout() {
       <div className="rgco-main">
         {/* ── CATALOG ── */}
         <section className="rgco-catalog" aria-label="Product catalog">
-          <h2 className="rgco-catalog__title">Product Catalog</h2>
-          <p className="rgco-catalog__sub">Products available for AI buyer test purchase. Select a product to continue.</p>
+          <div className="rgco-catalog__head-bar">
+            <div>
+              <div className="rgco-catalog__live-pill">
+                <span className="rgco-catalog__pulse" aria-hidden="true" />
+                <span>STORE DATABASE CONNECTED</span>
+              </div>
+              <h2 className="rgco-catalog__title">Product Catalog</h2>
+              <p className="rgco-catalog__sub">Products available for AI buyer test purchase. Select a product to continue.</p>
+            </div>
+            {products && products.length > 0 && (
+              <div className="rgco-catalog__stats-badge">
+                <span className="rgco-catalog__stats-count">{totalCount}</span>
+                <span className="rgco-catalog__stats-lbl">Products In Catalog</span>
+              </div>
+            )}
+          </div>
 
           {catalogError === "login_required" && (
             <div className="rgco-state" role="alert">
@@ -511,7 +545,10 @@ export function Checkout() {
         <div className="rgco-side">
           <section className="rgco-buy" aria-label="AI buyer purchase">
             <div className="rgco-buy__head">
-              <span>AI BUYER · PURCHASE</span>
+              <div className="rgco-buy__head-title">
+                <span className="rgco-buy__pulse" aria-hidden="true" />
+                <span>AI BUYER · PURCHASE</span>
+              </div>
               <span className="rgco-buy__test">TEST MODE</span>
             </div>
             <div className="rgco-preview">
@@ -586,6 +623,29 @@ export function Checkout() {
                   <p className="rgco-orderref">
                     Order created{session.razorpay_order_id ? ` · ref ${session.razorpay_order_id}` : ""}. Ready for Razorpay TEST checkout.
                   </p>
+
+                  <div
+                    className="rgco-quick-card-pill"
+                    onClick={() => handleCopyCard("4100 2800 0000 1007")}
+                    role="button"
+                    tabIndex={0}
+                    title="Click to copy payment card number"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleCopyCard("4100 2800 0000 1007");
+                      }
+                    }}
+                  >
+                    <div className="rgco-quick-card-left">
+                      <span className="rgco-quick-card-label">CARD FOR PAYMENT:</span>
+                      <code className="rgco-quick-card-code">4100 2800 0000 1007</code>
+                    </div>
+                    <span className="rgco-quick-card-btn">
+                      {copiedCard ? "✓ Copied" : "Copy"}
+                    </span>
+                  </div>
+
                   <button
                     type="button"
                     className="rgco-paybtn"
@@ -624,17 +684,70 @@ export function Checkout() {
                   <strong>Payment could not be completed</strong>
                   <p><b>What happened:</b> {outcome.reason}</p>
                   <p><b>Money status:</b> No successful capture occurred — no money moved.</p>
-                  <p><b>Recommended next step:</b> Try again — in TEST mode you can use the successful
-                    test card, or the declined test card (4100 2800 0000 1007) to see this safe state.</p>
+                  <p><b>Recommended next step:</b> Try again — in TEST mode you can use the test payment card (4100 2800 0000 1007) to test payments.</p>
                 </div>
               )}
             </div>
-            <div className="rgco-testbox">
-              <span className="rgco-testbox__icon">i</span>
-              <span>
-                <strong>TEST MODE ACTIVE</strong>
-                <p>Use Razorpay test credentials to simulate a successful payment. No real money is charged.</p>
-              </span>
+
+            {/* ══ TEST PAYMENT CARD CREDENTIALS ══ */}
+            <div className="rgco-testcard-box" aria-label="Test payment card credentials">
+              <div className="rgco-testcard-head">
+                <div className="rgco-testcard-tag">
+                  <span className="rgco-testcard-dot" aria-hidden="true" />
+                  <span>TEST CARD FOR PAYMENT</span>
+                </div>
+                <span className="rgco-testcard-badge">Razorpay TEST</span>
+              </div>
+
+              <div className="rgco-testcard-main">
+                <div className="rgco-testcard-num-group">
+                  <span className="rgco-testcard-label">CARD NUMBER</span>
+                  <div className="rgco-testcard-num-wrap">
+                    <code className="rgco-testcard-number">4100 2800 0000 1007</code>
+                    <button
+                      type="button"
+                      className="rgco-testcard-copy-btn"
+                      onClick={() => handleCopyCard("4100 2800 0000 1007")}
+                      aria-label="Copy test card number"
+                      title="Copy card number to clipboard"
+                    >
+                      {copiedCard ? (
+                        <>
+                          <span className="rgco-testcard-check" aria-hidden="true">✓</span>
+                          <span>Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                          </svg>
+                          <span>Copy</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rgco-testcard-meta-grid">
+                  <div className="rgco-testcard-meta-item">
+                    <span className="rgco-testcard-meta-label">EXPIRY</span>
+                    <span className="rgco-testcard-meta-val">12 / 28</span>
+                  </div>
+                  <div className="rgco-testcard-meta-item">
+                    <span className="rgco-testcard-meta-label">CVV</span>
+                    <span className="rgco-testcard-meta-val">123</span>
+                  </div>
+                  <div className="rgco-testcard-meta-item">
+                    <span className="rgco-testcard-meta-label">OTP</span>
+                    <span className="rgco-testcard-meta-val">Any OTP</span>
+                  </div>
+                </div>
+              </div>
+
+              <p className="rgco-testcard-note">
+                Use card number <strong>4100 2800 0000 1007</strong> in the Razorpay checkout window for payment testing. No real money is charged.
+              </p>
             </div>
           </section>
 

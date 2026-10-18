@@ -80,15 +80,17 @@ class CampaignStrategistAgent(BaseGrowthAgent):
         )
         if ctx.llm is not None and ctx.mode == "deep":
             try:
-                raw = ctx.llm.generate(
-                    system_prompt=(
+                adapter = self.get_langchain_adapter(ctx)
+                raw, ms = adapter.execute_text_reasoning(
+                    system_instruction=(
                         "Draft one short campaign message for the merchant's "
                         "customers. Use only facts provided; never invent "
                         "discounts or statistics."
                     ),
-                    user_prompt=f"Opportunity: {opportunity.title}; segment: {segment}",
+                    user_instruction=f"Opportunity: {opportunity.title}; segment: {segment}",
                 )
                 message_strategy = str(raw)[:800]
+                result.llm_ms += ms
             except Exception as exc:
                 result.errors.append(f"llm_copy_skipped: {exc}")
 

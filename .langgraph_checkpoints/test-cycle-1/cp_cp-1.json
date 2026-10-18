@@ -1,0 +1,14 @@
+{
+  "checkpoint": {
+    "id": "cp-1",
+    "ts": "2026-10-17T12:00:00Z",
+    "channel_values": {
+      "status": "running"
+    }
+  },
+  "metadata": {
+    "step": 1,
+    "source": "test"
+  },
+  "channel_versions": {}
+}

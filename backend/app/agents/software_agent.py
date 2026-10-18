@@ -65,6 +65,7 @@ class SoftwareAgent(BaseGrowthAgent):
         READ_MERCHANT,
         READ_ORDERS,
         READ_CUSTOMERS,
+        READ_PRODUCTS,
     })
     TOOLS = ("technical_planning", "integration_analysis", "automation_design", "feasibility_assessment", "spec_creation")
 

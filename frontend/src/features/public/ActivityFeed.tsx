@@ -123,15 +123,40 @@ export function ActivityFeed({ merchantId, windowDays = 30 }: ActivityFeedProps)
                 {item.objective ? `"${item.objective}"` : "No objective"}
               </span>
               <div className="activity-feed__metrics">
-                <span>📈 {item.opportunities_created} opps</span>
-                <span>💡 {item.actions_proposed} proposals</span>
-                <span>📊 {item.insights_generated} insights</span>
-                <span>🔅 {item.signals_detected} signals</span>
+                {(item.opportunities_created + item.actions_proposed + item.insights_generated + item.signals_detected > 0) ? (
+                  <>
+                    {item.opportunities_created > 0 && (
+                      <span className="act-chip act-chip--opps">
+                        📈 {item.opportunities_created} Opportunit{item.opportunities_created === 1 ? "y" : "ies"}
+                      </span>
+                    )}
+                    {item.actions_proposed > 0 && (
+                      <span className="act-chip act-chip--proposals">
+                        💡 {item.actions_proposed} Proposal{item.actions_proposed === 1 ? "" : "s"}
+                      </span>
+                    )}
+                    {item.insights_generated > 0 && (
+                      <span className="act-chip act-chip--insights">
+                        📊 {item.insights_generated} Insight{item.insights_generated === 1 ? "" : "s"}
+                      </span>
+                    )}
+                    {item.signals_detected > 0 && (
+                      <span className="act-chip act-chip--signals">
+                        🔅 {item.signals_detected} Signal{item.signals_detected === 1 ? "" : "s"}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="activity-feed__empty-metric">
+                    No new opportunities, proposals, insights, or signals from this run.
+                  </span>
+                )}
               </div>
               <span className="activity-feed__time">{formatActivityTime(item.timestamp)}</span>
             </div>
           ))}
       </div>
     </div>
+
   );
 }

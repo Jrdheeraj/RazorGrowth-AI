@@ -1,0 +1,39 @@
+[
+  [
+    "current_step_index",
+    1
+  ],
+  [
+    "agents_run",
+    [
+      {
+        "agent_name": "GrowthMemoryAgent",
+        "step_key": "fast:000:GrowthMemoryAgent:load:6770345103642257f81197e0",
+        "status": "completed",
+        "opportunities_created": 0,
+        "actions_proposed": 0,
+        "tools_used": [
+          "memory_retrieve",
+          "memory_record"
+        ],
+        "errors": [],
+        "reused": true
+      }
+    ]
+  ],
+  [
+    "resumed_steps",
+    [
+      {
+        "step_index": 0,
+        "step_key": "fast:000:GrowthMemoryAgent:load:6770345103642257f81197e0",
+        "agent": "GrowthMemoryAgent",
+        "phase": "load"
+      }
+    ]
+  ],
+  [
+    "branch:to:fast_discovery",
+    null
+  ]
+]

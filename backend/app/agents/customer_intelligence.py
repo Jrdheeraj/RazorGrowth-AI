@@ -62,15 +62,17 @@ class CustomerIntelligenceAgent(BaseGrowthAgent):
         strategy_note: str | None = None
         if ctx.llm is not None and ctx.mode == "deep":
             try:
-                raw = ctx.llm.generate(
-                    system_prompt=(
+                adapter = self.get_langchain_adapter(ctx)
+                raw, ms = adapter.execute_text_reasoning(
+                    system_instruction=(
                         "You are a customer intelligence analyst. In two "
                         "sentences, interpret the following segments for a "
                         "merchant. Never invent numbers."
                     ),
-                    user_prompt=str(by_segment),
+                    user_instruction=str(by_segment),
                 )
                 strategy_note = str(raw)[:1000]
+                result.llm_ms += ms
             except Exception as exc:  # LLM failure must not fail the agent
                 result.errors.append(f"llm_interpretation_skipped: {exc}")
         if strategy_note:
