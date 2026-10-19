@@ -16,6 +16,8 @@
  *     (min-width: 0 + minmax(0, 1fr)), otherwise their min-content width blows
  *     the page out horizontally on tablets.
  *  5. No layout may be sized with 100vw (scrollbar-width trap).
+ *  6. The Home page must keep its section surfaces and its stacking order over
+ *     the living merchant-world background (orphan-stylesheet regression).
  *
  * Zero-dependency: plain Node, no browser required (`npm run test:responsive`).
  */
@@ -152,6 +154,46 @@ ok("world column children opt out of min-width: auto", !!worldChildren && /min-w
 const readable = ruleBlock(environment, ".readable");
 ok("printed sheet opts out of min-width: auto", !!readable && /min-width\s*:\s*0/.test(readable));
 
+/* ── 4b. Home content must stay above the living background ──────────────
+   Regression guard. The day-to-night scene moved out of `Environment/` into
+   `MerchantWorld/`, which silently orphaned environment.css. With the sheet
+   rules missing, `.readable` lost its surface entirely and every Home section
+   rendered as bare text straight on top of the background artwork — no
+   container, no contrast, no separation. Nothing errored; it just looked wrong.
+   These checks pin the three things that broke. */
+const homePage = readRaw("pages/Home.tsx");
+ok(
+  "Home.tsx pulls in the world-page scaffolding stylesheet",
+  /import\s+"[^"]*Environment\/environment\.css"/.test(homePage),
+  "environment.css owns .world-page / .world-column / .readable; without this import they do not exist",
+);
+ok(
+  "section sheets remove opaque cream plates (transparent background)",
+  !!readable && /background\s*:\s*transparent/.test(readable),
+  "background is transparent so section cards float directly over the living world background",
+);
+ok(
+  "content column is explicitly above the fixed background",
+  !!worldColumn && /z-index\s*:\s*1/.test(worldColumn),
+);
+ok(
+  ".world-page must not create a stacking context (would bury the page)",
+  !!ruleBlock(environment, ".world-page") &&
+    !/z-index/.test(ruleBlock(environment, ".world-page")) &&
+    !/transform|filter|isolation|opacity/.test(ruleBlock(environment, ".world-page")),
+);
+
+const merchantWorld = read("features/public/MerchantWorld/merchantWorldBackground.css");
+const worldEnv = ruleBlock(merchantWorld, ".merchant-world-env");
+ok("merchant world background is fixed and below content", !!worldEnv && /position\s*:\s*fixed/.test(worldEnv) && /z-index\s*:\s*0/.test(worldEnv));
+ok("merchant world background never intercepts pointer events", !!worldEnv && /pointer-events\s*:\s*none/.test(worldEnv));
+const scrim = ruleBlock(merchantWorld, ".merchant-world-scrim");
+ok("readability scrim exists between artwork and content", !!scrim);
+ok("readability scrim stays pointer-transparent", !!scrim && /pointer-events\s*:\s*none/.test(scrim));
+
+const headerZ = /--z-header:\s*(\d+)/.exec(read("styles/tokens.css"));
+ok("navbar sits above the merchant world background", !!headerZ && Number(headerZ[1]) > 0, `z-header=${headerZ && headerZ[1]}`);
+
 /* ── 5. Hero floats stack before they can collide with the main window ── */
 const hero = read("features/public/Hero/hero.css");
 const heroStack = mediaBlock(hero, "max-width: 1023px");
@@ -181,6 +223,51 @@ const tokens = read("styles/tokens.css");
 ok(
   "section headline scale is fluid (clamp)",
   /--text-display-lg:\s*clamp\(/.test(tokens),
+);
+
+/* ── 8. Agent status cards & modals never clip behind navbar ────────── */
+const agentsCss = read("pages/AgentsPage.css");
+const detailOverlayRule = ruleBlock(agentsCss, ".detail-overlay");
+ok(
+  "detail overlay accounts for navbar height in padding-top",
+  !!detailOverlayRule && /padding-top\s*:[^;]*--header-height/.test(detailOverlayRule),
+);
+ok(
+  "detail overlay has high stacking context (z-index >= 1000)",
+  !!detailOverlayRule && /z-index\s*:\s*(1000|[1-9]\d{3,})/.test(detailOverlayRule),
+);
+
+const detailPanelRule = ruleBlock(agentsCss, ".detail-overlay__panel");
+ok(
+  "detail panel caps max-height accounting for navbar and viewport",
+  !!detailPanelRule && /max-height\s*:[^;]*--header-height/.test(detailPanelRule),
+);
+
+const detailBodyRule = ruleBlock(agentsCss, ".detail-overlay__body");
+ok(
+  "detail body scrolls internally without moving header",
+  !!detailBodyRule && /overflow-y\s*:\s*auto/.test(detailBodyRule),
+);
+
+const magiCss = read("pages/MarketingAGIPage.css");
+const magiModalBack = ruleBlock(magiCss, ".magi-modalback");
+ok(
+  "MarketingAGI modal accounts for navbar height in padding-top",
+  !!magiModalBack && /padding-top\s*:[^;]*--header-height/.test(magiModalBack),
+);
+
+const pagiCss = read("pages/ProductAGIPage.css");
+const pagiModalBack = ruleBlock(pagiCss, ".pagi-modalback");
+ok(
+  "ProductAGI modal accounts for navbar height in padding-top",
+  !!pagiModalBack && /padding-top\s*:[^;]*--header-height/.test(pagiModalBack),
+);
+
+const actionsCss = read("pages/ActionsPage.css");
+const actModalOverlay = ruleBlock(actionsCss, ".act-modal-overlay");
+ok(
+  "ActionsPage modal overlay accounts for navbar height in padding-top",
+  !!actModalOverlay && /padding-top\s*:[^;]*--header-height/.test(actModalOverlay),
 );
 
 console.log(failures === 0 ? "\nresponsive layout: all checks passed" : `\n${failures} check(s) failed`);

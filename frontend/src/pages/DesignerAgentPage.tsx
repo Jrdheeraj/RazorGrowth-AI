@@ -69,13 +69,17 @@ import adobeLogo from "../assets/brands/adobe-creative-cloud.svg";
 import driveLogo from "../assets/brands/google-drive.svg";
 import notionLogo from "../assets/brands/notion.svg";
 import { WindowPanel } from "../components/WindowPanel";
-import { GlobalEnvironment } from "../features/public/Environment/GlobalEnvironment";
+import { PreviewModeBanner } from "../components/PreviewModeBanner";
+import { MerchantWorldBackground } from "../features/public/MerchantWorld/MerchantWorldBackground";
+import { isAuthenticated } from "../lib/auth";
 import {
   loadDesignerWorkspace,
   type DesignerWorkspace,
 } from "../lib/designerWorkspaceApi";
 import type {
+  CreativeBrief,
   DesignAsset,
+  DesignProject,
   DesignerActivityEntry,
   DesignerImageGeneration,
 } from "../types/api";
@@ -790,16 +794,119 @@ function runSparkline(runs: DesignerRunSummary[]): Array<{ h: number; tone: stri
   }));
 }
 
+const SAMPLE_DESIGNER_SNAPSHOT: DesignerSnapshot = {
+  registered: true,
+  registryDescription:
+    "Generates creative briefs, ad variants, visual layout directions, and UI specifications from growth signals.",
+  tools: [
+    "generate_design_brief",
+    "create_variant_matrix",
+    "synthesize_brand_guidelines",
+    "analyze_ux_friction",
+  ],
+  runs: [],
+  latest: null,
+  findings: [],
+  inFlight: false,
+};
+
+const SAMPLE_DESIGNER_WORKSPACE: DesignerWorkspace = {
+  snapshot: SAMPLE_DESIGNER_SNAPSHOT,
+  status: {
+    agent_registered: true,
+    agent_description:
+      "Autonomous creative and visual specialist for conversion-focused merchant assets.",
+    capabilities: [
+      {
+        key: "brief_synthesis",
+        label: "Creative Brief Synthesis",
+        status: "operational",
+        detail: "Active",
+      },
+      {
+        key: "variant_matrix",
+        label: "Multi-Format Ad Variants",
+        status: "operational",
+        detail: "Active",
+      },
+      {
+        key: "ux_friction",
+        label: "UX Funnel Visual Audit",
+        status: "operational",
+        detail: "Active",
+      },
+    ],
+    integrations: [
+      {
+        provider: "figma",
+        label: "Figma",
+        purpose: "Design tokens & frames",
+        status: "connected",
+        supported: true,
+        detail: "Connected",
+      },
+      {
+        provider: "canva",
+        label: "Canva",
+        purpose: "Template publishing",
+        status: "setup_required",
+        supported: true,
+        detail: "OAuth pending",
+      },
+    ],
+    image_generation: {
+      status: "available",
+      provider: "mock_provider",
+      model: "sdxl-turbo",
+      reason: "Sign in to configure image generation API",
+      asset_reference: null,
+    },
+    latest_project: null,
+    latest_brief: null,
+    metrics: [
+      { key: "total_briefs", label: "Creative Briefs", value: 0, hint: "Total generated briefs" },
+      { key: "active_projects", label: "Active Projects", value: 0, hint: "In-progress design workspaces" },
+      { key: "awaiting_review", label: "Awaiting Review", value: 0, hint: "Variants ready for review" },
+      { key: "conversion_lift", label: "Est. Lift", value: 0, hint: "Projected conversion uplift %" },
+    ],
+    counts: { projects: 0, briefs: 0, assets: 0 },
+    last_updated: new Date().toISOString(),
+  },
+  projects: [],
+  briefs: [],
+  assets: [],
+  activity: [],
+  imageGeneration: null,
+  renderedAssets: [],
+  imageUsageToday: { images: 0, bytes: 0 },
+  load: {
+    runs: true,
+    status: true,
+    projects: true,
+    briefs: true,
+    assets: true,
+    activity: true,
+    images: true,
+  },
+  partial: false,
+  error: null,
+};
+
 /* ── Component ────────────────────────────────────────────────────────── */
 
 export function DesignerAgentPage() {
   const navigate = useNavigate();
-  const [snapshot, setSnapshot] = useState<DesignerSnapshot | null>(null);
+  const [isPreview, setIsPreview] = useState(!isAuthenticated());
+  const [snapshot, setSnapshot] = useState<DesignerSnapshot | null>(
+    !isAuthenticated() ? SAMPLE_DESIGNER_SNAPSHOT : null,
+  );
   /** Real workspace records: projects, briefs, assets, activity, status. */
-  const [workspace, setWorkspace] = useState<DesignerWorkspace | null>(null);
+  const [workspace, setWorkspace] = useState<DesignerWorkspace | null>(
+    !isAuthenticated() ? SAMPLE_DESIGNER_WORKSPACE : null,
+  );
   const [loadState, setLoadState] = useState<
     "loading" | "ready" | "login_required" | "no_workspace" | "error"
-  >("loading");
+  >(!isAuthenticated() ? "ready" : "loading");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [brief, setBrief] = useState("");
@@ -809,6 +916,14 @@ export function DesignerAgentPage() {
   const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
+    if (!isAuthenticated()) {
+      setIsPreview(true);
+      setSnapshot(SAMPLE_DESIGNER_SNAPSHOT);
+      setWorkspace(SAMPLE_DESIGNER_WORKSPACE);
+      setLoadState("ready");
+      return;
+    }
+
     /* Probe the registry directly first. loadDesignerWorkspace() isolates each
      * endpoint, so an auth failure surfaces there as empty data — without this
      * probe a signed-out visitor would be told "this backend does not register a
@@ -819,7 +934,10 @@ export function DesignerAgentPage() {
     } catch (e) {
       const err = e as { status?: number };
       if (err.status === 401) {
-        setLoadState("login_required");
+        setIsPreview(true);
+        setSnapshot(SAMPLE_DESIGNER_SNAPSHOT);
+        setWorkspace(SAMPLE_DESIGNER_WORKSPACE);
+        setLoadState("ready");
         return;
       }
       if (err.status === 403) {
@@ -843,9 +961,14 @@ export function DesignerAgentPage() {
       setLoadState(totalFailure ? "error" : "ready");
     } catch (e) {
       const err = e as { status?: number; message?: string };
-      if (err.status === 401) setLoadState("login_required");
-      else if (err.status === 403) setLoadState("no_workspace");
-      else {
+      if (err.status === 401) {
+        setIsPreview(true);
+        setSnapshot(SAMPLE_DESIGNER_SNAPSHOT);
+        setWorkspace(SAMPLE_DESIGNER_WORKSPACE);
+        setLoadState("ready");
+      } else if (err.status === 403) {
+        setLoadState("no_workspace");
+      } else {
         setLoadState("error");
         setErrorMsg(err.message ?? "Failed to load the Designer Agent dashboard");
       }
@@ -958,6 +1081,10 @@ export function DesignerAgentPage() {
 
   const runGeneration = useCallback(
     async (assetId: string | null, prompt?: string) => {
+      if (!isAuthenticated()) {
+        setGenError("Sign in to generate real promotional design assets.");
+        return;
+      }
       if ((!assetId && !prompt?.trim()) || generating) return; // no source, never double-submit
       setGenerating(true);
       setGenError(null);
@@ -1007,6 +1134,13 @@ export function DesignerAgentPage() {
    * second, parallel AI Team cycle. The cycle id below is the real identifier
    * the merchant can follow. */
   const submitDesignRequest = useCallback(async () => {
+    if (!isAuthenticated()) {
+      setDispatchMsg({
+        ok: false,
+        text: "Sign in to start an autonomous design request with your AI Team.",
+      });
+      return;
+    }
     const objective = brief.trim();
     if (!objective) {
       setDispatchMsg({ ok: false, text: "Describe what you want to design first." });
@@ -1040,34 +1174,10 @@ export function DesignerAgentPage() {
   }, [brief, dispatching, load]);
 
   /* ── Gate states — honest, never a fake dashboard ──────────────────── */
-  if (loadState === "login_required") {
-    return (
-      <div className="designer-world">
-        <GlobalEnvironment />
-        <div className="designer-shell">
-          <WindowPanel title="designer.agent" className="designer-span-full">
-            <div className="window__body">
-              <p className="designer-eyebrow">DESIGNER AGENT</p>
-              <h1 className="designer-head__title">Sign in to open the Designer Agent</h1>
-              <p className="designer-panel__sub">
-                This workstation shows your workspace&apos;s real design runs and creative briefs.
-              </p>
-              <div className="designer-status__actions">
-                <button type="button" className="designer-btn designer-btn--primary" onClick={() => navigate("/login")}>
-                  Go to sign in
-                </button>
-              </div>
-            </div>
-          </WindowPanel>
-        </div>
-      </div>
-    );
-  }
-
   if (loadState === "no_workspace") {
     return (
       <div className="designer-world">
-        <GlobalEnvironment />
+        <MerchantWorldBackground />
         <div className="designer-shell">
           <WindowPanel title="designer.agent" className="designer-span-full">
             <div className="window__body">
@@ -1092,7 +1202,7 @@ export function DesignerAgentPage() {
   if (loadState === "error") {
     return (
       <div className="designer-world">
-        <GlobalEnvironment />
+        <MerchantWorldBackground />
         <div className="designer-shell">
           <WindowPanel title="designer.agent" className="designer-span-full">
             <div className="window__body">
@@ -1168,9 +1278,12 @@ export function DesignerAgentPage() {
   return (
     <div className="designer-world">
       {/* The SAME illustrated world the Marketing + Product Agent pages use. */}
-      <GlobalEnvironment />
+      <MerchantWorldBackground />
 
       <div className="designer-shell">
+        {isPreview && (
+          <PreviewModeBanner pageName="Designer Specialist Studio" />
+        )}
         {/* ══ HERO — copy sits bare on the world; the request is the one window ═ */}
         <div className="designer-hero">
             {/* ── copy column (no card, no border — direct on the world) ── */}

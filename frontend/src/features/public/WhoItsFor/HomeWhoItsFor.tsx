@@ -130,7 +130,7 @@ export function HomeWhoItsFor() {
         windowTitle="razorgrowth — audience.app"
       />
 
-      <div ref={reveal} className="reveal">
+      <div ref={reveal} className="reveal" style={{ marginTop: 22 }}>
         <div className="home-whoitsfor__grid" role="list">
           {AUDIENCES.map((audience, index) => (
             <AudienceCard key={audience.id} audience={audience} index={index} />

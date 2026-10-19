@@ -1,0 +1,112 @@
+/* ==========================================================================
+   MERCHANT WORLD BACKGROUND — FULL-BROWSER 4-IMAGE TRANSITION
+   Full-screen merchant-world background covering 100% viewport width and
+   height, extending seamlessly behind the navbar with zero white gaps or seams.
+   ========================================================================== */
+
+.merchant-world-env {
+  position: fixed;
+  inset: 0;
+  /* No 100vw / 100vh: a fixed box already fills the visual viewport, and 100vw
+     includes the vertical scrollbar gutter, which can push the layer wider than
+     the document and create phantom horizontal overflow. */
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background-color: #F7EBD6;
+  /* Warm morning cream default fallback */
+}
+
+/* ── Four Perfectly Aligned Full-Viewport Layers ───────────────────────── */
+
+.merchant-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+  will-change: opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.merchant-layer--morning,
+.merchant-layer--day {
+  z-index: 1;
+  opacity: 1;
+}
+
+.merchant-layer--midday,
+.merchant-layer--afternoon {
+  z-index: 2;
+  opacity: 0;
+}
+
+.merchant-layer--sunset {
+  z-index: 3;
+  opacity: 0;
+}
+
+.merchant-layer--night {
+  z-index: 4;
+  opacity: 0;
+}
+
+/* ── Readability scrim ─────────────────────────────────────────────────────
+   Layer 2 of the page stack: a very light warm-cream wash between the four
+   time-of-day images and all page content.
+
+   Purpose is NOT to hide the illustration — it is to tie the artwork to the
+   RazorGrowth cream/beige palette so the gutters, the space around the navbar
+   and the warm horizon all read as one surface. It never sits under text:
+   every section renders on an opaque `.readable` sheet, and the navbar is an
+   opaque dark bar above this layer.
+
+   Kept deliberately low (6-20%) and pointer-transparent. Darkening further
+   would flatten the day-to-night transition, which is the point of the scene.
+   ───────────────────────────────────────────────────────────────────────── */
+
+.merchant-world-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 5;                 /* above all four scene layers */
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(247, 235, 213, 0.20) 0%,
+    rgba(247, 235, 213, 0.08) 34%,
+    rgba(247, 235, 213, 0.07) 62%,
+    rgba(240, 222, 196, 0.20) 100%
+  );
+}
+
+
+/* ── Full-Viewport Image Scaling & Alignment ───────────────────────────── */
+
+.merchant-layer__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Centered composition on desktop keeps full street and sky visible */
+  object-position: center center;
+  display: block;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── Responsive Viewport Adjustments ───────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .merchant-layer__img {
+    /* 36% focuses on the central RazorGrowth AI storefront on narrower viewports */
+    object-position: 36% center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .merchant-layer {
+    will-change: auto;
+    transition: opacity 0.3s ease-out;
+  }
+}

@@ -1,0 +1,608 @@
+{
+  "checkpoint": {
+    "v": 4,
+    "ts": "2026-10-18T15:46:55.040804+00:00",
+    "id": "1f1cb0b2-4f67-6b6e-800a-e93652d1ce05",
+    "channel_values": {
+      "merchant_id": "7711bcaf-ad1d-4d0f-a982-29a2212616b5",
+      "run_id": "a8085e9be7214cc383a42f94060bdcc6",
+      "workflow_id": "eff76070-8e79-4a9a-83d3-292166f564c4",
+      "mode": "growth_team",
+      "objective": "Find the strongest growth opportunity using the latest Razorpay TEST data",
+      "window_days": 30,
+      "params": {
+        "objective": "Find the strongest growth opportunity using the latest Razorpay TEST data",
+        "window_days": 30,
+        "propose_retry_action": true,
+        "debate_id": "cdc76a68-b263-42df-a01c-de6abedf8644"
+      },
+      "generation": 1,
+      "current_step_index": 8,
+      "selected_specialists": [],
+      "agents_run": [
+        {
+          "agent_name": "GrowthMemoryAgent",
+          "step_key": "growth_team:000:GrowthMemoryAgent:load:7e5f6a209b6f29398b2f3869",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "memory_retrieve",
+            "memory_record"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "ManagerAgent",
+          "step_key": "growth_team:001:ManagerAgent:delegate:39b923731825dcd4e94c381a",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "growth_radar",
+            "opportunity_lookup",
+            "task_decomposition",
+            "agent_delegation",
+            "debate_orchestration",
+            "synthesis"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "MarketingAgent",
+          "step_key": "growth_team:002:MarketingAgent:investigate:f4cd5f96686a1c94ecb1b253",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "segment_analysis",
+            "campaign_design",
+            "messaging_strategy",
+            "simulation",
+            "finding_creation"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "ProductAgent",
+          "step_key": "growth_team:003:ProductAgent:investigate:526a56255057b186ca4f6690",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "product_affinity_analysis",
+            "upsell_cross_sell_detection",
+            "experiment_design",
+            "simulation",
+            "finding_creation"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "DesignerAgent",
+          "step_key": "growth_team:004:DesignerAgent:investigate:a5cd347ce15047e1adb0a649",
+          "status": "failed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "creative_concept",
+            "messaging_strategy",
+            "experiment_variants",
+            "ux_recommendations",
+            "creative_brief"
+          ],
+          "errors": [
+            "brief_generation_failed:unknown",
+            "brief_generation_failed:unknown",
+            "brief_generation_failed:unknown",
+            "brief_generation_failed:unknown",
+            "brief_generation_failed:unknown",
+            "brief_generation_failed:unknown"
+          ]
+        },
+        {
+          "agent_name": "SoftwareAgent",
+          "step_key": "growth_team:005:SoftwareAgent:investigate:68441e5c38b2cba17a4e87b6",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "technical_planning",
+            "integration_analysis",
+            "automation_design",
+            "feasibility_assessment",
+            "spec_creation"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "OpportunityPrioritizationAgent",
+          "step_key": "growth_team:006:OpportunityPrioritizationAgent:-:df259876f6face85f2fa42ad",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "opportunity_scoring"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "ManagerAgent",
+          "step_key": "growth_team:007:ManagerAgent:delegate:a1c9edef74d0e14682833e19",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "growth_radar",
+            "opportunity_lookup",
+            "task_decomposition",
+            "agent_delegation",
+            "debate_orchestration",
+            "synthesis"
+          ],
+          "errors": []
+        }
+      ],
+      "resumed_steps": [],
+      "needs_reconciliation": [],
+      "opportunities": [],
+      "ranked_opportunities": [
+        {
+          "opportunity_id": "760a811f-d291-4bd1-ac1c-deb53cd5b6c0",
+          "score": 0.33,
+          "title": "Revenue changed -47.87% over the last 30 days"
+        },
+        {
+          "opportunity_id": "675ea976-9d4d-40e9-a6f8-10b18fe79b47",
+          "score": 0.17,
+          "title": "1 payment failures worth \u20b92499.00 in the last 30 days"
+        },
+        {
+          "opportunity_id": "028cfba2-abbf-4ca4-b0f8-d458a975f721",
+          "score": 0.14,
+          "title": "4 payment failures worth \u20b93998.00 in the last 30 days"
+        },
+        {
+          "opportunity_id": "44463af1-cf69-44cf-9218-9659b4607254",
+          "score": 0.14,
+          "title": "Recoverable failed-payment revenue of \u20b93998.00"
+        },
+        {
+          "opportunity_id": "56f9f8ad-f6e8-4949-a5ce-4c5d22e86144",
+          "score": 0.11,
+          "title": "Recoverable failed-payment revenue of \u20b98996.00"
+        },
+        {
+          "opportunity_id": "fff66e1f-d0f5-4fbf-ad5c-4df7be89916b",
+          "score": 0.11,
+          "title": "6 payment failures worth \u20b98996.00 in the last 90 days"
+        },
+        {
+          "opportunity_id": "c20de17e-a64a-4673-a7f6-f0630cc6f4d4",
+          "score": 0.08,
+          "title": "Recover \u20b94498.00 in 2 failed payments (last 30 days)"
+        },
+        {
+          "opportunity_id": "758da95a-7672-46da-9560-28bc2e1f032c",
+          "score": 0.06,
+          "title": "Recover \u20b93998.00 in 4 failed payments (last 30 days)"
+        },
+        {
+          "opportunity_id": "fb901e29-f6c5-483e-8896-d7811ab174c2",
+          "score": 0.0,
+          "title": "Underperforming: Mechanical Wireless Keyboard"
+        },
+        {
+          "opportunity_id": "8b2e6914-b104-4a15-88a5-c68fef2fd1ce",
+          "score": 0.0,
+          "title": "Underperforming: 1080p USB Webcam"
+        }
+      ],
+      "findings": [],
+      "actions_proposed": [],
+      "tool_records": [],
+      "shared_memory": {
+        "rag_context": {
+          "merchant_id": "7711bcaf-ad1d-4d0f-a982-29a2212616b5",
+          "query": "Find the strongest growth opportunity using the latest Razorpay TEST data",
+          "status": "ready",
+          "data_sufficiency": {
+            "status": "sufficient",
+            "message": "Sufficient real captured transaction data is available for growth analysis.",
+            "minimum_required": 3,
+            "available": 4
+          },
+          "verified_facts": [
+            {
+              "fact": "captured_revenue",
+              "value": 5696.0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "captured_transactions",
+              "value": 4,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "successful_payments",
+              "value": 4,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "failed_payments",
+              "value": 2,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "total_customers",
+              "value": 4,
+              "verified": true,
+              "source": "customers"
+            },
+            {
+              "fact": "total_orders",
+              "value": 5,
+              "verified": true,
+              "source": "orders"
+            }
+          ],
+          "derived_metrics": {
+            "average_order_value": 1424.0,
+            "signals": [
+              {
+                "signal": "revenue_drop",
+                "title": "Revenue changed -68.51% over the last 30 days",
+                "observed_data": {
+                  "current_window": {
+                    "captured_payments": 4
+                  },
+                  "previous_window": {
+                    "captured_payments": 18
+                  },
+                  "threshold_pct": -10.0
+                },
+                "calculated_metric": "captured_revenue_inr",
+                "opportunity": "Revenue recovery opportunity",
+                "confidence": 0.542,
+                "reason": "Observed captured_revenue_inr from 30-day PostgreSQL payment/order data.",
+                "recommended_action": "Investigate the real revenue decline and target retention or recovery work."
+              },
+              {
+                "signal": "unusual_order_behavior",
+                "title": "Order volume shifted -92.19% versus the prior window",
+                "observed_data": {
+                  "band_pct": 40.0
+                },
+                "calculated_metric": "order_count",
+                "opportunity": "Growth opportunity",
+                "confidence": 0.85,
+                "reason": "Observed order_count from 30-day PostgreSQL payment/order data.",
+                "recommended_action": "Review the recorded evidence with the merchant team."
+              },
+              {
+                "signal": "payment_failures",
+                "title": "2 payment failures worth \u20b94998.00 in the last 30 days",
+                "observed_data": {
+                  "failed_count": 2,
+                  "source": "payments.status='failed'"
+                },
+                "calculated_metric": "failed_payment_value_inr",
+                "opportunity": "Payment recovery opportunity",
+                "confidence": 0.322,
+                "reason": "Observed failed_payment_value_inr from 30-day PostgreSQL payment/order data.",
+                "recommended_action": "Review failed transactions and offer a compliant payment-recovery path."
+              },
+              {
+                "signal": "payment_recovery_opportunity",
+                "title": "Recoverable failed-payment revenue of \u20b94998.00",
+                "observed_data": {
+                  "failed_count": 2
+                },
+                "calculated_metric": "recoverable_revenue_inr",
+                "opportunity": "Recover failed-payment revenue",
+                "confidence": 0.322,
+                "reason": "Observed recoverable_revenue_inr from 30-day PostgreSQL payment/order data.",
+                "recommended_action": "Follow up on the recorded failed payments using an approved recovery workflow."
+              }
+            ]
+          },
+          "retrieved_context": [
+            {
+              "source_type": "growth_radar",
+              "source_id": "7711bcaf-ad1d-4d0f-a982-29a2212616b5",
+              "document_id": "7711bcaf-ad1d-4d0f-a982-29a2212616b5",
+              "chunk_id": "radar-30",
+              "similarity": null,
+              "content_preview": "Captured revenue INR 5696.00; captured transactions 4; customers 4; orders 5.",
+              "metadata": {
+                "verified": true,
+                "window_days": 30,
+                "signals": [
+                  {
+                    "signal": "revenue_drop",
+                    "title": "Revenue changed -68.51% over the last 30 days",
+                    "observed_data": {
+                      "current_window": {
+                        "captured_payments": 4
+                      },
+                      "previous_window": {
+                        "captured_payments": 18
+                      },
+                      "threshold_pct": -10.0
+                    },
+                    "calculated_metric": "captured_revenue_inr",
+                    "opportunity": "Revenue recovery opportunity",
+                    "confidence": 0.542,
+                    "reason": "Observed captured_revenue_inr from 30-day PostgreSQL payment/order data.",
+                    "recommended_action": "Investigate the real revenue decline and target retention or recovery work."
+                  },
+                  {
+                    "signal": "unusual_order_behavior",
+                    "title": "Order volume shifted -92.19% versus the prior window",
+                    "observed_data": {
+                      "band_pct": 40.0
+                    },
+                    "calculated_metric": "order_count",
+                    "opportunity": "Growth opportunity",
+                    "confidence": 0.85,
+                    "reason": "Observed order_count from 30-day PostgreSQL payment/order data.",
+                    "recommended_action": "Review the recorded evidence with the merchant team."
+                  },
+                  {
+                    "signal": "payment_failures",
+                    "title": "2 payment failures worth \u20b94998.00 in the last 30 days",
+                    "observed_data": {
+                      "failed_count": 2,
+                      "source": "payments.status='failed'"
+                    },
+                    "calculated_metric": "failed_payment_value_inr",
+                    "opportunity": "Payment recovery opportunity",
+                    "confidence": 0.322,
+                    "reason": "Observed failed_payment_value_inr from 30-day PostgreSQL payment/order data.",
+                    "recommended_action": "Review failed transactions and offer a compliant payment-recovery path."
+                  },
+                  {
+                    "signal": "payment_recovery_opportunity",
+                    "title": "Recoverable failed-payment revenue of \u20b94998.00",
+                    "observed_data": {
+                      "failed_count": 2
+                    },
+                    "calculated_metric": "recoverable_revenue_inr",
+                    "opportunity": "Recover failed-payment revenue",
+                    "confidence": 0.322,
+                    "reason": "Observed recoverable_revenue_inr from 30-day PostgreSQL payment/order data.",
+                    "recommended_action": "Follow up on the recorded failed payments using an approved recovery workflow."
+                  }
+                ]
+              }
+            }
+          ],
+          "inference_allowed": true
+        },
+        "langchain_adapter": "<backend.app.ai.langchain_adapter.adapter.LangChainAgentAdapter object at 0x0000015990906690>",
+        "memories": [
+          {
+            "id": "b1aa57f7-65fc-4b4b-9733-d1677ed95dda",
+            "memory_type": "recommendation",
+            "content": "PaymentRecoveryAgent proposed retry for highest-value failure; 1 failures worth \u20b92499.00 in window.",
+            "summary": "PaymentRecoveryAgent proposed retry for highest-value failure; 1 failures worth \u20b92499.00 in window.",
+            "score": 0.3262,
+            "importance": 0.7,
+            "outcome_variance_pct": null,
+            "created_at": "2026-10-13 07:56:14.888414+00:00"
+          },
+          {
+            "id": "aaa1f9cd-e4e7-42e6-9c96-61d8a55629c2",
+            "memory_type": "recommendation",
+            "content": "[MarketingAGI investigation] Run 7de348f0-bd24-4a67-8afe-131b3832697d: detected 6 failed payments worth \u20b98996 recoverable \u2192 prepared failed_payment_recovery campaign for 4 customers (action 41176748-04cf-469c-b81f-a665943e5b3f awaiting approval)",
+            "summary": "[MarketingAGI investigation] Run 7de348f0-bd24-4a67-8afe-131b3832697d: detected 6 failed payments worth \u20b98996 recoverable \u2192 prepared failed_payment_recovery campaign for 4 customers (action 41176748-0",
+            "score": 0.3234,
+            "importance": 0.5,
+            "outcome_variance_pct": null,
+            "created_at": "2026-10-18 08:27:51.319794+00:00"
+          },
+          {
+            "id": "d6dfa418-7a61-4391-9574-dd565738c1b3",
+            "memory_type": "recommendation",
+            "content": "Orchestrator run 3ba735f68f884658aba43a789ceebb55: 0 opportunities, 1 actions proposed (awaiting human approval).",
+            "summary": "Orchestrator run 3ba735f68f884658aba43a789ceebb55: 0 opportunities, 1 actions proposed (awaiting human approval).",
+            "score": 0.3231,
+            "importance": 0.6,
+            "outcome_variance_pct": null,
+            "created_at": "2026-10-15 14:22:16.237094+00:00"
+          },
+          {
+            "id": "3b008de6-5754-47cf-8239-761bb2b8ce3d",
+            "memory_type": "recommendation",
+            "content": "[MarketingAGI investigation] Run b87cdb76-44b3-445e-b2a8-39c80789fe10: linked failed_payment_recovery campaign to open action 77913b99-e865-48e3-a919-da375af53246 (no duplicate created)",
+            "summary": "[MarketingAGI investigation] Run b87cdb76-44b3-445e-b2a8-39c80789fe10: linked failed_payment_recovery campaign to open action 77913b99-e865-48e3-a919-da375af53246 (no duplicate created)",
+            "score": 0.3195,
+            "importance": 0.5,
+            "outcome_variance_pct": null,
+            "created_at": "2026-10-17 16:11:42.710791+00:00"
+          },
+          {
+            "id": "52f7e2ae-a2f7-412c-9a61-cb9ff8edc82f",
+            "memory_type": "recommendation",
+            "content": "[MarketingAGI investigation] Run 6dbf3486-dcc2-4162-9172-7ceca835e67e: linked failed_payment_recovery campaign to open action 77913b99-e865-48e3-a919-da375af53246 (no duplicate created)",
+            "summary": "[MarketingAGI investigation] Run 6dbf3486-dcc2-4162-9172-7ceca835e67e: linked failed_payment_recovery campaign to open action 77913b99-e865-48e3-a919-da375af53246 (no duplicate created)",
+            "score": 0.3194,
+            "importance": 0.5,
+            "outcome_variance_pct": null,
+            "created_at": "2026-10-17 15:48:10.188852+00:00"
+          }
+        ],
+        "manager_debate_id": "cdc76a68-b263-42df-a01c-de6abedf8644",
+        "ranked_opportunities": [
+          {
+            "opportunity_id": "760a811f-d291-4bd1-ac1c-deb53cd5b6c0",
+            "score": 0.33,
+            "title": "Revenue changed -47.87% over the last 30 days"
+          },
+          {
+            "opportunity_id": "675ea976-9d4d-40e9-a6f8-10b18fe79b47",
+            "score": 0.17,
+            "title": "1 payment failures worth \u20b92499.00 in the last 30 days"
+          },
+          {
+            "opportunity_id": "028cfba2-abbf-4ca4-b0f8-d458a975f721",
+            "score": 0.14,
+            "title": "4 payment failures worth \u20b93998.00 in the last 30 days"
+          },
+          {
+            "opportunity_id": "44463af1-cf69-44cf-9218-9659b4607254",
+            "score": 0.14,
+            "title": "Recoverable failed-payment revenue of \u20b93998.00"
+          },
+          {
+            "opportunity_id": "56f9f8ad-f6e8-4949-a5ce-4c5d22e86144",
+            "score": 0.11,
+            "title": "Recoverable failed-payment revenue of \u20b98996.00"
+          },
+          {
+            "opportunity_id": "fff66e1f-d0f5-4fbf-ad5c-4df7be89916b",
+            "score": 0.11,
+            "title": "6 payment failures worth \u20b98996.00 in the last 90 days"
+          },
+          {
+            "opportunity_id": "c20de17e-a64a-4673-a7f6-f0630cc6f4d4",
+            "score": 0.08,
+            "title": "Recover \u20b94498.00 in 2 failed payments (last 30 days)"
+          },
+          {
+            "opportunity_id": "758da95a-7672-46da-9560-28bc2e1f032c",
+            "score": 0.06,
+            "title": "Recover \u20b93998.00 in 4 failed payments (last 30 days)"
+          },
+          {
+            "opportunity_id": "fb901e29-f6c5-483e-8896-d7811ab174c2",
+            "score": 0.0,
+            "title": "Underperforming: Mechanical Wireless Keyboard"
+          },
+          {
+            "opportunity_id": "8b2e6914-b104-4a15-88a5-c68fef2fd1ce",
+            "score": 0.0,
+            "title": "Underperforming: 1080p USB Webcam"
+          }
+        ]
+      },
+      "errors": [
+        "brief_generation_failed:unknown",
+        "brief_generation_failed:unknown",
+        "brief_generation_failed:unknown",
+        "brief_generation_failed:unknown",
+        "brief_generation_failed:unknown",
+        "brief_generation_failed:unknown"
+      ],
+      "status": "running",
+      "cancelled": false,
+      "cancelled_at_step": null,
+      "totals": {},
+      "debate_id": null,
+      "action_plan": null,
+      "terminal_outcome": {},
+      "branch:to:growth_team_memory_persist": null
+    },
+    "channel_versions": {
+      "__start__": 2,
+      "merchant_id": 2,
+      "run_id": 2,
+      "workflow_id": 2,
+      "mode": 2,
+      "objective": 2,
+      "window_days": 2,
+      "params": 2,
+      "generation": 2,
+      "current_step_index": 12,
+      "selected_specialists": 2,
+      "agents_run": 12,
+      "resumed_steps": 2,
+      "needs_reconciliation": 2,
+      "opportunities": 2,
+      "ranked_opportunities": 12,
+      "findings": 2,
+      "actions_proposed": 2,
+      "tool_records": 2,
+      "shared_memory": 12,
+      "errors": 9,
+      "status": 3,
+      "cancelled": 3,
+      "cancelled_at_step": 2,
+      "totals": 2,
+      "debate_id": 2,
+      "action_plan": 2,
+      "terminal_outcome": 2,
+      "branch:to:validate_request": 3,
+      "branch:to:load_context": 4,
+      "branch:to:growth_team_memory_load": 5,
+      "branch:to:growth_team_manager_plan": 6,
+      "branch:to:growth_team_marketing": 7,
+      "branch:to:growth_team_product": 8,
+      "branch:to:growth_team_designer": 9,
+      "branch:to:growth_team_software": 10,
+      "branch:to:growth_team_prioritization": 11,
+      "branch:to:growth_team_manager_synth": 12,
+      "branch:to:growth_team_memory_persist": 12
+    },
+    "versions_seen": {
+      "__input__": {},
+      "__start__": {
+        "__start__": 1
+      },
+      "validate_request": {
+        "branch:to:validate_request": 2
+      },
+      "load_context": {
+        "branch:to:load_context": 3
+      },
+      "growth_team_memory_load": {
+        "branch:to:growth_team_memory_load": 4
+      },
+      "growth_team_manager_plan": {
+        "branch:to:growth_team_manager_plan": 5
+      },
+      "growth_team_marketing": {
+        "branch:to:growth_team_marketing": 6
+      },
+      "growth_team_product": {
+        "branch:to:growth_team_product": 7
+      },
+      "growth_team_designer": {
+        "branch:to:growth_team_designer": 8
+      },
+      "growth_team_software": {
+        "branch:to:growth_team_software": 9
+      },
+      "growth_team_prioritization": {
+        "branch:to:growth_team_prioritization": 10
+      },
+      "growth_team_manager_synth": {
+        "branch:to:growth_team_manager_synth": 11
+      }
+    },
+    "updated_channels": [
+      "agents_run",
+      "branch:to:growth_team_memory_persist",
+      "current_step_index",
+      "ranked_opportunities",
+      "shared_memory"
+    ]
+  },
+  "metadata": {
+    "source": "loop",
+    "step": 10,
+    "parents": {}
+  },
+  "channel_versions": {
+    "current_step_index": 12,
+    "agents_run": 12,
+    "ranked_opportunities": 12,
+    "shared_memory": 12,
+    "branch:to:growth_team_manager_synth": 12,
+    "branch:to:growth_team_memory_persist": 12
+  }
+}

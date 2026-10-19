@@ -14,7 +14,14 @@
   pointer-events: none;
 }
 
-/* Page scaffolding: keep the content column clearly above the fixed world. */
+/* Page scaffolding: keep the content column clearly above the fixed world.
+
+   STACKING CONTRACT — do not break this:
+   `.world-page` must stay `position: relative` with `z-index: auto` so it does
+   NOT create a stacking context. Adding `transform`, `filter`, `opacity < 1`,
+   `isolation`, `contain: paint` or `will-change` here would trap `.world-column`
+   (z-index: 1) inside it and paint the whole page underneath the fixed
+   background (z-index: 0). */
 .world-page   { position: relative; }
 .world-column {
   position: relative;
@@ -148,35 +155,48 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   READABILITY — solid printed-paper sheets.
-   Each content section sits on an opaque cream card with clean edges,
-   like an editorial plate laid over the illustration. The world remains
-   visible around and BETWEEN the sheets. No blur, no translucency.
+   READABILITY — Section surfaces.
+
+   Each Home section below the hero sits on an OPAQUE warm-cream plate laid
+   over the living merchant world, exactly like an editorial sheet resting on
+   an illustration. This is a deliberate layer, not an accident:
+
+     merchant-world images (z 0) → readability scrim → .readable plate (z 1)
+     → .site-header (z 40)
+
+   The plate is solid on purpose. Body copy is `--ink-soft` (#5B4232) on
+   `--paper` (#F7EBD7) at 7.85:1; the same text over the daylight artwork
+   measures well under 4.5:1. Opaque surfaces are what keep every section
+   legible from morning through night without changing the scene itself.
+
+   The world stays visible where it should: full-bleed behind the hero,
+   around the navbar, in the gutters beside each plate, and in the 28-64px
+   gaps between plates.
    ═══════════════════════════════════════════════════════════════════════ */
 
 .readable {
-  --sheet-pad: clamp(20px, 4vw, 52px);
   position: relative;
+  isolation: isolate;
   min-width: 0;
-  width: min(100%, calc(var(--shell-max) + 2 * var(--sheet-pad)));
+  width: 100%;
   margin-inline: auto;
-  padding: clamp(24px, 4vw, 48px) var(--sheet-pad);
-  background: var(--paper);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-window);
-  box-shadow: 6px 6px 0 rgba(33, 19, 14, 0.08);
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
-/* Remove top border from the first readable section that directly follows the hero to eliminate the harsh visual separation */
+/* The first plate sits flush under the hero, so drop its top border and the
+   matching shadow half to avoid a hard seam at the hero boundary. */
 .hero + .world-column > .readable:first-child,
 .audience-hero + .world-column > .readable:first-child {
   border-top-color: transparent;
-  box-shadow: 6px 0 0 rgba(33, 19, 14, 0.08), 6px 6px 0 rgba(33, 19, 14, 0.08);
+  box-shadow: none;
 }
 
 .readable > * { position: relative; z-index: 1; }
 
-/* headings become small editorial title-cards on the sheet */
+/* headings become small editorial title-cards */
 .readable .page-hero {
   display: inline-block;
   max-width: 100%;
@@ -187,7 +207,7 @@
   padding: 18px clamp(16px, 5vw, 26px);
 }
 
-/* mobile: tighter margins, sheets keep their solid ground */
+/* mobile: tighter margins, plates keep their solid ground */
 @media (max-width: 768px) {
   :root { --par-scale: 0.4; }
 
@@ -197,8 +217,7 @@
   }
 
   .readable {
-    --sheet-pad: 16px;
-    box-shadow: 4px 4px 0 rgba(33, 19, 14, 0.08);
+    box-shadow: none;
   }
 
   .env-district { opacity: 0.85; }

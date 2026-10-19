@@ -155,6 +155,15 @@
   width: 7px; height: 7px; border-radius: 50%; background: var(--green);
   box-shadow: 0 0 0 3px rgba(112,184,138,0.22);
 }
+.rg-live--preview {
+  background: rgba(200, 90, 50, 0.08);
+  border-color: var(--terracotta-400, #c85a32);
+  color: var(--terracotta-600, #b84f28);
+}
+.rg-live--preview .rg-live__dot {
+  background: var(--terracotta-500, #c85a32);
+  box-shadow: 0 0 0 3px rgba(200, 90, 50, 0.22);
+}
 .rg-sideCard {
   border: 1px solid var(--line);
   border-radius: var(--radius-window);

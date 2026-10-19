@@ -28,8 +28,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { WindowPanel } from "../components/WindowPanel";
+import { PreviewModeBanner } from "../components/PreviewModeBanner";
 import { Button, ButtonLink } from "../components/Button";
-import { GlobalEnvironment } from "../features/public/Environment/GlobalEnvironment";
+import { MerchantWorldBackground } from "../features/public/MerchantWorld/MerchantWorldBackground";
+import { isAuthenticated } from "../lib/auth";
 import {
   DEFAULT_WINDOW_DAYS,
   PREVIEW_TABS,
@@ -1017,6 +1019,99 @@ function MismatchBanner({ items }: { items: StatusMismatch[] }) {
   );
 }
 
+const SAMPLE_PRODUCT_AGENT_STATUS: ProductAgentStatusResponse = {
+  has_run: false,
+  run_id: null,
+  analysis_cycle_id: null,
+  managed_by_ai_team: true,
+  status: "idle",
+  stage: "idle",
+  step_index: 0,
+  status_label: "Ready for analysis",
+  needs_approval: false,
+  approval_status: "none",
+  headline: "Product Agent ready — start an AI Team analysis to inspect catalog telemetry.",
+  support:
+    "Product Agent evaluates pricing elasticity, stock velocity, and checkout dropoff when an analysis cycle is triggered.",
+  llm: { provider: "anthropic", model: "claude-3-5-sonnet", degraded: false },
+  insights: [],
+  recommendations: [],
+  work: [],
+  activity: [],
+  learning_insight:
+    "Product Agent continuously refines pricing elasticity models as approved recommendations generate actual checkout telemetry.",
+  platforms: [
+    {
+      key: "shopify",
+      name: "Shopify / WooCommerce Catalog",
+      status: "connected",
+      blurb: "0 products synced",
+      meta: "Ready to sync",
+      integration_implemented: true,
+    },
+    {
+      key: "razorpay",
+      name: "Razorpay Standard Checkout",
+      status: "connected",
+      blurb: "Real-time payment telemetry",
+      meta: "Active telemetry",
+      integration_implemented: true,
+    },
+  ],
+  metrics: {
+    analyzed_products: 0,
+    active_opportunities: 0,
+    pending_approvals: 0,
+    executed_count: 0,
+    estimated_revenue_lift_pct: 0,
+  },
+  catalog: {
+    window_days: 30,
+    generated_at: new Date().toISOString(),
+    summary: {
+      window_days: 30,
+      generated_at: new Date().toISOString(),
+      product_count: 0,
+      total_units: 0,
+      in_stock_count: 0,
+      out_of_stock_count: 0,
+      category_count: 0,
+      categories: [],
+      catalog_value_inr: 0,
+      low_stock_threshold: 0,
+      low_stock_count: 0,
+      total_units_sold: 0,
+      total_revenue_inr: 0,
+      settled_orders: 0,
+      average_order_value_inr: 0,
+      never_sold_count: 0,
+      multi_item_order_count: 0,
+      data_completeness: "no_data",
+    },
+    catalog_health: {
+      status: "healthy",
+      score: 0,
+      grade: "—",
+    },
+    products: [],
+    segments: {},
+    segment_status: {},
+  },
+  workflow_steps: [
+    { top: "Understand", bottom: "catalog" },
+    { top: "Analyze", bottom: "performance" },
+    { top: "Find", bottom: "opportunities" },
+    { top: "Research", bottom: "& analyze" },
+    { top: "Prepare", bottom: "recommendation" },
+    { top: "Safety", bottom: "check" },
+    { top: "Waiting for", bottom: "approval" },
+    { top: "Execute", bottom: "& measure" },
+  ],
+  started_at: null,
+  completed_at: null,
+  duration_seconds: 0,
+};
+
 /* ── Page ─────────────────────────────────────────────────────────────── */
 
 export function ProductAgentPage() {
@@ -1024,17 +1119,35 @@ export function ProductAgentPage() {
   const recommendationsRef = useRef<HTMLDivElement | null>(null);
   const detailsRef = useRef<HTMLDivElement | null>(null);
 
-  const [status, setStatus] = useState<ProductAgentStatusResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [isPreview, setIsPreview] = useState(!isAuthenticated());
+  const [status, setStatus] = useState<ProductAgentStatusResponse | null>(
+    !isAuthenticated() ? SAMPLE_PRODUCT_AGENT_STATUS : null,
+  );
+  const [loading, setLoading] = useState(isAuthenticated());
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    if (!isAuthenticated()) {
+      setIsPreview(true);
+      setStatus(SAMPLE_PRODUCT_AGENT_STATUS);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       const next = await loadProductAgentDashboard(DEFAULT_WINDOW_DAYS);
       setStatus(next);
       setError(null);
     } catch (e) {
-      setError((e as Error)?.message || "Could not reach the Product Agent API.");
+      const err = e as { status?: number; message?: string };
+      if (err?.status === 401 || !isAuthenticated()) {
+        setIsPreview(true);
+        setStatus(SAMPLE_PRODUCT_AGENT_STATUS);
+        setError(null);
+      } else {
+        setError((e as Error)?.message || "Could not reach the Product Agent API.");
+      }
     } finally {
       setLoading(false);
     }
@@ -1051,12 +1164,12 @@ export function ProductAgentPage() {
   // intermediate state keep the page live; only a terminal run status stops
   // the interval (waiting for a human polls slower than active work).
   useEffect(() => {
-    if (!shouldPollRun(status?.status)) return undefined;
+    if (!shouldPollRun(status?.status) || isPreview) return undefined;
     const timer = window.setInterval(() => {
       void refresh();
     }, pollIntervalMs(status?.status));
     return () => window.clearInterval(timer);
-  }, [status?.status, refresh]);
+  }, [status?.status, refresh, isPreview]);
 
   // 3. Coming back to the tab (or another tab approving an action) must not
   // leave this page showing a state that no longer exists.
@@ -1108,8 +1221,11 @@ export function ProductAgentPage() {
 
   return (
     <div className="prod-world">
-      <GlobalEnvironment />
+      <MerchantWorldBackground />
       <div className="prod-shell">
+        {isPreview && (
+          <PreviewModeBanner pageName="Product Specialist Workstation" />
+        )}
         <ProductAgentHero live={Boolean(status?.has_run)} />
 
         {viewState === "error" ? (

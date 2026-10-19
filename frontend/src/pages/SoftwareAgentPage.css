@@ -1,5 +1,10 @@
 /* Software Agent Workstation — Autonomous Technical Feasibility & Automation */
 
+.software-page {
+  position: relative;
+  min-height: 100vh;
+}
+
 .software-shell {
   position: relative;
   z-index: 1;
@@ -17,6 +22,11 @@
   align-items: flex-start;
   gap: 24px;
   flex-wrap: wrap;
+  background: var(--paper-bright, #fffcf6);
+  border: 1.5px solid var(--line, #2a1810);
+  border-radius: var(--radius-window, 8px);
+  padding: 24px 28px;
+  box-shadow: 4px 4px 0 rgba(42, 24, 16, 0.08);
 }
 
 .software-hero__title {

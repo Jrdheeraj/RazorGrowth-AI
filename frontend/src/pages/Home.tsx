@@ -1,7 +1,17 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { scrollToSection, scrollToTop } from "../lib/scroll";
-import { GlobalEnvironment } from "../features/public/Environment/GlobalEnvironment";
+import { MerchantWorldBackground } from "../features/public/MerchantWorld/MerchantWorldBackground";
+
+/* Page scaffolding for the living-world Home page.
+   `.world-page`, `.world-column` and the opaque `.readable` section sheets are
+   used by this component only. The rules live in the Environment stylesheet,
+   which is no longer pulled in automatically: the day-to-night scene moved to
+   MerchantWorldBackground, so the old EnvironmentScene module that used to
+   import this file is no longer part of the render tree. Without this import the
+   whole stylesheet is dropped and every section renders as bare content on top
+   of the background image. Keep this import. */
+import "../features/public/Environment/environment.css";
 
 import { Hero } from "../features/public/Hero/Hero";
 import { ProductOverview } from "../features/public/ProductOverview/ProductOverview";
@@ -53,7 +63,7 @@ export function Home() {
 
   return (
     <div className="world-page">
-      <GlobalEnvironment />
+      <MerchantWorldBackground />
 
       {/* Chapter 1 — MORNING HERO (Locked & Protected Region) */}
       <Hero />

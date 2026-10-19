@@ -1,0 +1,654 @@
+{
+  "checkpoint": {
+    "v": 4,
+    "ts": "2026-10-18T08:32:57.523960+00:00",
+    "id": "1f1cace8-564b-65b2-8010-c1651e314c21",
+    "channel_values": {
+      "merchant_id": "7711bcaf-ad1d-4d0f-a982-29a2212616b5",
+      "run_id": "f7c6691702224259814a19aa17506556",
+      "workflow_id": "8dddf112-ea64-4a90-875a-6242651df93a",
+      "mode": "team",
+      "objective": "Comprehensive commerce analysis and growth optimization",
+      "window_days": 90,
+      "params": {
+        "window_days": 90,
+        "propose_retry_action": true,
+        "objective": "Comprehensive commerce analysis and growth optimization"
+      },
+      "generation": 1,
+      "current_step_index": 14,
+      "selected_specialists": [],
+      "agents_run": [
+        {
+          "agent_name": "GrowthMemoryAgent",
+          "step_key": "team:000:GrowthMemoryAgent:load:632fb95926da5f442aeb7b73",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "memory_retrieve",
+            "memory_record"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "GrowthDiscoveryAgent",
+          "step_key": "team:001:GrowthDiscoveryAgent:-:fb6e9ae0f6da4d64111f919f",
+          "status": "completed",
+          "opportunities_created": 2,
+          "actions_proposed": 0,
+          "tools_used": [
+            "growth_radar",
+            "opportunity_upsert",
+            "opportunity_scoring"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "CustomerIntelligenceAgent",
+          "step_key": "team:002:CustomerIntelligenceAgent:-:c62f7498086a51a414a55169",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "customer_metrics",
+            "segment_classification",
+            "churn_engine"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "RevenueOptimizationAgent",
+          "step_key": "team:003:RevenueOptimizationAgent:-:14a79b6aeebf52a02a0afbf7",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "opportunity_ranking",
+            "what_if_simulation",
+            "phase4_propose"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "PaymentRecoveryAgent",
+          "step_key": "team:004:PaymentRecoveryAgent:-:cf9446a6efb4b0ba1a862948",
+          "status": "completed",
+          "opportunities_created": 1,
+          "actions_proposed": 0,
+          "tools_used": [
+            "failed_payment_scan",
+            "recovery_simulation",
+            "phase4_propose",
+            "failed_payment_scan",
+            "recovery_simulation",
+            "phase4_propose"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "MarketingAgent",
+          "step_key": "team:005:MarketingAgent:work:d2b7b799cb65eb68883f0c09",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "segment_analysis",
+            "campaign_design",
+            "messaging_strategy",
+            "simulation",
+            "finding_creation"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "ProductAgent",
+          "step_key": "team:006:ProductAgent:work:49463e51962e81b50d2fface",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "product_affinity_analysis",
+            "upsell_cross_sell_detection",
+            "experiment_design",
+            "simulation",
+            "finding_creation"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "CampaignStrategistAgent",
+          "step_key": "team:007:CampaignStrategistAgent:-:ade6b8a035bc904db813de88",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 1,
+          "tools_used": [
+            "segment_lookup",
+            "campaign_simulation",
+            "phase4_propose"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "DesignerAgent",
+          "step_key": "team:008:DesignerAgent:work:5ebf96d996293d30974e76eb",
+          "status": "failed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "creative_concept",
+            "messaging_strategy",
+            "experiment_variants",
+            "ux_recommendations",
+            "creative_brief"
+          ],
+          "errors": [
+            "brief_generation_failed:unknown",
+            "brief_generation_failed:unknown",
+            "brief_generation_failed:unknown",
+            "brief_generation_failed:unknown",
+            "brief_generation_failed:unknown",
+            "brief_generation_failed:unknown"
+          ]
+        },
+        {
+          "agent_name": "ExperimentAgent",
+          "step_key": "team:009:ExperimentAgent:-:8f6b41fb0c56086b5af4ad29",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "experiment_design"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "OpportunityPrioritizationAgent",
+          "step_key": "team:010:OpportunityPrioritizationAgent:-:4e6532b7ea9fa7ce30fe2f86",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "opportunity_scoring"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "SoftwareAgent",
+          "step_key": "team:011:SoftwareAgent:work:1ab56b16de9d408a93a22d0f",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "technical_planning",
+            "integration_analysis",
+            "automation_design",
+            "feasibility_assessment",
+            "spec_creation"
+          ],
+          "errors": []
+        },
+        {
+          "agent_name": "PersonalizationAgent",
+          "step_key": "team:012:PersonalizationAgent:-:195e6d309b70ea2c08fccd16",
+          "status": "failed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "customer.insights",
+            "commerce.catalog_intelligence"
+          ],
+          "errors": [
+            "IntegrityError: (psycopg2.errors.NotNullViolation) null value in column \"created_at\" of relation \"personalization_decisions\" violates not-null constraint\nDETAIL:  Failing row contains (7711bcaf-ad1d-4d0f-a982-29a2212616b5, af52edf4-1258-404f-95b3-06419701ce98, vip_nurture, control, 0.83765, {\"trigger\": \"Lifetime value 16888 is at least 2x the merchant me..., [], 629bc8644eb272e5418b228da00d448cb783f196c5d98cd54a4ddd09c9e0866d, af52edf4-1258-404f-95b3-06419701ce98:vip_nurture, proposed, null, null, de13577d-6498-4a0f-bccd-0bafce884190, null, null).\n\n[SQL: INSERT INTO personalization_decisions (merchant_id, customer_id, recommended_action, cohort, score, rationale, recommended_product_ids, assignment_key, decision_key, status, observed_revenue, measured_at, id) VALUES (%(merchant_id__0)s::UUID, %(custo ... 569 characters truncated ... onalization_decisions.created_at, personalization_decisions.updated_at, personalization_decisions.id]\n[parameters: {'id__0': UUID('de13577d-6498-4a0f-bccd-0bafce884190'), 'decision_key__0': 'af52edf4-1258-404f-95b3-06419701ce98:vip_nurture', 'recommended_action__0': 'vip_nurture', 'measured_at__0': None, 'score__0': Decimal('0.83765'), 'rationale__0': '{\"lifetime_value\": 16888.0, \"recency_days\": 25.0, \"order_count\": 18, \"primary_segment\": \"vip\", \"churn_risk_level\": \"\", \"payment_success_rate\": 0.9048 ... (135 characters truncated) ... 032740+00:00\", \"trigger\": \"Lifetime value 16888 is at least 2x the merchant median 11892; protect the relationship.\", \"evidence_rule\": \"vip_nurture\"}', 'customer_id__0': UUID('af52edf4-1258-404f-95b3-06419701ce98'), 'merchant_id__0': UUID('7711bcaf-ad1d-4d0f-a982-29a2212616b5'), 'status__0': 'proposed', 'observed_revenue__0': None, 'cohort__0': 'control', 'assignment_key__0': '629bc8644eb272e5418b228da00d448cb783f196c5d98cd54a4ddd09c9e0866d', 'recommended_product_ids__0': '[]', 'id__1': UUID('a410392f-e360-4a50-a500-5012bcbde2da'), 'decision_key__1': 'c95a3ecd-db79-4bac-ab23-1528c3d7d56e:payment_update', 'recommended_action__1': 'payment_update', 'measured_at__1': None, 'score__1': Decimal('0.982'), 'rationale__1': '{\"lifetime_value\": 6897.0, \"recency_days\": 2.0, \"order_count\": 4, \"primary_segment\": \"vip\", \"churn_risk_level\": \"\", \"payment_success_rate\": 0.5, \"mer ... (188 characters truncated) ... w the 70% floor and this customer has a failed payment, so fixing the instrument is the highest-value next step.\", \"evidence_rule\": \"payment_update\"}', 'customer_id__1': UUID('c95a3ecd-db79-4bac-ab23-1528c3d7d56e'), 'merchant_id__1': UUID('7711bcaf-ad1d-4d0f-a982-29a2212616b5'), 'status__1': 'proposed', 'observed_revenue__1': None, 'cohort__1': 'treatment', 'assignment_key__1': 'c86be490b492ae1c733ae3e012fd3e0b1df5b24b671099f34d20db98ed42e112', 'recommended_product_ids__1': '[]'}]\n(Background on this error at: https://sqlalche.me/e/20/gkpj)",
+            "PendingRollbackError: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (psycopg2.errors.NotNullViolation) null value in column \"created_at\" of relation \"personalization_decisions\" violates not-null constraint\nDETAIL:  Failing row contains (7711bcaf-ad1d-4d0f-a982-29a2212616b5, af52edf4-1258-404f-95b3-06419701ce98, vip_nurture, control, 0.83765, {\"trigger\": \"Lifetime value 16888 is at least 2x the merchant me..., [], 629bc8644eb272e5418b228da00d448cb783f196c5d98cd54a4ddd09c9e0866d, af52edf4-1258-404f-95b3-06419701ce98:vip_nurture, proposed, null, null, de13577d-6498-4a0f-bccd-0bafce884190, null, null).\n\n[SQL: INSERT INTO personalization_decisions (merchant_id, customer_id, recommended_action, cohort, score, rationale, recommended_product_ids, assignment_key, decision_key, status, observed_revenue, measured_at, id) VALUES (%(merchant_id__0)s::UUID, %(custo ... 569 characters truncated ... onalization_decisions.created_at, personalization_decisions.updated_at, personalization_decisions.id]\n[parameters: {'id__0': UUID('de13577d-6498-4a0f-bccd-0bafce884190'), 'decision_key__0': 'af52edf4-1258-404f-95b3-06419701ce98:vip_nurture', 'recommended_action__0': 'vip_nurture', 'measured_at__0': None, 'score__0': Decimal('0.83765'), 'rationale__0': '{\"lifetime_value\": 16888.0, \"recency_days\": 25.0, \"order_count\": 18, \"primary_segment\": \"vip\", \"churn_risk_level\": \"\", \"payment_success_rate\": 0.9048 ... (135 characters truncated) ... 032740+00:00\", \"trigger\": \"Lifetime value 16888 is at least 2x the merchant median 11892; protect the relationship.\", \"evidence_rule\": \"vip_nurture\"}', 'customer_id__0': UUID('af52edf4-1258-404f-95b3-06419701ce98'), 'merchant_id__0': UUID('7711bcaf-ad1d-4d0f-a982-29a2212616b5'), 'status__0': 'proposed', 'observed_revenue__0': None, 'cohort__0': 'control', 'assignment_key__0': '629bc8644eb272e5418b228da00d448cb783f196c5d98cd54a4ddd09c9e0866d', 'recommended_product_ids__0': '[]', 'id__1': UUID('a410392f-e360-4a50-a500-5012bcbde2da'), 'decision_key__1': 'c95a3ecd-db79-4bac-ab23-1528c3d7d56e:payment_update', 'recommended_action__1': 'payment_update', 'measured_at__1': None, 'score__1': Decimal('0.982'), 'rationale__1': '{\"lifetime_value\": 6897.0, \"recency_days\": 2.0, \"order_count\": 4, \"primary_segment\": \"vip\", \"churn_risk_level\": \"\", \"payment_success_rate\": 0.5, \"mer ... (188 characters truncated) ... w the 70% floor and this customer has a failed payment, so fixing the instrument is the highest-value next step.\", \"evidence_rule\": \"payment_update\"}', 'customer_id__1': UUID('c95a3ecd-db79-4bac-ab23-1528c3d7d56e'), 'merchant_id__1': UUID('7711bcaf-ad1d-4d0f-a982-29a2212616b5'), 'status__1': 'proposed', 'observed_revenue__1': None, 'cohort__1': 'treatment', 'assignment_key__1': 'c86be490b492ae1c733ae3e012fd3e0b1df5b24b671099f34d20db98ed42e112', 'recommended_product_ids__1': '[]'}]\n(Background on this error at: https://sqlalche.me/e/20/gkpj) (Background on this error at: https://sqlalche.me/e/20/7s2a)",
+            "PendingRollbackError: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (psycopg2.errors.NotNullViolation) null value in column \"created_at\" of relation \"personalization_decisions\" violates not-null constraint\nDETAIL:  Failing row contains (7711bcaf-ad1d-4d0f-a982-29a2212616b5, af52edf4-1258-404f-95b3-06419701ce98, vip_nurture, control, 0.83765, {\"trigger\": \"Lifetime value 16888 is at least 2x the merchant me..., [], 629bc8644eb272e5418b228da00d448cb783f196c5d98cd54a4ddd09c9e0866d, af52edf4-1258-404f-95b3-06419701ce98:vip_nurture, proposed, null, null, de13577d-6498-4a0f-bccd-0bafce884190, null, null).\n\n[SQL: INSERT INTO personalization_decisions (merchant_id, customer_id, recommended_action, cohort, score, rationale, recommended_product_ids, assignment_key, decision_key, status, observed_revenue, measured_at, id) VALUES (%(merchant_id__0)s::UUID, %(custo ... 569 characters truncated ... onalization_decisions.created_at, personalization_decisions.updated_at, personalization_decisions.id]\n[parameters: {'id__0': UUID('de13577d-6498-4a0f-bccd-0bafce884190'), 'decision_key__0': 'af52edf4-1258-404f-95b3-06419701ce98:vip_nurture', 'recommended_action__0': 'vip_nurture', 'measured_at__0': None, 'score__0': Decimal('0.83765'), 'rationale__0': '{\"lifetime_value\": 16888.0, \"recency_days\": 25.0, \"order_count\": 18, \"primary_segment\": \"vip\", \"churn_risk_level\": \"\", \"payment_success_rate\": 0.9048 ... (135 characters truncated) ... 032740+00:00\", \"trigger\": \"Lifetime value 16888 is at least 2x the merchant median 11892; protect the relationship.\", \"evidence_rule\": \"vip_nurture\"}', 'customer_id__0': UUID('af52edf4-1258-404f-95b3-06419701ce98'), 'merchant_id__0': UUID('7711bcaf-ad1d-4d0f-a982-29a2212616b5'), 'status__0': 'proposed', 'observed_revenue__0': None, 'cohort__0': 'control', 'assignment_key__0': '629bc8644eb272e5418b228da00d448cb783f196c5d98cd54a4ddd09c9e0866d', 'recommended_product_ids__0': '[]', 'id__1': UUID('a410392f-e360-4a50-a500-5012bcbde2da'), 'decision_key__1': 'c95a3ecd-db79-4bac-ab23-1528c3d7d56e:payment_update', 'recommended_action__1': 'payment_update', 'measured_at__1': None, 'score__1': Decimal('0.982'), 'rationale__1': '{\"lifetime_value\": 6897.0, \"recency_days\": 2.0, \"order_count\": 4, \"primary_segment\": \"vip\", \"churn_risk_level\": \"\", \"payment_success_rate\": 0.5, \"mer ... (188 characters truncated) ... w the 70% floor and this customer has a failed payment, so fixing the instrument is the highest-value next step.\", \"evidence_rule\": \"payment_update\"}', 'customer_id__1': UUID('c95a3ecd-db79-4bac-ab23-1528c3d7d56e'), 'merchant_id__1': UUID('7711bcaf-ad1d-4d0f-a982-29a2212616b5'), 'status__1': 'proposed', 'observed_revenue__1': None, 'cohort__1': 'treatment', 'assignment_key__1': 'c86be490b492ae1c733ae3e012fd3e0b1df5b24b671099f34d20db98ed42e112', 'recommended_product_ids__1': '[]'}]\n(Background on this error at: https://sqlalche.me/e/20/gkpj) (Background on this error at: https://sqlalche.me/e/20/7s2a)",
+            "PendingRollbackError: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (psycopg2.errors.NotNullViolation) null value in column \"created_at\" of relation \"personalization_decisions\" violates not-null constraint\nDETAIL:  Failing row contains (7711bcaf-ad1d-4d0f-a982-29a2212616b5, af52edf4-1258-404f-95b3-06419701ce98, vip_nurture, control, 0.83765, {\"trigger\": \"Lifetime value 16888 is at least 2x the merchant me..., [], 629bc8644eb272e5418b228da00d448cb783f196c5d98cd54a4ddd09c9e0866d, af52edf4-1258-404f-95b3-06419701ce98:vip_nurture, proposed, null, null, de13577d-6498-4a0f-bccd-0bafce884190, null, null).\n\n[SQL: INSERT INTO personalization_decisions (merchant_id, customer_id, recommended_action, cohort, score, rationale, recommended_product_ids, assignment_key, decision_key, status, observed_revenue, measured_at, id) VALUES (%(merchant_id__0)s::UUID, %(custo ... 569 characters truncated ... onalization_decisions.created_at, personalization_decisions.updated_at, personalization_decisions.id]\n[parameters: {'id__0': UUID('de13577d-6498-4a0f-bccd-0bafce884190'), 'decision_key__0': 'af52edf4-1258-404f-95b3-06419701ce98:vip_nurture', 'recommended_action__0': 'vip_nurture', 'measured_at__0': None, 'score__0': Decimal('0.83765'), 'rationale__0': '{\"lifetime_value\": 16888.0, \"recency_days\": 25.0, \"order_count\": 18, \"primary_segment\": \"vip\", \"churn_risk_level\": \"\", \"payment_success_rate\": 0.9048 ... (135 characters truncated) ... 032740+00:00\", \"trigger\": \"Lifetime value 16888 is at least 2x the merchant median 11892; protect the relationship.\", \"evidence_rule\": \"vip_nurture\"}', 'customer_id__0': UUID('af52edf4-1258-404f-95b3-06419701ce98'), 'merchant_id__0': UUID('7711bcaf-ad1d-4d0f-a982-29a2212616b5'), 'status__0': 'proposed', 'observed_revenue__0': None, 'cohort__0': 'control', 'assignment_key__0': '629bc8644eb272e5418b228da00d448cb783f196c5d98cd54a4ddd09c9e0866d', 'recommended_product_ids__0': '[]', 'id__1': UUID('a410392f-e360-4a50-a500-5012bcbde2da'), 'decision_key__1': 'c95a3ecd-db79-4bac-ab23-1528c3d7d56e:payment_update', 'recommended_action__1': 'payment_update', 'measured_at__1': None, 'score__1': Decimal('0.982'), 'rationale__1': '{\"lifetime_value\": 6897.0, \"recency_days\": 2.0, \"order_count\": 4, \"primary_segment\": \"vip\", \"churn_risk_level\": \"\", \"payment_success_rate\": 0.5, \"mer ... (188 characters truncated) ... w the 70% floor and this customer has a failed payment, so fixing the instrument is the highest-value next step.\", \"evidence_rule\": \"payment_update\"}', 'customer_id__1': UUID('c95a3ecd-db79-4bac-ab23-1528c3d7d56e'), 'merchant_id__1': UUID('7711bcaf-ad1d-4d0f-a982-29a2212616b5'), 'status__1': 'proposed', 'observed_revenue__1': None, 'cohort__1': 'treatment', 'assignment_key__1': 'c86be490b492ae1c733ae3e012fd3e0b1df5b24b671099f34d20db98ed42e112', 'recommended_product_ids__1': '[]'}]\n(Background on this error at: https://sqlalche.me/e/20/gkpj) (Background on this error at: https://sqlalche.me/e/20/7s2a)"
+          ]
+        },
+        {
+          "agent_name": "ManagerAgent",
+          "step_key": "team:013:ManagerAgent:coordinate:2b0e54da69f85cb6c1d4d469",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "growth_radar",
+            "opportunity_lookup",
+            "task_decomposition",
+            "agent_delegation",
+            "debate_orchestration",
+            "synthesis"
+          ],
+          "errors": []
+        }
+      ],
+      "resumed_steps": [],
+      "needs_reconciliation": [],
+      "opportunities": [],
+      "ranked_opportunities": [
+        {
+          "opportunity_id": "760a811f-d291-4bd1-ac1c-deb53cd5b6c0",
+          "score": 0.33,
+          "title": "Revenue changed -47.87% over the last 30 days"
+        },
+        {
+          "opportunity_id": "675ea976-9d4d-40e9-a6f8-10b18fe79b47",
+          "score": 0.17,
+          "title": "1 payment failures worth \u20b92499.00 in the last 30 days"
+        },
+        {
+          "opportunity_id": "028cfba2-abbf-4ca4-b0f8-d458a975f721",
+          "score": 0.14,
+          "title": "4 payment failures worth \u20b93998.00 in the last 30 days"
+        },
+        {
+          "opportunity_id": "44463af1-cf69-44cf-9218-9659b4607254",
+          "score": 0.14,
+          "title": "Recoverable failed-payment revenue of \u20b93998.00"
+        },
+        {
+          "opportunity_id": "56f9f8ad-f6e8-4949-a5ce-4c5d22e86144",
+          "score": 0.11,
+          "title": "Recoverable failed-payment revenue of \u20b98996.00"
+        },
+        {
+          "opportunity_id": "fff66e1f-d0f5-4fbf-ad5c-4df7be89916b",
+          "score": 0.11,
+          "title": "6 payment failures worth \u20b98996.00 in the last 90 days"
+        },
+        {
+          "opportunity_id": "c20de17e-a64a-4673-a7f6-f0630cc6f4d4",
+          "score": 0.08,
+          "title": "Recover \u20b94498.00 in 2 failed payments (last 30 days)"
+        },
+        {
+          "opportunity_id": "758da95a-7672-46da-9560-28bc2e1f032c",
+          "score": 0.06,
+          "title": "Recover \u20b93998.00 in 4 failed payments (last 30 days)"
+        },
+        {
+          "opportunity_id": "fb901e29-f6c5-483e-8896-d7811ab174c2",
+          "score": 0.0,
+          "title": "Underperforming: Mechanical Wireless Keyboard"
+        },
+        {
+          "opportunity_id": "8b2e6914-b104-4a15-88a5-c68fef2fd1ce",
+          "score": 0.0,
+          "title": "Underperforming: 1080p USB Webcam"
+        }
+      ],
+      "findings": [],
+      "actions_proposed": [],
+      "tool_records": [],
+      "shared_memory": {
+        "rag_context": {
+          "merchant_id": "7711bcaf-ad1d-4d0f-a982-29a2212616b5",
+          "query": "Comprehensive commerce analysis and growth optimization",
+          "status": "ready",
+          "data_sufficiency": {
+            "status": "sufficient",
+            "message": "Sufficient real captured transaction data is available for growth analysis.",
+            "minimum_required": 3,
+            "available": 22
+          },
+          "verified_facts": [
+            {
+              "fact": "captured_revenue",
+              "value": 23785.0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "captured_transactions",
+              "value": 22,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "successful_payments",
+              "value": 22,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "failed_payments",
+              "value": 6,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "total_customers",
+              "value": 4,
+              "verified": true,
+              "source": "customers"
+            },
+            {
+              "fact": "total_orders",
+              "value": 69,
+              "verified": true,
+              "source": "orders"
+            }
+          ],
+          "derived_metrics": {
+            "average_order_value": 1081.1363636363637,
+            "signals": [
+              {
+                "signal": "payment_failures",
+                "title": "6 payment failures worth \u20b98996.00 in the last 90 days",
+                "observed_data": {
+                  "failed_count": 6,
+                  "source": "payments.status='failed'"
+                },
+                "calculated_metric": "failed_payment_value_inr",
+                "opportunity": "Payment recovery opportunity",
+                "confidence": 0.366,
+                "reason": "Observed failed_payment_value_inr from 90-day PostgreSQL payment/order data.",
+                "recommended_action": "Review failed transactions and offer a compliant payment-recovery path."
+              },
+              {
+                "signal": "payment_recovery_opportunity",
+                "title": "Recoverable failed-payment revenue of \u20b98996.00",
+                "observed_data": {
+                  "failed_count": 6
+                },
+                "calculated_metric": "recoverable_revenue_inr",
+                "opportunity": "Recover failed-payment revenue",
+                "confidence": 0.366,
+                "reason": "Observed recoverable_revenue_inr from 90-day PostgreSQL payment/order data.",
+                "recommended_action": "Follow up on the recorded failed payments using an approved recovery workflow."
+              }
+            ]
+          },
+          "retrieved_context": [
+            {
+              "source_type": "growth_radar",
+              "source_id": "7711bcaf-ad1d-4d0f-a982-29a2212616b5",
+              "document_id": "7711bcaf-ad1d-4d0f-a982-29a2212616b5",
+              "chunk_id": "radar-90",
+              "similarity": null,
+              "content_preview": "Captured revenue INR 23785.00; captured transactions 22; customers 4; orders 69.",
+              "metadata": {
+                "verified": true,
+                "window_days": 90,
+                "signals": [
+                  {
+                    "signal": "payment_failures",
+                    "title": "6 payment failures worth \u20b98996.00 in the last 90 days",
+                    "observed_data": {
+                      "failed_count": 6,
+                      "source": "payments.status='failed'"
+                    },
+                    "calculated_metric": "failed_payment_value_inr",
+                    "opportunity": "Payment recovery opportunity",
+                    "confidence": 0.366,
+                    "reason": "Observed failed_payment_value_inr from 90-day PostgreSQL payment/order data.",
+                    "recommended_action": "Review failed transactions and offer a compliant payment-recovery path."
+                  },
+                  {
+                    "signal": "payment_recovery_opportunity",
+                    "title": "Recoverable failed-payment revenue of \u20b98996.00",
+                    "observed_data": {
+                      "failed_count": 6
+                    },
+                    "calculated_metric": "recoverable_revenue_inr",
+                    "opportunity": "Recover failed-payment revenue",
+                    "confidence": 0.366,
+                    "reason": "Observed recoverable_revenue_inr from 90-day PostgreSQL payment/order data.",
+                    "recommended_action": "Follow up on the recorded failed payments using an approved recovery workflow."
+                  }
+                ]
+              }
+            }
+          ],
+          "inference_allowed": true
+        },
+        "langchain_adapter": "<backend.app.ai.langchain_adapter.adapter.LangChainAgentAdapter object at 0x00000172DAEB4610>",
+        "memories": [
+          {
+            "id": "b1aa57f7-65fc-4b4b-9733-d1677ed95dda",
+            "memory_type": "recommendation",
+            "content": "PaymentRecoveryAgent proposed retry for highest-value failure; 1 failures worth \u20b92499.00 in window.",
+            "summary": "PaymentRecoveryAgent proposed retry for highest-value failure; 1 failures worth \u20b92499.00 in window.",
+            "score": 0.3276,
+            "importance": 0.7,
+            "outcome_variance_pct": null,
+            "created_at": "2026-10-13 07:56:14.888414+00:00"
+          },
+          {
+            "id": "d6dfa418-7a61-4391-9574-dd565738c1b3",
+            "memory_type": "recommendation",
+            "content": "Orchestrator run 3ba735f68f884658aba43a789ceebb55: 0 opportunities, 1 actions proposed (awaiting human approval).",
+            "summary": "Orchestrator run 3ba735f68f884658aba43a789ceebb55: 0 opportunities, 1 actions proposed (awaiting human approval).",
+            "score": 0.3246,
+            "importance": 0.6,
+            "outcome_variance_pct": null,
+            "created_at": "2026-10-15 14:22:16.237094+00:00"
+          },
+          {
+            "id": "3b008de6-5754-47cf-8239-761bb2b8ce3d",
+            "memory_type": "recommendation",
+            "content": "[MarketingAGI investigation] Run b87cdb76-44b3-445e-b2a8-39c80789fe10: linked failed_payment_recovery campaign to open action 77913b99-e865-48e3-a919-da375af53246 (no duplicate created)",
+            "summary": "[MarketingAGI investigation] Run b87cdb76-44b3-445e-b2a8-39c80789fe10: linked failed_payment_recovery campaign to open action 77913b99-e865-48e3-a919-da375af53246 (no duplicate created)",
+            "score": 0.3211,
+            "importance": 0.5,
+            "outcome_variance_pct": null,
+            "created_at": "2026-10-17 16:11:42.710791+00:00"
+          },
+          {
+            "id": "52f7e2ae-a2f7-412c-9a61-cb9ff8edc82f",
+            "memory_type": "recommendation",
+            "content": "[MarketingAGI investigation] Run 6dbf3486-dcc2-4162-9172-7ceca835e67e: linked failed_payment_recovery campaign to open action 77913b99-e865-48e3-a919-da375af53246 (no duplicate created)",
+            "summary": "[MarketingAGI investigation] Run 6dbf3486-dcc2-4162-9172-7ceca835e67e: linked failed_payment_recovery campaign to open action 77913b99-e865-48e3-a919-da375af53246 (no duplicate created)",
+            "score": 0.321,
+            "importance": 0.5,
+            "outcome_variance_pct": null,
+            "created_at": "2026-10-17 15:48:10.188852+00:00"
+          },
+          {
+            "id": "9bbe4d06-2694-41b7-9fae-46b98c43dd3a",
+            "memory_type": "recommendation",
+            "content": "[MarketingAGI investigation] Run d45ee22f-2954-49ad-911b-dbab3cd97037: linked failed_payment_recovery campaign to open action 77913b99-e865-48e3-a919-da375af53246 (no duplicate created)",
+            "summary": "[MarketingAGI investigation] Run d45ee22f-2954-49ad-911b-dbab3cd97037: linked failed_payment_recovery campaign to open action 77913b99-e865-48e3-a919-da375af53246 (no duplicate created)",
+            "score": 0.3208,
+            "importance": 0.5,
+            "outcome_variance_pct": null,
+            "created_at": "2026-10-17 14:40:59.090691+00:00"
+          }
+        ],
+        "ranked_opportunities": [
+          {
+            "opportunity_id": "760a811f-d291-4bd1-ac1c-deb53cd5b6c0",
+            "score": 0.33,
+            "title": "Revenue changed -47.87% over the last 30 days"
+          },
+          {
+            "opportunity_id": "675ea976-9d4d-40e9-a6f8-10b18fe79b47",
+            "score": 0.17,
+            "title": "1 payment failures worth \u20b92499.00 in the last 30 days"
+          },
+          {
+            "opportunity_id": "028cfba2-abbf-4ca4-b0f8-d458a975f721",
+            "score": 0.14,
+            "title": "4 payment failures worth \u20b93998.00 in the last 30 days"
+          },
+          {
+            "opportunity_id": "44463af1-cf69-44cf-9218-9659b4607254",
+            "score": 0.14,
+            "title": "Recoverable failed-payment revenue of \u20b93998.00"
+          },
+          {
+            "opportunity_id": "56f9f8ad-f6e8-4949-a5ce-4c5d22e86144",
+            "score": 0.11,
+            "title": "Recoverable failed-payment revenue of \u20b98996.00"
+          },
+          {
+            "opportunity_id": "fff66e1f-d0f5-4fbf-ad5c-4df7be89916b",
+            "score": 0.11,
+            "title": "6 payment failures worth \u20b98996.00 in the last 90 days"
+          },
+          {
+            "opportunity_id": "c20de17e-a64a-4673-a7f6-f0630cc6f4d4",
+            "score": 0.08,
+            "title": "Recover \u20b94498.00 in 2 failed payments (last 30 days)"
+          },
+          {
+            "opportunity_id": "758da95a-7672-46da-9560-28bc2e1f032c",
+            "score": 0.06,
+            "title": "Recover \u20b93998.00 in 4 failed payments (last 30 days)"
+          },
+          {
+            "opportunity_id": "fb901e29-f6c5-483e-8896-d7811ab174c2",
+            "score": 0.0,
+            "title": "Underperforming: Mechanical Wireless Keyboard"
+          },
+          {
+            "opportunity_id": "8b2e6914-b104-4a15-88a5-c68fef2fd1ce",
+            "score": 0.0,
+            "title": "Underperforming: 1080p USB Webcam"
+          }
+        ]
+      },
+      "errors": [
+        "brief_generation_failed:unknown",
+        "brief_generation_failed:unknown",
+        "brief_generation_failed:unknown",
+        "brief_generation_failed:unknown",
+        "brief_generation_failed:unknown",
+        "brief_generation_failed:unknown",
+        "IntegrityError: (psycopg2.errors.NotNullViolation) null value in column \"created_at\" of relation \"personalization_decisions\" violates not-null constraint\nDETAIL:  Failing row contains (7711bcaf-ad1d-4d0f-a982-29a2212616b5, af52edf4-1258-404f-95b3-06419701ce98, vip_nurture, control, 0.83765, {\"trigger\": \"Lifetime value 16888 is at least 2x the merchant me..., [], 629bc8644eb272e5418b228da00d448cb783f196c5d98cd54a4ddd09c9e0866d, af52edf4-1258-404f-95b3-06419701ce98:vip_nurture, proposed, null, null, de13577d-6498-4a0f-bccd-0bafce884190, null, null).\n\n[SQL: INSERT INTO personalization_decisions (merchant_id, customer_id, recommended_action, cohort, score, rationale, recommended_product_ids, assignment_key, decision_key, status, observed_revenue, measured_at, id) VALUES (%(merchant_id__0)s::UUID, %(custo ... 569 characters truncated ... onalization_decisions.created_at, personalization_decisions.updated_at, personalization_decisions.id]\n[parameters: {'id__0': UUID('de13577d-6498-4a0f-bccd-0bafce884190'), 'decision_key__0': 'af52edf4-1258-404f-95b3-06419701ce98:vip_nurture', 'recommended_action__0': 'vip_nurture', 'measured_at__0': None, 'score__0': Decimal('0.83765'), 'rationale__0': '{\"lifetime_value\": 16888.0, \"recency_days\": 25.0, \"order_count\": 18, \"primary_segment\": \"vip\", \"churn_risk_level\": \"\", \"payment_success_rate\": 0.9048 ... (135 characters truncated) ... 032740+00:00\", \"trigger\": \"Lifetime value 16888 is at least 2x the merchant median 11892; protect the relationship.\", \"evidence_rule\": \"vip_nurture\"}', 'customer_id__0': UUID('af52edf4-1258-404f-95b3-06419701ce98'), 'merchant_id__0': UUID('7711bcaf-ad1d-4d0f-a982-29a2212616b5'), 'status__0': 'proposed', 'observed_revenue__0': None, 'cohort__0': 'control', 'assignment_key__0': '629bc8644eb272e5418b228da00d448cb783f196c5d98cd54a4ddd09c9e0866d', 'recommended_product_ids__0': '[]', 'id__1': UUID('a410392f-e360-4a50-a500-5012bcbde2da'), 'decision_key__1': 'c95a3ecd-db79-4bac-ab23-1528c3d7d56e:payment_update', 'recommended_action__1': 'payment_update', 'measured_at__1': None, 'score__1': Decimal('0.982'), 'rationale__1': '{\"lifetime_value\": 6897.0, \"recency_days\": 2.0, \"order_count\": 4, \"primary_segment\": \"vip\", \"churn_risk_level\": \"\", \"payment_success_rate\": 0.5, \"mer ... (188 characters truncated) ... w the 70% floor and this customer has a failed payment, so fixing the instrument is the highest-value next step.\", \"evidence_rule\": \"payment_update\"}', 'customer_id__1': UUID('c95a3ecd-db79-4bac-ab23-1528c3d7d56e'), 'merchant_id__1': UUID('7711bcaf-ad1d-4d0f-a982-29a2212616b5'), 'status__1': 'proposed', 'observed_revenue__1': None, 'cohort__1': 'treatment', 'assignment_key__1': 'c86be490b492ae1c733ae3e012fd3e0b1df5b24b671099f34d20db98ed42e112', 'recommended_product_ids__1': '[]'}]\n(Background on this error at: https://sqlalche.me/e/20/gkpj)",
+        "PendingRollbackError: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (psycopg2.errors.NotNullViolation) null value in column \"created_at\" of relation \"personalization_decisions\" violates not-null constraint\nDETAIL:  Failing row contains (7711bcaf-ad1d-4d0f-a982-29a2212616b5, af52edf4-1258-404f-95b3-06419701ce98, vip_nurture, control, 0.83765, {\"trigger\": \"Lifetime value 16888 is at least 2x the merchant me..., [], 629bc8644eb272e5418b228da00d448cb783f196c5d98cd54a4ddd09c9e0866d, af52edf4-1258-404f-95b3-06419701ce98:vip_nurture, proposed, null, null, de13577d-6498-4a0f-bccd-0bafce884190, null, null).\n\n[SQL: INSERT INTO personalization_decisions (merchant_id, customer_id, recommended_action, cohort, score, rationale, recommended_product_ids, assignment_key, decision_key, status, observed_revenue, measured_at, id) VALUES (%(merchant_id__0)s::UUID, %(custo ... 569 characters truncated ... onalization_decisions.created_at, personalization_decisions.updated_at, personalization_decisions.id]\n[parameters: {'id__0': UUID('de13577d-6498-4a0f-bccd-0bafce884190'), 'decision_key__0': 'af52edf4-1258-404f-95b3-06419701ce98:vip_nurture', 'recommended_action__0': 'vip_nurture', 'measured_at__0': None, 'score__0': Decimal('0.83765'), 'rationale__0': '{\"lifetime_value\": 16888.0, \"recency_days\": 25.0, \"order_count\": 18, \"primary_segment\": \"vip\", \"churn_risk_level\": \"\", \"payment_success_rate\": 0.9048 ... (135 characters truncated) ... 032740+00:00\", \"trigger\": \"Lifetime value 16888 is at least 2x the merchant median 11892; protect the relationship.\", \"evidence_rule\": \"vip_nurture\"}', 'customer_id__0': UUID('af52edf4-1258-404f-95b3-06419701ce98'), 'merchant_id__0': UUID('7711bcaf-ad1d-4d0f-a982-29a2212616b5'), 'status__0': 'proposed', 'observed_revenue__0': None, 'cohort__0': 'control', 'assignment_key__0': '629bc8644eb272e5418b228da00d448cb783f196c5d98cd54a4ddd09c9e0866d', 'recommended_product_ids__0': '[]', 'id__1': UUID('a410392f-e360-4a50-a500-5012bcbde2da'), 'decision_key__1': 'c95a3ecd-db79-4bac-ab23-1528c3d7d56e:payment_update', 'recommended_action__1': 'payment_update', 'measured_at__1': None, 'score__1': Decimal('0.982'), 'rationale__1': '{\"lifetime_value\": 6897.0, \"recency_days\": 2.0, \"order_count\": 4, \"primary_segment\": \"vip\", \"churn_risk_level\": \"\", \"payment_success_rate\": 0.5, \"mer ... (188 characters truncated) ... w the 70% floor and this customer has a failed payment, so fixing the instrument is the highest-value next step.\", \"evidence_rule\": \"payment_update\"}', 'customer_id__1': UUID('c95a3ecd-db79-4bac-ab23-1528c3d7d56e'), 'merchant_id__1': UUID('7711bcaf-ad1d-4d0f-a982-29a2212616b5'), 'status__1': 'proposed', 'observed_revenue__1': None, 'cohort__1': 'treatment', 'assignment_key__1': 'c86be490b492ae1c733ae3e012fd3e0b1df5b24b671099f34d20db98ed42e112', 'recommended_product_ids__1': '[]'}]\n(Background on this error at: https://sqlalche.me/e/20/gkpj) (Background on this error at: https://sqlalche.me/e/20/7s2a)",
+        "PendingRollbackError: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (psycopg2.errors.NotNullViolation) null value in column \"created_at\" of relation \"personalization_decisions\" violates not-null constraint\nDETAIL:  Failing row contains (7711bcaf-ad1d-4d0f-a982-29a2212616b5, af52edf4-1258-404f-95b3-06419701ce98, vip_nurture, control, 0.83765, {\"trigger\": \"Lifetime value 16888 is at least 2x the merchant me..., [], 629bc8644eb272e5418b228da00d448cb783f196c5d98cd54a4ddd09c9e0866d, af52edf4-1258-404f-95b3-06419701ce98:vip_nurture, proposed, null, null, de13577d-6498-4a0f-bccd-0bafce884190, null, null).\n\n[SQL: INSERT INTO personalization_decisions (merchant_id, customer_id, recommended_action, cohort, score, rationale, recommended_product_ids, assignment_key, decision_key, status, observed_revenue, measured_at, id) VALUES (%(merchant_id__0)s::UUID, %(custo ... 569 characters truncated ... onalization_decisions.created_at, personalization_decisions.updated_at, personalization_decisions.id]\n[parameters: {'id__0': UUID('de13577d-6498-4a0f-bccd-0bafce884190'), 'decision_key__0': 'af52edf4-1258-404f-95b3-06419701ce98:vip_nurture', 'recommended_action__0': 'vip_nurture', 'measured_at__0': None, 'score__0': Decimal('0.83765'), 'rationale__0': '{\"lifetime_value\": 16888.0, \"recency_days\": 25.0, \"order_count\": 18, \"primary_segment\": \"vip\", \"churn_risk_level\": \"\", \"payment_success_rate\": 0.9048 ... (135 characters truncated) ... 032740+00:00\", \"trigger\": \"Lifetime value 16888 is at least 2x the merchant median 11892; protect the relationship.\", \"evidence_rule\": \"vip_nurture\"}', 'customer_id__0': UUID('af52edf4-1258-404f-95b3-06419701ce98'), 'merchant_id__0': UUID('7711bcaf-ad1d-4d0f-a982-29a2212616b5'), 'status__0': 'proposed', 'observed_revenue__0': None, 'cohort__0': 'control', 'assignment_key__0': '629bc8644eb272e5418b228da00d448cb783f196c5d98cd54a4ddd09c9e0866d', 'recommended_product_ids__0': '[]', 'id__1': UUID('a410392f-e360-4a50-a500-5012bcbde2da'), 'decision_key__1': 'c95a3ecd-db79-4bac-ab23-1528c3d7d56e:payment_update', 'recommended_action__1': 'payment_update', 'measured_at__1': None, 'score__1': Decimal('0.982'), 'rationale__1': '{\"lifetime_value\": 6897.0, \"recency_days\": 2.0, \"order_count\": 4, \"primary_segment\": \"vip\", \"churn_risk_level\": \"\", \"payment_success_rate\": 0.5, \"mer ... (188 characters truncated) ... w the 70% floor and this customer has a failed payment, so fixing the instrument is the highest-value next step.\", \"evidence_rule\": \"payment_update\"}', 'customer_id__1': UUID('c95a3ecd-db79-4bac-ab23-1528c3d7d56e'), 'merchant_id__1': UUID('7711bcaf-ad1d-4d0f-a982-29a2212616b5'), 'status__1': 'proposed', 'observed_revenue__1': None, 'cohort__1': 'treatment', 'assignment_key__1': 'c86be490b492ae1c733ae3e012fd3e0b1df5b24b671099f34d20db98ed42e112', 'recommended_product_ids__1': '[]'}]\n(Background on this error at: https://sqlalche.me/e/20/gkpj) (Background on this error at: https://sqlalche.me/e/20/7s2a)",
+        "PendingRollbackError: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (psycopg2.errors.NotNullViolation) null value in column \"created_at\" of relation \"personalization_decisions\" violates not-null constraint\nDETAIL:  Failing row contains (7711bcaf-ad1d-4d0f-a982-29a2212616b5, af52edf4-1258-404f-95b3-06419701ce98, vip_nurture, control, 0.83765, {\"trigger\": \"Lifetime value 16888 is at least 2x the merchant me..., [], 629bc8644eb272e5418b228da00d448cb783f196c5d98cd54a4ddd09c9e0866d, af52edf4-1258-404f-95b3-06419701ce98:vip_nurture, proposed, null, null, de13577d-6498-4a0f-bccd-0bafce884190, null, null).\n\n[SQL: INSERT INTO personalization_decisions (merchant_id, customer_id, recommended_action, cohort, score, rationale, recommended_product_ids, assignment_key, decision_key, status, observed_revenue, measured_at, id) VALUES (%(merchant_id__0)s::UUID, %(custo ... 569 characters truncated ... onalization_decisions.created_at, personalization_decisions.updated_at, personalization_decisions.id]\n[parameters: {'id__0': UUID('de13577d-6498-4a0f-bccd-0bafce884190'), 'decision_key__0': 'af52edf4-1258-404f-95b3-06419701ce98:vip_nurture', 'recommended_action__0': 'vip_nurture', 'measured_at__0': None, 'score__0': Decimal('0.83765'), 'rationale__0': '{\"lifetime_value\": 16888.0, \"recency_days\": 25.0, \"order_count\": 18, \"primary_segment\": \"vip\", \"churn_risk_level\": \"\", \"payment_success_rate\": 0.9048 ... (135 characters truncated) ... 032740+00:00\", \"trigger\": \"Lifetime value 16888 is at least 2x the merchant median 11892; protect the relationship.\", \"evidence_rule\": \"vip_nurture\"}', 'customer_id__0': UUID('af52edf4-1258-404f-95b3-06419701ce98'), 'merchant_id__0': UUID('7711bcaf-ad1d-4d0f-a982-29a2212616b5'), 'status__0': 'proposed', 'observed_revenue__0': None, 'cohort__0': 'control', 'assignment_key__0': '629bc8644eb272e5418b228da00d448cb783f196c5d98cd54a4ddd09c9e0866d', 'recommended_product_ids__0': '[]', 'id__1': UUID('a410392f-e360-4a50-a500-5012bcbde2da'), 'decision_key__1': 'c95a3ecd-db79-4bac-ab23-1528c3d7d56e:payment_update', 'recommended_action__1': 'payment_update', 'measured_at__1': None, 'score__1': Decimal('0.982'), 'rationale__1': '{\"lifetime_value\": 6897.0, \"recency_days\": 2.0, \"order_count\": 4, \"primary_segment\": \"vip\", \"churn_risk_level\": \"\", \"payment_success_rate\": 0.5, \"mer ... (188 characters truncated) ... w the 70% floor and this customer has a failed payment, so fixing the instrument is the highest-value next step.\", \"evidence_rule\": \"payment_update\"}', 'customer_id__1': UUID('c95a3ecd-db79-4bac-ab23-1528c3d7d56e'), 'merchant_id__1': UUID('7711bcaf-ad1d-4d0f-a982-29a2212616b5'), 'status__1': 'proposed', 'observed_revenue__1': None, 'cohort__1': 'treatment', 'assignment_key__1': 'c86be490b492ae1c733ae3e012fd3e0b1df5b24b671099f34d20db98ed42e112', 'recommended_product_ids__1': '[]'}]\n(Background on this error at: https://sqlalche.me/e/20/gkpj) (Background on this error at: https://sqlalche.me/e/20/7s2a)"
+      ],
+      "status": "running",
+      "cancelled": false,
+      "cancelled_at_step": null,
+      "totals": {},
+      "debate_id": null,
+      "action_plan": null,
+      "terminal_outcome": {},
+      "branch:to:team_memory_persist": null
+    },
+    "channel_versions": {
+      "__start__": 2,
+      "merchant_id": 2,
+      "run_id": 2,
+      "workflow_id": 2,
+      "mode": 2,
+      "objective": 2,
+      "window_days": 2,
+      "params": 2,
+      "generation": 2,
+      "current_step_index": 18,
+      "selected_specialists": 2,
+      "agents_run": 18,
+      "resumed_steps": 2,
+      "needs_reconciliation": 2,
+      "opportunities": 2,
+      "ranked_opportunities": 18,
+      "findings": 2,
+      "actions_proposed": 2,
+      "tool_records": 2,
+      "shared_memory": 18,
+      "errors": 17,
+      "status": 3,
+      "cancelled": 3,
+      "cancelled_at_step": 2,
+      "totals": 2,
+      "debate_id": 2,
+      "action_plan": 2,
+      "terminal_outcome": 2,
+      "branch:to:validate_request": 3,
+      "branch:to:load_context": 4,
+      "branch:to:team_memory_load": 5,
+      "branch:to:team_discovery": 6,
+      "branch:to:team_customer_intel": 7,
+      "branch:to:team_revenue_opt": 8,
+      "branch:to:team_payment_recovery": 9,
+      "branch:to:team_marketing": 10,
+      "branch:to:team_product": 11,
+      "branch:to:team_campaign_strategist": 12,
+      "branch:to:team_designer": 13,
+      "branch:to:team_experiment": 14,
+      "branch:to:team_prioritization": 15,
+      "branch:to:team_software": 16,
+      "branch:to:team_personalization": 17,
+      "branch:to:team_manager": 18,
+      "branch:to:team_memory_persist": 18
+    },
+    "versions_seen": {
+      "__input__": {},
+      "__start__": {
+        "__start__": 1
+      },
+      "validate_request": {
+        "branch:to:validate_request": 2
+      },
+      "load_context": {
+        "branch:to:load_context": 3
+      },
+      "team_memory_load": {
+        "branch:to:team_memory_load": 4
+      },
+      "team_discovery": {
+        "branch:to:team_discovery": 5
+      },
+      "team_customer_intel": {
+        "branch:to:team_customer_intel": 6
+      },
+      "team_revenue_opt": {
+        "branch:to:team_revenue_opt": 7
+      },
+      "team_payment_recovery": {
+        "branch:to:team_payment_recovery": 8
+      },
+      "team_marketing": {
+        "branch:to:team_marketing": 9
+      },
+      "team_product": {
+        "branch:to:team_product": 10
+      },
+      "team_campaign_strategist": {
+        "branch:to:team_campaign_strategist": 11
+      },
+      "team_designer": {
+        "branch:to:team_designer": 12
+      },
+      "team_experiment": {
+        "branch:to:team_experiment": 13
+      },
+      "team_prioritization": {
+        "branch:to:team_prioritization": 14
+      },
+      "team_software": {
+        "branch:to:team_software": 15
+      },
+      "team_personalization": {
+        "branch:to:team_personalization": 16
+      },
+      "team_manager": {
+        "branch:to:team_manager": 17
+      }
+    },
+    "updated_channels": [
+      "agents_run",
+      "branch:to:team_memory_persist",
+      "current_step_index",
+      "ranked_opportunities",
+      "shared_memory"
+    ]
+  },
+  "metadata": {
+    "source": "loop",
+    "step": 16,
+    "parents": {}
+  },
+  "channel_versions": {
+    "current_step_index": 18,
+    "agents_run": 18,
+    "ranked_opportunities": 18,
+    "shared_memory": 18,
+    "branch:to:team_manager": 18,
+    "branch:to:team_memory_persist": 18
+  }
+}

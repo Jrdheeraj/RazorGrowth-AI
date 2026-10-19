@@ -18,7 +18,7 @@
  * plan and the selected specialists first, then explicitly starts execution.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { GlobalEnvironment } from "../features/public/Environment/GlobalEnvironment";
+import { MerchantWorldBackground } from "../features/public/MerchantWorld/MerchantWorldBackground";
 import { ManagerHero } from "./manager/ManagerHero";
 import { ManagerWorkspaceAndMetrics } from "./manager/ManagerWorkspaceAndMetrics";
 import { ManagerRoster } from "./manager/ManagerRoster";
@@ -38,6 +38,8 @@ import {
   type ManagerWorkflowReport,
 } from "../lib/api";
 import { Button } from "../components/Button";
+import { PreviewModeBanner } from "../components/PreviewModeBanner";
+import { isAuthenticated } from "../lib/auth";
 import type {
   ExecutionStepItem,
   ApprovalQueueItem,
@@ -81,7 +83,29 @@ function stepStatus(
   }
 }
 
+const SAMPLE_MANAGER_METRICS: ManagerMetrics = {
+  merchant_id: "preview-merchant",
+  agents_coordinated: 13,
+  tasks_completed: 0,
+  awaiting_approval: 0,
+  active_workflows: 0,
+  total_workflows: 0,
+  window_days: 30,
+  metrics_available: true,
+  unavailable_reasons: [],
+};
+
+const SAMPLE_MANAGER_ACTIONS: Array<{
+  id: string;
+  action_type: string;
+  status: string;
+  origin_agent: string | null;
+  workflow_id: string | null;
+  created_at: string;
+}> = [];
+
 export function ManagerAgentPage() {
+  const [isPreview, setIsPreview] = useState(!isAuthenticated());
   const [isCreating, setIsCreating] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [activeWorkflow, setActiveWorkflow] = useState<string>("Growth Acceleration Plan");
@@ -89,7 +113,9 @@ export function ManagerAgentPage() {
   // Real backend state.
   const [plan, setPlan] = useState<ManagerPlan | null>(null);
   const [workflow, setWorkflow] = useState<ManagerWorkflowReport | null>(null);
-  const [metrics, setMetrics] = useState<ManagerMetrics | null>(null);
+  const [metrics, setMetrics] = useState<ManagerMetrics | null>(
+    !isAuthenticated() ? SAMPLE_MANAGER_METRICS : null,
+  );
   const [roster, setRoster] = useState<ManagerRosterData | null>(null);
   const [pendingActions, setPendingActions] = useState<
     Array<{
@@ -100,12 +126,20 @@ export function ManagerAgentPage() {
       workflow_id: string | null;
       created_at: string;
     }>
-  >([]);
+  >(!isAuthenticated() ? SAMPLE_MANAGER_ACTIONS : []);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   /* Read-only dashboard load. Every call is independent, so one failing
    * endpoint degrades a single panel instead of blanking the page. */
   const loadDashboard = useCallback(async () => {
+    if (!isAuthenticated()) {
+      setIsPreview(true);
+      setMetrics(SAMPLE_MANAGER_METRICS);
+      setPendingActions(SAMPLE_MANAGER_ACTIONS);
+      setLoadError(null);
+      return;
+    }
+
     const [metricsRes, rosterRes, actionsRes] = await Promise.allSettled([
       fetchManagerMetrics(),
       fetchManagerRoster(),
@@ -131,11 +165,14 @@ export function ManagerAgentPage() {
       (r) => r.status === "rejected",
     ).length;
     if (failures > 0) {
-      setLoadError(
-        failures === 3
-          ? "Manager Agent data is unavailable. Nothing is shown rather than guessed."
-          : "Some Manager Agent panels are unavailable.",
-      );
+      if (!isAuthenticated() || failures === 3) {
+        setIsPreview(true);
+        setMetrics(SAMPLE_MANAGER_METRICS);
+        setPendingActions(SAMPLE_MANAGER_ACTIONS);
+        setLoadError(null);
+      } else {
+        setLoadError("Some Manager Agent panels are unavailable.");
+      }
     } else {
       setLoadError(null);
     }
@@ -161,6 +198,10 @@ export function ManagerAgentPage() {
    * orchestrator responds.
    */
   const handleCreatePlan = async (goal: string) => {
+    if (!isAuthenticated()) {
+      setStatusMessage("Sign in to generate autonomous execution plans with the Manager Agent.");
+      return;
+    }
     const trimmed = goal.trim();
     if (trimmed.length < 3) {
       setStatusMessage("Describe a growth goal in a few more words before planning.");
@@ -202,6 +243,10 @@ export function ManagerAgentPage() {
 
   /** Step 2 — the merchant explicitly starts execution. */
   const handleStartExecution = async () => {
+    if (!isAuthenticated()) {
+      setStatusMessage("Sign in to execute growth plans with your AI Team.");
+      return;
+    }
     if (!plan) return;
     setIsCreating(true);
     setStatusMessage("Dispatching the validated plan to the AI Team workflow…");
@@ -309,9 +354,12 @@ export function ManagerAgentPage() {
 
   return (
     <div className="mgr-world">
-      <GlobalEnvironment />
+      <MerchantWorldBackground />
 
       <main className="mgr-shell" id="main-content">
+        {isPreview && (
+          <PreviewModeBanner pageName="Manager Orchestration Command Center" />
+        )}
         {/* Section B: Hero Section */}
         <ManagerHero
           onCreatePlan={handleCreatePlan}

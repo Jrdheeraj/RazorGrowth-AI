@@ -214,10 +214,10 @@ div[id] {
   color: var(--coral);
 }
 
-/* Scroll reveal (subtle; disabled via prefers-reduced-motion in tokens use) */
+/* Scroll reveal (subtle; ensures content is always visible) */
 .reveal {
-  opacity: 0;
-  transform: translateY(14px);
+  opacity: 1;
+  transform: none;
   transition:
     opacity var(--dur-med) var(--ease-out),
     transform var(--dur-med) var(--ease-out);

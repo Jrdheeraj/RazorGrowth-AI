@@ -1,0 +1,222 @@
+{
+  "checkpoint": {
+    "v": 4,
+    "ts": "2026-10-18T08:26:02.256632+00:00",
+    "id": "1f1cacd8-ddff-61b9-8002-6fb0e6e96e23",
+    "channel_values": {
+      "merchant_id": "7711bcaf-ad1d-4d0f-a982-29a2212616b5",
+      "run_id": "f7c6691702224259814a19aa17506556",
+      "workflow_id": "8dddf112-ea64-4a90-875a-6242651df93a",
+      "mode": "team",
+      "objective": "Comprehensive commerce analysis and growth optimization",
+      "window_days": 90,
+      "params": {
+        "window_days": 90,
+        "propose_retry_action": true,
+        "objective": "Comprehensive commerce analysis and growth optimization"
+      },
+      "generation": 1,
+      "current_step_index": 0,
+      "selected_specialists": [],
+      "agents_run": [],
+      "resumed_steps": [],
+      "needs_reconciliation": [],
+      "opportunities": [],
+      "ranked_opportunities": [],
+      "findings": [],
+      "actions_proposed": [],
+      "tool_records": [],
+      "shared_memory": {
+        "rag_context": {
+          "merchant_id": "7711bcaf-ad1d-4d0f-a982-29a2212616b5",
+          "query": "Comprehensive commerce analysis and growth optimization",
+          "status": "ready",
+          "data_sufficiency": {
+            "status": "sufficient",
+            "message": "Sufficient real captured transaction data is available for growth analysis.",
+            "minimum_required": 3,
+            "available": 22
+          },
+          "verified_facts": [
+            {
+              "fact": "captured_revenue",
+              "value": 23785.0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "captured_transactions",
+              "value": 22,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "successful_payments",
+              "value": 22,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "failed_payments",
+              "value": 6,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "total_customers",
+              "value": 4,
+              "verified": true,
+              "source": "customers"
+            },
+            {
+              "fact": "total_orders",
+              "value": 69,
+              "verified": true,
+              "source": "orders"
+            }
+          ],
+          "derived_metrics": {
+            "average_order_value": 1081.1363636363637,
+            "signals": [
+              {
+                "signal": "payment_failures",
+                "title": "6 payment failures worth \u20b98996.00 in the last 90 days",
+                "observed_data": {
+                  "failed_count": 6,
+                  "source": "payments.status='failed'"
+                },
+                "calculated_metric": "failed_payment_value_inr",
+                "opportunity": "Payment recovery opportunity",
+                "confidence": 0.366,
+                "reason": "Observed failed_payment_value_inr from 90-day PostgreSQL payment/order data.",
+                "recommended_action": "Review failed transactions and offer a compliant payment-recovery path."
+              },
+              {
+                "signal": "payment_recovery_opportunity",
+                "title": "Recoverable failed-payment revenue of \u20b98996.00",
+                "observed_data": {
+                  "failed_count": 6
+                },
+                "calculated_metric": "recoverable_revenue_inr",
+                "opportunity": "Recover failed-payment revenue",
+                "confidence": 0.366,
+                "reason": "Observed recoverable_revenue_inr from 90-day PostgreSQL payment/order data.",
+                "recommended_action": "Follow up on the recorded failed payments using an approved recovery workflow."
+              }
+            ]
+          },
+          "retrieved_context": [
+            {
+              "source_type": "growth_radar",
+              "source_id": "7711bcaf-ad1d-4d0f-a982-29a2212616b5",
+              "document_id": "7711bcaf-ad1d-4d0f-a982-29a2212616b5",
+              "chunk_id": "radar-90",
+              "similarity": null,
+              "content_preview": "Captured revenue INR 23785.00; captured transactions 22; customers 4; orders 69.",
+              "metadata": {
+                "verified": true,
+                "window_days": 90,
+                "signals": [
+                  {
+                    "signal": "payment_failures",
+                    "title": "6 payment failures worth \u20b98996.00 in the last 90 days",
+                    "observed_data": {
+                      "failed_count": 6,
+                      "source": "payments.status='failed'"
+                    },
+                    "calculated_metric": "failed_payment_value_inr",
+                    "opportunity": "Payment recovery opportunity",
+                    "confidence": 0.366,
+                    "reason": "Observed failed_payment_value_inr from 90-day PostgreSQL payment/order data.",
+                    "recommended_action": "Review failed transactions and offer a compliant payment-recovery path."
+                  },
+                  {
+                    "signal": "payment_recovery_opportunity",
+                    "title": "Recoverable failed-payment revenue of \u20b98996.00",
+                    "observed_data": {
+                      "failed_count": 6
+                    },
+                    "calculated_metric": "recoverable_revenue_inr",
+                    "opportunity": "Recover failed-payment revenue",
+                    "confidence": 0.366,
+                    "reason": "Observed recoverable_revenue_inr from 90-day PostgreSQL payment/order data.",
+                    "recommended_action": "Follow up on the recorded failed payments using an approved recovery workflow."
+                  }
+                ]
+              }
+            }
+          ],
+          "inference_allowed": true
+        }
+      },
+      "errors": [],
+      "status": "running",
+      "cancelled": false,
+      "cancelled_at_step": null,
+      "totals": {},
+      "debate_id": null,
+      "action_plan": null,
+      "terminal_outcome": {},
+      "branch:to:team_memory_load": null
+    },
+    "channel_versions": {
+      "__start__": 2,
+      "merchant_id": 2,
+      "run_id": 2,
+      "workflow_id": 2,
+      "mode": 2,
+      "objective": 2,
+      "window_days": 2,
+      "params": 2,
+      "generation": 2,
+      "current_step_index": 3,
+      "selected_specialists": 2,
+      "agents_run": 2,
+      "resumed_steps": 2,
+      "needs_reconciliation": 2,
+      "opportunities": 2,
+      "ranked_opportunities": 2,
+      "findings": 2,
+      "actions_proposed": 2,
+      "tool_records": 2,
+      "shared_memory": 4,
+      "errors": 2,
+      "status": 3,
+      "cancelled": 3,
+      "cancelled_at_step": 2,
+      "totals": 2,
+      "debate_id": 2,
+      "action_plan": 2,
+      "terminal_outcome": 2,
+      "branch:to:validate_request": 3,
+      "branch:to:load_context": 4,
+      "branch:to:team_memory_load": 4
+    },
+    "versions_seen": {
+      "__input__": {},
+      "__start__": {
+        "__start__": 1
+      },
+      "validate_request": {
+        "branch:to:validate_request": 2
+      },
+      "load_context": {
+        "branch:to:load_context": 3
+      }
+    },
+    "updated_channels": [
+      "branch:to:team_memory_load",
+      "shared_memory"
+    ]
+  },
+  "metadata": {
+    "source": "loop",
+    "step": 2,
+    "parents": {}
+  },
+  "channel_versions": {
+    "shared_memory": 4,
+    "branch:to:load_context": 4,
+    "branch:to:team_memory_load": 4
+  }
+}

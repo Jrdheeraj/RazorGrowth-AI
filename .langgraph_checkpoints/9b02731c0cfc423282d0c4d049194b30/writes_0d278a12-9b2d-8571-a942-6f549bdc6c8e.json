@@ -1,0 +1,108 @@
+[
+  [
+    "current_step_index",
+    7
+  ],
+  [
+    "agents_run",
+    [
+      {
+        "agent_name": "OpportunityPrioritizationAgent",
+        "step_key": "growth_team:006:OpportunityPrioritizationAgent:-:df259876f6face85f2fa42ad",
+        "status": "completed",
+        "opportunities_created": 0,
+        "actions_proposed": 0,
+        "tools_used": [
+          "opportunity_scoring"
+        ],
+        "errors": []
+      }
+    ]
+  ],
+  [
+    "shared_memory",
+    {
+      "rag_context": {
+        "merchant_id": "b4517095-8167-476c-bd97-8201eb9e6c8e",
+        "query": "Find revenue growth opportunities",
+        "status": "ready",
+        "data_sufficiency": {
+          "status": "sufficient",
+          "message": "Sufficient real captured transaction data is available for growth analysis.",
+          "minimum_required": 3,
+          "available": 3
+        },
+        "verified_facts": [
+          {
+            "fact": "captured_revenue",
+            "value": 300.0,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "captured_transactions",
+            "value": 3,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "successful_payments",
+            "value": 3,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "failed_payments",
+            "value": 0,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "total_customers",
+            "value": 3,
+            "verified": true,
+            "source": "customers"
+          },
+          {
+            "fact": "total_orders",
+            "value": 3,
+            "verified": true,
+            "source": "orders"
+          }
+        ],
+        "derived_metrics": {
+          "average_order_value": 100.0,
+          "signals": []
+        },
+        "retrieved_context": [
+          {
+            "source_type": "growth_radar",
+            "source_id": "b4517095-8167-476c-bd97-8201eb9e6c8e",
+            "document_id": "b4517095-8167-476c-bd97-8201eb9e6c8e",
+            "chunk_id": "radar-30",
+            "similarity": null,
+            "content_preview": "Captured revenue INR 300.00; captured transactions 3; customers 3; orders 3.",
+            "metadata": {
+              "verified": true,
+              "window_days": 30,
+              "signals": []
+            }
+          }
+        ],
+        "inference_allowed": true
+      },
+      "langchain_adapter": "<backend.app.ai.langchain_adapter.adapter.LangChainAgentAdapter object at 0x000001EB71506C90>",
+      "memories": [],
+      "manager_debate_id": "cd5222a7-7d23-45a1-9737-8b9d67e86183",
+      "ranked_opportunities": []
+    }
+  ],
+  [
+    "ranked_opportunities",
+    []
+  ],
+  [
+    "branch:to:growth_team_manager_synth",
+    null
+  ]
+]

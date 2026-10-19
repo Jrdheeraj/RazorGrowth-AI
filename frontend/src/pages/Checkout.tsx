@@ -28,12 +28,71 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createCheckoutSession, verifyPayment, fetchProducts } from "../lib/api";
+import { isAuthenticated } from "../lib/auth";
 import type { ProductResponse, CheckoutSessionResponse } from "../types/api";
 import { catalogImageFor } from "../data/productCatalog";
 import { AgentOfficeArt } from "../components/AgentOfficeArt";
 import { ProductMedia } from "../components/ProductMedia";
+import { PreviewModeBanner } from "../components/PreviewModeBanner";
 import razorpayLogo from "../assets/brands/razorpay.svg";
 import "./Checkout.css";
+
+/* ── Sample Showcase Products for Unauthenticated Visitors ─────────────── */
+
+const SAMPLE_CHECKOUT_PRODUCTS: ProductResponse[] = [
+  {
+    id: "demo_prod_keyboard",
+    merchant_id: "demo_merchant_preview",
+    name: "Ergonomic Mechanical Keyboard",
+    category: "Desk Accessories",
+    price: 4299,
+    description: "Compact mechanical keyboard with hot-swappable switches and custom sound dampening.",
+    sku: "KB-MECH-01",
+    stock_quantity: 42,
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "demo_prod_soundbar",
+    merchant_id: "demo_merchant_preview",
+    name: "Studio Soundbar Pro",
+    category: "Audio",
+    price: 7499,
+    description: "Premium spatial audio soundbar with Bluetooth 5.3 and dual subwoofers.",
+    sku: "AU-SND-02",
+    stock_quantity: 18,
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "demo_prod_hub",
+    merchant_id: "demo_merchant_preview",
+    name: "Aluminum Multiport USB-C Hub",
+    category: "Accessories",
+    price: 1899,
+    description: "8-in-1 USB-C hub with 4K HDMI, 100W Power Delivery, and Gigabit Ethernet.",
+    sku: "ACC-HUB-03",
+    stock_quantity: 65,
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "demo_prod_headphones",
+    merchant_id: "demo_merchant_preview",
+    name: "Wireless ANC Over-Ear Headphones",
+    category: "Audio",
+    price: 5999,
+    description: "Hybrid active noise cancellation with 40-hour battery life and low-latency gaming mode.",
+    sku: "AU-HP-04",
+    stock_quantity: 27,
+    active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
 
 declare global {
   interface Window {
@@ -130,6 +189,7 @@ export function Checkout() {
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+  const [isPreview, setIsPreview] = useState(!isAuthenticated());
   /* catalog chrome state (client-side only, over the REAL list) */
   const [query, setQuery] = useState("");
   const [cat, setCat] = useState<string>("all");
@@ -146,10 +206,17 @@ export function Checkout() {
 
   /* Load the real merchant catalog. (PRESERVED) */
   useEffect(() => {
+    if (!isAuthenticated()) {
+      setIsPreview(true);
+      setProducts(SAMPLE_CHECKOUT_PRODUCTS);
+      setSelectedId(SAMPLE_CHECKOUT_PRODUCTS[0].id);
+      return;
+    }
     fetchProducts()
       .then((data) => {
         const list = data.products ?? [];
         setProducts(list);
+        setIsPreview(false);
         // Auto-select the first purchasable product — never the ₹0
         // auto-created placeholder, which cannot be ordered (amount > 0).
         const firstPurchasable = list.find((p) => p.active && p.stock_quantity > 0 && Number(p.price) > 0);
@@ -158,7 +225,9 @@ export function Checkout() {
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : "";
         if (msg.includes("NOT_AUTHENTICATED") || msg.includes("TOKEN_EXPIRED") || msg.includes("401")) {
-          setCatalogError("login_required");
+          setIsPreview(true);
+          setProducts(SAMPLE_CHECKOUT_PRODUCTS);
+          setSelectedId(SAMPLE_CHECKOUT_PRODUCTS[0].id);
         } else {
           setCatalogError(
             err instanceof Error ? err.message : "The product catalog could not be loaded"
@@ -188,6 +257,10 @@ export function Checkout() {
 
   const startCheckout = async () => {
     if (!selected) return;
+    if (!isAuthenticated() || isPreview) {
+      setError("Sign in with your merchant account to connect your live store and initiate genuine Razorpay TEST orders.");
+      return;
+    }
     const price = Number(selected.price); // API returns a decimal string — send a clean number
     if (!(price > 0)) {
       setError("This product cannot be ordered — its price is ₹0.");
@@ -320,6 +393,12 @@ export function Checkout() {
 
   return (
     <div className="rgco-page">
+      {isPreview && (
+        <PreviewModeBanner
+          pageName="Checkout Experience"
+          description="Viewing merchant product showcase in preview mode. Sign in to connect your live store catalog and process test transactions."
+        />
+      )}
       {/* ══ HERO ══ */}
       <section className="rgco-hero" aria-labelledby="checkout-heading">
         <div className="rgco-hero__inner">
@@ -400,7 +479,7 @@ export function Checkout() {
             <div>
               <div className="rgco-catalog__live-pill">
                 <span className="rgco-catalog__pulse" aria-hidden="true" />
-                <span>STORE DATABASE CONNECTED</span>
+                <span>{isPreview ? "PREVIEW SHOWCASE CATALOG" : "STORE DATABASE CONNECTED"}</span>
               </div>
               <h2 className="rgco-catalog__title">Product Catalog</h2>
               <p className="rgco-catalog__sub">Products available for AI buyer test purchase. Select a product to continue.</p>
@@ -412,19 +491,6 @@ export function Checkout() {
               </div>
             )}
           </div>
-
-          {catalogError === "login_required" && (
-            <div className="rgco-state" role="alert">
-              <strong>Sign in required</strong>
-              Checkout reads your merchant catalog and creates Razorpay TEST orders for your
-              workspace. Sign in to continue.
-              <div style={{ marginTop: 12 }}>
-                <button type="button" className="rgco-card__btn" style={{ maxWidth: 180 }} onClick={() => navigate("/login")}>
-                  Sign in
-                </button>
-              </div>
-            </div>
-          )}
 
           {catalogError && catalogError !== "login_required" && (
             <div className="rgco-state" role="alert">

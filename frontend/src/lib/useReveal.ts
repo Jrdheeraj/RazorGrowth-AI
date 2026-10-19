@@ -10,10 +10,18 @@ export function useReveal<T extends HTMLElement>() {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+
+    // Check immediately if already in or near viewport
+    const rect = el.getBoundingClientRect();
+    if (rect.top < window.innerHeight + 250) {
+      el.classList.add("is-visible");
+    }
+
     if (typeof IntersectionObserver === "undefined") {
       el.classList.add("is-visible");
       return;
     }
+
     const io = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -23,10 +31,19 @@ export function useReveal<T extends HTMLElement>() {
           }
         }
       },
-      { threshold: 0.12 },
+      { threshold: 0.01, rootMargin: "250px 0px 100px 0px" },
     );
     io.observe(el);
-    return () => io.disconnect();
+
+    // Safety fallback: ensure element is visible after 800ms regardless
+    const timer = setTimeout(() => {
+      el.classList.add("is-visible");
+    }, 800);
+
+    return () => {
+      clearTimeout(timer);
+      io.disconnect();
+    };
   }, []);
 
   return ref;

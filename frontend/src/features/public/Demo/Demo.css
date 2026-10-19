@@ -3,8 +3,9 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 .walkthrough-container {
-  margin-top: 24px;
+  margin-top: 0;
 }
+
 
 .walkthrough-step-tabs {
   display: grid;

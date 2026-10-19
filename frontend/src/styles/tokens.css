@@ -97,6 +97,16 @@
   --z-mobile-menu: 39;
 }
 
+/* Below the desktop-nav breakpoint the floating bar shrinks from 80px to 68px,
+   so the sticky shell measures 8 + 68 + 8 = 84px, not 96px. `--header-height`
+   drives `scroll-margin-top` for every anchored section and the mobile panel's
+   max-height, so it has to follow the real bar or headings land under it. */
+@media (max-width: 1199px) {
+  :root {
+    --header-height: 84px;
+  }
+}
+
 /* Dark section context — applied via .theme-dark wrapper */
 .theme-dark {
   --line: var(--line-on-dark);

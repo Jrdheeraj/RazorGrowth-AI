@@ -36,8 +36,6 @@ interface SectionLink {
 
 const SECTION_LINKS: readonly SectionLink[] = [
   { id: "home",         label: "Home",        route: "/" },
-  { id: "who-its-for",  label: "Who It's For" },
-  { id: "how-it-works", label: "How It Works" },
   { id: "growth-radar", label: "Radar",        route: "/growth-radar" },
   { id: "agents",       label: "AI Team",      route: "/agents" },
   { id: "debate",       label: "Debates",      route: "/debate" },
@@ -215,8 +213,6 @@ function AiMenuIcon({ to }: { to: string }) {
 function IconFor(id: string) {
   switch (id) {
     case "home":         return <IconHome />;
-    case "who-its-for":  return <IconUsers />;
-    case "how-it-works": return <IconWorkflow />;
     case "growth-radar": return <IconRadar />;
     case "agents":       return <IconBot />;
     case "debate":       return <IconDebates />;

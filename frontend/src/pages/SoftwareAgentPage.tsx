@@ -7,8 +7,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { WindowPanel } from "../components/WindowPanel";
+import { PreviewModeBanner } from "../components/PreviewModeBanner";
 import { Button } from "../components/Button";
-import { GlobalEnvironment } from "../features/public/Environment/GlobalEnvironment";
+import { MerchantWorldBackground } from "../features/public/MerchantWorld/MerchantWorldBackground";
+import { isAuthenticated } from "../lib/auth";
 import { fetchAgentCatalog, fetchAgentRuns, type AgentCatalogResponse } from "../lib/api";
 import type { AgentRunRow } from "../types/api";
 import "./SoftwareAgentPage.css";
@@ -46,8 +48,11 @@ export function SoftwareAgentPage() {
 
   return (
     <div className="software-page">
-      <GlobalEnvironment />
+      <MerchantWorldBackground />
       <div className="software-shell">
+        {!isAuthenticated() && (
+          <PreviewModeBanner pageName="Software Specialist Workstation" />
+        )}
         {/* Hero Banner */}
         <header className="software-hero">
           <div>

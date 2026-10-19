@@ -1,0 +1,207 @@
+[
+  [
+    "current_step_index",
+    8
+  ],
+  [
+    "agents_run",
+    [
+      {
+        "agent_name": "CampaignStrategistAgent",
+        "step_key": "team:007:CampaignStrategistAgent:-:ade6b8a035bc904db813de88",
+        "status": "completed",
+        "opportunities_created": 0,
+        "actions_proposed": 1,
+        "tools_used": [
+          "segment_lookup",
+          "campaign_simulation",
+          "phase4_propose"
+        ],
+        "errors": []
+      }
+    ]
+  ],
+  [
+    "shared_memory",
+    {
+      "rag_context": {
+        "merchant_id": "7711bcaf-ad1d-4d0f-a982-29a2212616b5",
+        "query": "Comprehensive commerce analysis and growth optimization",
+        "status": "ready",
+        "data_sufficiency": {
+          "status": "sufficient",
+          "message": "Sufficient real captured transaction data is available for growth analysis.",
+          "minimum_required": 3,
+          "available": 22
+        },
+        "verified_facts": [
+          {
+            "fact": "captured_revenue",
+            "value": 23785.0,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "captured_transactions",
+            "value": 22,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "successful_payments",
+            "value": 22,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "failed_payments",
+            "value": 6,
+            "verified": true,
+            "source": "payments"
+          },
+          {
+            "fact": "total_customers",
+            "value": 4,
+            "verified": true,
+            "source": "customers"
+          },
+          {
+            "fact": "total_orders",
+            "value": 69,
+            "verified": true,
+            "source": "orders"
+          }
+        ],
+        "derived_metrics": {
+          "average_order_value": 1081.1363636363637,
+          "signals": [
+            {
+              "signal": "payment_failures",
+              "title": "6 payment failures worth \u20b98996.00 in the last 90 days",
+              "observed_data": {
+                "failed_count": 6,
+                "source": "payments.status='failed'"
+              },
+              "calculated_metric": "failed_payment_value_inr",
+              "opportunity": "Payment recovery opportunity",
+              "confidence": 0.366,
+              "reason": "Observed failed_payment_value_inr from 90-day PostgreSQL payment/order data.",
+              "recommended_action": "Review failed transactions and offer a compliant payment-recovery path."
+            },
+            {
+              "signal": "payment_recovery_opportunity",
+              "title": "Recoverable failed-payment revenue of \u20b98996.00",
+              "observed_data": {
+                "failed_count": 6
+              },
+              "calculated_metric": "recoverable_revenue_inr",
+              "opportunity": "Recover failed-payment revenue",
+              "confidence": 0.366,
+              "reason": "Observed recoverable_revenue_inr from 90-day PostgreSQL payment/order data.",
+              "recommended_action": "Follow up on the recorded failed payments using an approved recovery workflow."
+            }
+          ]
+        },
+        "retrieved_context": [
+          {
+            "source_type": "growth_radar",
+            "source_id": "7711bcaf-ad1d-4d0f-a982-29a2212616b5",
+            "document_id": "7711bcaf-ad1d-4d0f-a982-29a2212616b5",
+            "chunk_id": "radar-90",
+            "similarity": null,
+            "content_preview": "Captured revenue INR 23785.00; captured transactions 22; customers 4; orders 69.",
+            "metadata": {
+              "verified": true,
+              "window_days": 90,
+              "signals": [
+                {
+                  "signal": "payment_failures",
+                  "title": "6 payment failures worth \u20b98996.00 in the last 90 days",
+                  "observed_data": {
+                    "failed_count": 6,
+                    "source": "payments.status='failed'"
+                  },
+                  "calculated_metric": "failed_payment_value_inr",
+                  "opportunity": "Payment recovery opportunity",
+                  "confidence": 0.366,
+                  "reason": "Observed failed_payment_value_inr from 90-day PostgreSQL payment/order data.",
+                  "recommended_action": "Review failed transactions and offer a compliant payment-recovery path."
+                },
+                {
+                  "signal": "payment_recovery_opportunity",
+                  "title": "Recoverable failed-payment revenue of \u20b98996.00",
+                  "observed_data": {
+                    "failed_count": 6
+                  },
+                  "calculated_metric": "recoverable_revenue_inr",
+                  "opportunity": "Recover failed-payment revenue",
+                  "confidence": 0.366,
+                  "reason": "Observed recoverable_revenue_inr from 90-day PostgreSQL payment/order data.",
+                  "recommended_action": "Follow up on the recorded failed payments using an approved recovery workflow."
+                }
+              ]
+            }
+          }
+        ],
+        "inference_allowed": true
+      },
+      "langchain_adapter": "<backend.app.ai.langchain_adapter.adapter.LangChainAgentAdapter object at 0x00000172DAE65610>",
+      "memories": [
+        {
+          "id": "b1aa57f7-65fc-4b4b-9733-d1677ed95dda",
+          "memory_type": "recommendation",
+          "content": "PaymentRecoveryAgent proposed retry for highest-value failure; 1 failures worth \u20b92499.00 in window.",
+          "summary": "PaymentRecoveryAgent proposed retry for highest-value failure; 1 failures worth \u20b92499.00 in window.",
+          "score": 0.3276,
+          "importance": 0.7,
+          "outcome_variance_pct": null,
+          "created_at": "2026-10-13 07:56:14.888414+00:00"
+        },
+        {
+          "id": "d6dfa418-7a61-4391-9574-dd565738c1b3",
+          "memory_type": "recommendation",
+          "content": "Orchestrator run 3ba735f68f884658aba43a789ceebb55: 0 opportunities, 1 actions proposed (awaiting human approval).",
+          "summary": "Orchestrator run 3ba735f68f884658aba43a789ceebb55: 0 opportunities, 1 actions proposed (awaiting human approval).",
+          "score": 0.3246,
+          "importance": 0.6,
+          "outcome_variance_pct": null,
+          "created_at": "2026-10-15 14:22:16.237094+00:00"
+        },
+        {
+          "id": "3b008de6-5754-47cf-8239-761bb2b8ce3d",
+          "memory_type": "recommendation",
+          "content": "[MarketingAGI investigation] Run b87cdb76-44b3-445e-b2a8-39c80789fe10: linked failed_payment_recovery campaign to open action 77913b99-e865-48e3-a919-da375af53246 (no duplicate created)",
+          "summary": "[MarketingAGI investigation] Run b87cdb76-44b3-445e-b2a8-39c80789fe10: linked failed_payment_recovery campaign to open action 77913b99-e865-48e3-a919-da375af53246 (no duplicate created)",
+          "score": 0.3211,
+          "importance": 0.5,
+          "outcome_variance_pct": null,
+          "created_at": "2026-10-17 16:11:42.710791+00:00"
+        },
+        {
+          "id": "52f7e2ae-a2f7-412c-9a61-cb9ff8edc82f",
+          "memory_type": "recommendation",
+          "content": "[MarketingAGI investigation] Run 6dbf3486-dcc2-4162-9172-7ceca835e67e: linked failed_payment_recovery campaign to open action 77913b99-e865-48e3-a919-da375af53246 (no duplicate created)",
+          "summary": "[MarketingAGI investigation] Run 6dbf3486-dcc2-4162-9172-7ceca835e67e: linked failed_payment_recovery campaign to open action 77913b99-e865-48e3-a919-da375af53246 (no duplicate created)",
+          "score": 0.321,
+          "importance": 0.5,
+          "outcome_variance_pct": null,
+          "created_at": "2026-10-17 15:48:10.188852+00:00"
+        },
+        {
+          "id": "9bbe4d06-2694-41b7-9fae-46b98c43dd3a",
+          "memory_type": "recommendation",
+          "content": "[MarketingAGI investigation] Run d45ee22f-2954-49ad-911b-dbab3cd97037: linked failed_payment_recovery campaign to open action 77913b99-e865-48e3-a919-da375af53246 (no duplicate created)",
+          "summary": "[MarketingAGI investigation] Run d45ee22f-2954-49ad-911b-dbab3cd97037: linked failed_payment_recovery campaign to open action 77913b99-e865-48e3-a919-da375af53246 (no duplicate created)",
+          "score": 0.3208,
+          "importance": 0.5,
+          "outcome_variance_pct": null,
+          "created_at": "2026-10-17 14:40:59.090691+00:00"
+        }
+      ]
+    }
+  ],
+  [
+    "branch:to:team_designer",
+    null
+  ]
+]

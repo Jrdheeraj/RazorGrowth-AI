@@ -98,7 +98,7 @@ export function Demo() {
         windowTitle="razorgrowth — interactive_demo.app"
       />
 
-      <div ref={reveal} className="reveal walkthrough-container">
+      <div ref={reveal} className="reveal walkthrough-container" style={{ marginTop: 22 }}>
         <div className="walkthrough-step-tabs" role="tablist" aria-label="Walkthrough stages">
           {STAGES.map((s, idx) => (
             <button

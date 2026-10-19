@@ -1569,17 +1569,24 @@
 .magi-modalback {
   position: fixed;
   inset: 0;
-  background: rgba(26, 19, 32, 0.55);
+  background: rgba(26, 19, 32, 0.65);
+  backdrop-filter: blur(3px);
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 48px 16px;
-  z-index: 60;
+  padding-top: calc(var(--header-height, 96px) + 16px);
+  padding-bottom: 24px;
+  padding-inline: 16px;
+  box-sizing: border-box;
+  z-index: 1000;
   overflow-y: auto;
 }
 
 .magi-modal {
   width: min(720px, 100%);
+  max-height: calc(100vh - var(--header-height, 96px) - 36px);
+  max-height: calc(100dvh - var(--header-height, 96px) - 36px);
+  overflow-y: auto;
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: var(--radius-window);

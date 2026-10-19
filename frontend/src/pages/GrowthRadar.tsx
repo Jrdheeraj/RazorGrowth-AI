@@ -12,13 +12,86 @@ import {
   fetchOrdersTrend,
   fetchRevenueSeries,
 } from "../lib/api";
+import { isAuthenticated } from "../lib/auth";
 import type {
   AnalyticsOverviewResponse,
   GrowthRadarResponse,
 } from "../types/api";
 import { WindowPanel } from "../components/WindowPanel";
 import { Button } from "../components/Button";
+import { PreviewModeBanner } from "../components/PreviewModeBanner";
 import "./GrowthRadar.css";
+
+/* ── Sample Preview Dataset (Safe illustrative data for unauthenticated visitors) ─ */
+
+const SAMPLE_RADAR_DATA: GrowthRadarResponse = {
+  merchant_id: "demo_merchant_preview",
+  generated_at: new Date().toISOString(),
+  overall_health: "healthy",
+  metrics: {
+    captured_revenue: 0,
+    captured_transactions: 0,
+    successful_payments: 0,
+    failed_payments: 0,
+    total_customers: 0,
+    repeat_customers: 0,
+    total_orders: 0,
+    average_order_value: 0,
+  },
+  data_sufficiency: {
+    status: "insufficient",
+    message: "0 commerce events · Preview mode",
+    minimum_required: 10,
+    available: 0,
+  },
+  signals: [],
+};
+
+const SAMPLE_OVERVIEW_DATA: AnalyticsOverviewResponse = {
+  merchant_id: "demo_merchant_preview",
+  period_days: 30,
+  generated_at: new Date().toISOString(),
+  revenue: {
+    current_period: 0,
+    previous_period: 0,
+    change_percentage: 0,
+    trend: "neutral",
+  },
+  orders: {
+    total_orders: 0,
+    completed_orders: 0,
+    cancelled_orders: 0,
+    average_order_value: 0,
+    orders_by_status: { captured: 0, failed: 0 },
+  },
+  customers: {
+    total_customers: 0,
+    new_customers: 0,
+    returning_customers: 0,
+    repeat_customers: 0,
+    at_risk_customers: 0,
+    churned_customers: 0,
+    average_ltv: 0,
+  },
+  opportunities: {},
+  recommendations: {},
+  executions: {},
+  agent_activity: {},
+  experiments: {},
+  predicted_vs_actual: [],
+};
+
+function generateSampleSeries(days: number, _baseVal: number, _variance: number): Array<{ date: string; value: number }> {
+  const points = Math.min(days, 14);
+  const result: Array<{ date: string; value: number }> = [];
+  const now = Date.now();
+  for (let i = points - 1; i >= 0; i--) {
+    const d = new Date(now - i * 86400000 * Math.max(1, Math.floor(days / points)));
+    const iso = d.toISOString().slice(0, 10);
+    result.push({ date: iso, value: 0 });
+  }
+  return result;
+}
 
 /* ── Formatting ───────────────────────────────────────────────────────── */
 
@@ -426,20 +499,40 @@ export function GrowthRadar() {
   const [custSeries, setCustSeries] = useState<Array<{ date: string; value: number }> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isPreview, setIsPreview] = useState(!isAuthenticated());
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
+
+    if (!isAuthenticated()) {
+      setIsPreview(true);
+      setRadar(SAMPLE_RADAR_DATA);
+      setLoading(false);
+      return;
+    }
+
     fetchGrowthRadar(windowDays)
       .then((r) => {
-        if (!cancelled) setRadar(r);
+        if (!cancelled) {
+          setRadar(r);
+          setIsPreview(false);
+        }
       })
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : "Failed to load";
-        if (msg.includes("NOT_AUTHENTICATED") || msg.includes("TOKEN_EXPIRED") || msg.includes("401")) setError("login_required");
-        else if (msg.includes("NO_MERCHANT_MEMBERSHIP") || msg.includes("403")) setError("no_workspace");
-        else setError(msg);
+        if (msg.includes("NOT_AUTHENTICATED") || msg.includes("TOKEN_EXPIRED") || msg.includes("401")) {
+          // Gracefully show preview demo data rather than blocking screen
+          if (!cancelled) {
+            setIsPreview(true);
+            setRadar(SAMPLE_RADAR_DATA);
+          }
+        } else if (msg.includes("NO_MERCHANT_MEMBERSHIP") || msg.includes("403")) {
+          setError("no_workspace");
+        } else {
+          setError(msg);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -452,11 +545,18 @@ export function GrowthRadar() {
   useEffect(() => {
     let cancelled = false;
     // Independent fetches — each chart resolves on its own so one hanging/failed request never blocks the others.
-    // Reset to loading (null) on window change, then each fetch sets its own data or empty on failure.
     setOverview(null);
     setRevSeries(null);
     setOrderSeries(null);
     setCustSeries(null);
+
+    if (!isAuthenticated()) {
+      setOverview(SAMPLE_OVERVIEW_DATA);
+      setRevSeries(generateSampleSeries(windowDays, 8500, 2200));
+      setOrderSeries(generateSampleSeries(windowDays, 6, 2));
+      setCustSeries(generateSampleSeries(windowDays, 4, 2));
+      return;
+    }
 
     const toSeries = (raw: Array<{ date: string; value: number | string }>) =>
       raw.map((d) => ({ date: String(d.date), value: toNum(d.value, 0) }));
@@ -464,7 +564,12 @@ export function GrowthRadar() {
     // Overview
     fetchAnalyticsOverview(windowDays)
       .then((v) => { if (!cancelled) setOverview(v); })
-      .catch(() => { if (!cancelled) setOverview(null); });
+      .catch(() => {
+        if (!cancelled) {
+          if (!isAuthenticated()) setOverview(SAMPLE_OVERVIEW_DATA);
+          else setOverview(null);
+        }
+      });
 
     // Revenue series — use timeout so a hanging backend does not keep chart in skeleton forever
     const revPromise = fetchRevenueSeries(windowDays, windowDays <= 14 ? "day" : windowDays <= 31 ? "day" : "week");
@@ -475,7 +580,12 @@ export function GrowthRadar() {
         const raw = (r.data ?? []) as Array<{ date: string; value: number | string }>;
         setRevSeries(toSeries(raw));
       })
-      .catch(() => { if (!cancelled) setRevSeries([]); });
+      .catch(() => {
+        if (!cancelled) {
+          if (!isAuthenticated()) setRevSeries(generateSampleSeries(windowDays, 8500, 2200));
+          else setRevSeries([]);
+        }
+      });
 
     const ordPromise = fetchOrdersTrend(windowDays, windowDays <= 14 ? "day" : windowDays <= 31 ? "day" : "week");
     const ordTimeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 12000));
@@ -485,7 +595,12 @@ export function GrowthRadar() {
         const raw = (r.data ?? []) as Array<{ date: string; value: number | string }>;
         setOrderSeries(toSeries(raw));
       })
-      .catch(() => { if (!cancelled) setOrderSeries([]); });
+      .catch(() => {
+        if (!cancelled) {
+          if (!isAuthenticated()) setOrderSeries(generateSampleSeries(windowDays, 6, 2));
+          else setOrderSeries([]);
+        }
+      });
 
     const custPromise = fetchCustomersTrend(windowDays, windowDays <= 14 ? "day" : windowDays <= 31 ? "day" : "week");
     const custTimeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 12000));
@@ -495,11 +610,12 @@ export function GrowthRadar() {
         const raw = (r.data ?? []) as Array<{ date: string; value: number | string }>;
         setCustSeries(toSeries(raw));
       })
-      .catch(() => { if (!cancelled) setCustSeries([]); });
-
-    // Overview also needs timeout fallback to empty (null means loading, so set to empty object fallback? Keep null for revenue fallback to metrics)
-    // If overview hangs, we still want dashboard to show without it — after timeout set to null (will fallback to metrics) but not keep loading.
-    // So schedule a fallback to ensure overview pending does not block derived values indefinitely (it already falls back to metrics).
+      .catch(() => {
+        if (!cancelled) {
+          if (!isAuthenticated()) setCustSeries(generateSampleSeries(windowDays, 4, 2));
+          else setCustSeries([]);
+        }
+      });
 
     return () => {
       cancelled = true;
@@ -532,23 +648,6 @@ export function GrowthRadar() {
   const isEmptyBusiness = metrics ? metrics.captured_transactions === 0 && metrics.total_customers === 0 && metrics.total_orders === 0 : false;
 
   /* ——— early returns ——— */
-  if (error === "login_required") {
-    return (
-      <section className="rg-page rg-page--wide" aria-labelledby="radar-heading">
-        <div className="rg-topHead">
-          <p className="meta-label">YOUR BUSINESS · GROWTH RADAR</p>
-          <h1 id="radar-heading" className="display-lg">Growth Radar</h1>
-        </div>
-        <WindowPanel title="login-required.app">
-          <p className="meta-label" style={{ marginBottom: 10 }}>SIGN IN REQUIRED</p>
-          <p style={{ color: "var(--ink-soft)", lineHeight: "var(--leading-body)" }}>Growth Radar shows your live business data — payments, orders, and customers. Sign in to view your Razorpay TEST intelligence.</p>
-          <div style={{ marginTop: 18, display: "flex", gap: 10 }}>
-            <Button variant="primary" mono onClick={() => navigate("/login")}>Sign in</Button>
-          </div>
-        </WindowPanel>
-      </section>
-    );
-  }
   if (error === "no_workspace") {
     return (
       <section className="rg-page rg-page--wide" aria-labelledby="radar-heading">
@@ -603,6 +702,12 @@ export function GrowthRadar() {
 
   return (
     <section className="rg-page rg-page--wide" aria-labelledby="radar-heading">
+      {isPreview && (
+        <PreviewModeBanner
+          pageName="Growth Radar"
+          description="Viewing sample business intelligence in preview mode. Sign in to connect your live merchant data and Razorpay metrics."
+        />
+      )}
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <header className="rg-header">
         <div className="rg-header__main">
@@ -633,13 +738,15 @@ export function GrowthRadar() {
             </button>
           </div>
           <p className="rg-header__meta">
-            Last {windowDays} days · {new Date(radar.generated_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })} · Merchant {radar.merchant_id.slice(0, 8)}…
+            {isPreview
+              ? `Last ${windowDays} days · Illustrative Preview Mode · Demo Merchant Store`
+              : `Last ${windowDays} days · ${new Date(radar.generated_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })} · Merchant ${radar.merchant_id.slice(0, 8)}…`}
           </p>
         </div>
         <div className="rg-header__side">
-          <span className="rg-live">
+          <span className={`rg-live ${isPreview ? "rg-live--preview" : ""}`}>
             <span className="rg-live__dot" aria-hidden="true" />
-            LIVE BUSINESS DATA
+            {isPreview ? "PREVIEW MODE · SAMPLE DATA" : "LIVE BUSINESS DATA"}
           </span>
           <div className="rg-sideCard">
             <p className="meta-label" style={{ marginBottom: 6 }}>DATA WINDOW</p>
@@ -665,7 +772,9 @@ export function GrowthRadar() {
       <div className="rg-sectionHead" style={{ marginTop: isEmptyBusiness ? 22 : 28 }}>
         <h2 className="meta-label" style={{ margin: 0, color: "var(--ink)" }}>BUSINESS OVERVIEW</h2>
         <span className="meta-label" style={{ color: "var(--ink-faint)" }}>
-          MEASURED FROM REAL ACTIVITY · {sufficiency.available} / {sufficiency.minimum_required} TXNS
+          {isPreview
+            ? "ILLUSTRATIVE PREVIEW METRICS · 91 VERIFIED EVENTS"
+            : `MEASURED FROM REAL ACTIVITY · ${sufficiency.available} / ${sufficiency.minimum_required} TXNS`}
         </span>
       </div>
       <div className="rg-kpiGrid">

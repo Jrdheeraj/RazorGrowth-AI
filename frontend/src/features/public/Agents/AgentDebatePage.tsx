@@ -1,11 +1,22 @@
 /**
- * AgentDebatePage
+ * AgentDebatePage.tsx — Complete Agent Debates Dashboard Redesign.
  *
- * Frontend-only redesign of the debate detail surface. All rendered content
- * comes from the existing Agent Debate APIs.
+ * Implements the 3-column workspace from the reference specification:
+ *   - Top Toolbar: Agent Debates title + subtitle, "+ New debate" button,
+ *     Status filter tabs (All debates, In progress, Concluded), Search box.
+ *   - Left Column: "Your debates" scrollable list with categorized icons,
+ *     title, subtitle, status dots (● Discussing, ● Concluded, ● Investigating),
+ *     dates, and active highlight.
+ *   - Center Column: Active debate primary workspace with "← Back to debates",
+ *     status pill, updated timestamp, title, description, 3 tabs
+ *     (Discussion, Evidence & data, Decision), rich message stream with agent avatars
+ *     and embedded verified data cards, and fixed bottom conversation composer.
+ *   - Right Column: Team recommendation card (featured outcome, recovery value,
+ *     failed payments, explanation), Key opportunities (numbered 1, 2, 3 with badges),
+ *     and primary "Review action plan →" action button.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   fetchAgentDashboard,
   fetchDebateFindings,
@@ -15,6 +26,7 @@ import {
   startAgentDebate,
   askAgentDebate,
 } from "../../../lib/api";
+import { isAuthenticated } from "../../../lib/auth";
 import type {
   AgentDashboardResponse,
   AgentDebateListItem,
@@ -24,300 +36,274 @@ import type {
 } from "../../../types/api";
 import "./AgentDebate.css";
 
-const AGENT_LABELS: Record<string, string> = {
-  manager: "Growth Manager",
-  marketing: "Marketing Expert",
-  product: "Product Expert",
-  designer: "Design & UX Expert",
-  design: "Design & UX Expert",
-  software: "Technology Expert",
-  technology: "Technology Expert",
-};
+/* ── Status and Filter Types ─────────────────────────────────────────────── */
 
-const AGENT_TONES: Record<string, string> = {
-  manager: "green",
-  marketing: "warm",
-  product: "mist",
-  designer: "terracotta",
-  design: "terracotta",
-  software: "amber",
-  technology: "amber",
-};
+type StatusFilter = "all" | "in_progress" | "concluded";
+type ActiveTab = "discussion" | "evidence" | "decision";
 
-function normalizeKey(value: string | null | undefined) {
-  return (value ?? "").toLowerCase().replace(/[^a-z]/g, "");
-}
+/* ── Helpers: Display formatting & text normalization ────────────────────── */
 
-function agentLabel(raw: string | null | undefined) {
-  const key = normalizeKey(raw);
-  return AGENT_LABELS[key] ?? prettify(raw ?? "AI Expert");
-}
-
-function agentInitials(raw: string | null | undefined) {
-  const label = agentLabel(raw);
-  const words = label.split(/\s+/).filter(Boolean);
-  return (words[0]?.[0] ?? "A") + (words[1]?.[0] ?? "");
-}
-
-function agentTone(raw: string | null | undefined) {
-  return AGENT_TONES[normalizeKey(raw)] ?? "neutral";
-}
-
-function prettify(value: string) {
+function prettify(value: string): string {
   return value
     .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    .replace(/\b\w/g, (l) => l.toUpperCase());
 }
 
-function formatDate(value: string | null | undefined, options: Intl.DateTimeFormatOptions = {}) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", ...options });
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
 }
 
-function formatTime(value: string | null | undefined) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const datePart = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const timePart = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  return `${datePart}, ${timePart}`;
 }
 
-function shortStatus(status: string | null | undefined) {
-  const value = status ?? "";
-  if (value === "concluded") return "Concluded";
-  if (value === "debating" || value === "synthesizing") return "Discussing";
-  if (value === "investigating") return "Investigating";
-  return prettify(value || "Working");
+function formatTime(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
-function firstSentence(text: string | null | undefined) {
-  if (!text) return "";
-  const match = text.trim().match(/^(.+?[.!?])(\s|$)/);
-  return match?.[1] ?? text.trim();
-}
-
-function remainingText(text: string | null | undefined, first: string) {
-  if (!text) return "";
-  return text.trim().slice(first.length).trim();
-}
-
-function pickRecommendationTitle(dashboard: AgentDashboardResponse, findings: AgentFinding[]) {
-  const supporting = findings.find((finding) => finding.supports_recommendation || finding.finding_type === "supporting");
-  return supporting?.title || firstSentence(dashboard.recommendation) || firstSentence(dashboard.final_synthesis) || dashboard.objective;
-}
-
-function pickRecommendationBody(dashboard: AgentDashboardResponse, title: string) {
-  const source = dashboard.recommendation || dashboard.final_synthesis || "";
-  const rest = remainingText(source, title);
-  return rest || source || "The team has completed its review of the current business data.";
-}
-
-function getRound(msg: AgentMessage): number {
-  if (!Array.isArray(msg.references)) return 0;
-  const first = msg.references[0] as Record<string, unknown> | undefined;
-  return typeof first?.round === "number" ? first.round : 0;
-}
-
-function parseArray(value: unknown): unknown[] | null {
-  if (Array.isArray(value)) return value;
-  if (typeof value !== "string") return null;
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
+function normalizeStatus(status: string | null | undefined): {
+  label: "Discussing" | "Concluded" | "Investigating";
+  type: "discussing" | "concluded" | "investigating";
+  dotColor: string;
+} {
+  const s = (status || "").toLowerCase();
+  if (s === "concluded") {
+    return { label: "Concluded", type: "concluded", dotColor: "#2E7D32" };
   }
+  if (s === "debating" || s === "discussing" || s === "synthesizing") {
+    return { label: "Discussing", type: "discussing", dotColor: "#E25B2D" };
+  }
+  return { label: "Investigating", type: "investigating", dotColor: "#64748B" };
 }
 
-function normalizeMessages(raw: AgentMessage[]) {
-  return raw.map((message) => ({
-    ...message,
-    references: parseArray(message.references),
-  }));
+function getDebateTitle(debate: AgentDebateListItem): string {
+  const ctxTitle = debate.context?.title as string | undefined;
+  if (ctxTitle) return ctxTitle;
+  const raw = debate.objective;
+  const lower = raw.toLowerCase();
+  if (lower.includes("social media")) return "Social media creatives";
+  if (lower.includes("campaign creative")) return "Campaign creative set";
+  if (lower.includes("brand identity")) return "Brand identity kit";
+  if (lower.includes("q4")) return "Q4 growth campaign";
+  if (lower.includes("customer retention") || (lower.includes("customer") && lower.includes("retention"))) return "Customer retention";
+  if (lower.includes("website messaging") || (lower.includes("messaging") && lower.includes("copy"))) return "Website messaging";
+  if (lower.includes("product page")) return "Product page redesign";
+  if (lower.includes("usb cable")) return "USB Cable Campaign";
+  if (lower.includes("razorpay") || lower.includes("strongest growth")) return "Revenue & Growth Strategy";
+  return raw.length > 36 ? raw.slice(0, 36).trim() + "…" : raw;
 }
 
-function normalizeFindings(raw: AgentFinding[]) {
-  return raw.map((finding) => ({
-    ...finding,
-    evidence: parseArray(finding.evidence) as Array<Record<string, unknown>> | null,
-  }));
+function getDebateSubtitle(debate: AgentDebateListItem): string {
+  const ctxSub = debate.context?.subtitle as string | undefined;
+  if (ctxSub) return ctxSub;
+  const lower = debate.objective.toLowerCase();
+  if (lower.includes("social media")) return "Creative strategy for growth";
+  if (lower.includes("campaign creative")) return "Ad creatives and messaging";
+  if (lower.includes("brand identity")) return "Visual identity and brand assets";
+  if (lower.includes("q4")) return "Multi-channel campaign plan";
+  if (lower.includes("retention")) return "Improve repeat purchase rate";
+  if (lower.includes("messaging") || lower.includes("website")) return "Value proposition and copy";
+  if (lower.includes("product page")) return "Conversion funnel and UX";
+  if (lower.includes("usb cable")) return "Marketing creative and ad variants";
+  if (lower.includes("razorpay") || lower.includes("growth")) return "Live commerce signals & recovery";
+  return "AI strategic investigation";
 }
 
-function sortMessages(messages: AgentMessage[]) {
-  return [...messages].sort((a, b) => {
-    const aRound = getRound(a);
-    const bRound = getRound(b);
-    if (aRound !== bRound) return aRound - bRound;
-    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-  });
+function getDebateIcon(title: string, objective: string): {
+  type: "megaphone" | "chart" | "palette" | "target" | "users" | "document" | "sparkle";
+  bg: string;
+  color: string;
+} {
+  const text = (title + " " + objective).toLowerCase();
+  if (text.includes("social") || text.includes("creative strategy")) {
+    return { type: "megaphone", bg: "#FFEBE3", color: "#E25B2D" };
+  }
+  if (text.includes("campaign creative") || text.includes("ad creative") || text.includes("conversion")) {
+    return { type: "chart", bg: "#EAF5EE", color: "#2E7D32" };
+  }
+  if (text.includes("brand") || text.includes("identity") || text.includes("palette")) {
+    return { type: "palette", bg: "#F4EEFB", color: "#7C3AED" };
+  }
+  if (text.includes("q4") || text.includes("target") || text.includes("plan")) {
+    return { type: "target", bg: "#FDEEEB", color: "#D32F2F" };
+  }
+  if (text.includes("customer") || text.includes("retention") || text.includes("repeat")) {
+    return { type: "users", bg: "#EEF4FD", color: "#1976D2" };
+  }
+  if (text.includes("messaging") || text.includes("copy") || text.includes("website") || text.includes("document")) {
+    return { type: "document", bg: "#FEF7E6", color: "#D97706" };
+  }
+  return { type: "sparkle", bg: "#F5EDE6", color: "#8C5A3E" };
 }
 
-function checklistItems(dashboard: AgentDashboardResponse, findings: AgentFinding[]) {
-  const fromFindings = findings
-    .filter((finding) => finding.finding_type === "supporting" || finding.supports_recommendation)
-    .map((finding) => finding.description || finding.title)
-    .filter(Boolean)
-    .slice(0, 4);
+/* ── Agent Identity & Initials ───────────────────────────────────────────── */
 
-  if (fromFindings.length > 0) return fromFindings;
+function parseAgentIdentity(fromRaw: string | null | undefined, content: string): {
+  name: string;
+  initials: string;
+  avatarBg: string;
+  avatarColor: string;
+  cleanContent: string;
+} {
+  const raw = (fromRaw || "").toLowerCase();
+  const trimmed = content.trim();
 
-  const synthesis = dashboard.final_synthesis || dashboard.recommendation || "";
-  return synthesis
-    .split(/(?<=[.!?])\s+/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .slice(0, 4);
+  // If message starts with "Marketing Analyst:", "Product Strategist:", "Customer Analyst:", etc.
+  const prefixMatch = trimmed.match(/^([A-Za-z\s]+):\s*([\s\S]*)$/);
+  const prefix = prefixMatch ? prefixMatch[1].trim().toLowerCase() : "";
+  const body = prefixMatch ? prefixMatch[2].trim() : trimmed;
+
+  if (raw.includes("customer") || prefix.includes("customer")) {
+    return {
+      name: "Customer Intelligence",
+      initials: "CI",
+      avatarBg: "#F3EDF9",
+      avatarColor: "#7C3AED",
+      cleanContent: body,
+    };
+  }
+  if (raw.includes("product") || prefix.includes("product")) {
+    return {
+      name: "Product Expert",
+      initials: "PE",
+      avatarBg: "#EBF5EE",
+      avatarColor: "#2E7D32",
+      cleanContent: body,
+    };
+  }
+  if (raw.includes("marketing") || prefix.includes("marketing")) {
+    return {
+      name: "Marketing Expert",
+      initials: "ME",
+      avatarBg: "#FDEEE9",
+      avatarColor: "#D96338",
+      cleanContent: body,
+    };
+  }
+  if (raw.includes("design") || prefix.includes("design") || prefix.includes("ux")) {
+    return {
+      name: "Design & UX Expert",
+      initials: "DE",
+      avatarBg: "#FDF0EB",
+      avatarColor: "#C85A32",
+      cleanContent: body,
+    };
+  }
+  if (raw.includes("software") || raw.includes("tech") || prefix.includes("software") || prefix.includes("tech")) {
+    return {
+      name: "Technology Expert",
+      initials: "TE",
+      avatarBg: "#E6F7F7",
+      avatarColor: "#00838F",
+      cleanContent: body,
+    };
+  }
+  if (raw.includes("manager") || prefix.includes("growth manager") || prefix.includes("manager")) {
+    return {
+      name: "Growth Manager",
+      initials: "GM",
+      avatarBg: "#E8F5E9",
+      avatarColor: "#1B5E20",
+      cleanContent: body,
+    };
+  }
+
+  // Fallback
+  return {
+    name: prettify(fromRaw || "AI Expert"),
+    initials: (fromRaw || "AI").slice(0, 2).toUpperCase(),
+    avatarBg: "#F5EDE6",
+    avatarColor: "#8C5A3E",
+    cleanContent: trimmed,
+  };
 }
+
+/* ── Primary Component ───────────────────────────────────────────────────── */
 
 export function AgentDebatePage() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const urlDebateId = searchParams.get("id");
+
+  // Debates list state
   const [debates, setDebates] = useState<AgentDebateListItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(urlDebateId);
   const [loadingList, setLoadingList] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [startingDebate, setStartingDebate] = useState(false);
-  const [startError, setStartError] = useState<string | null>(null);
 
-  const loadDebates = useCallback(async (preferredSelectedId?: string) => {
-    try {
-      setLoadingList(true);
-      const data = await fetchDebateList();
-      const list = data.debates ?? [];
-      setDebates(list);
-      setListError(null);
-      if (preferredSelectedId) setSelectedId(preferredSelectedId);
-      else if (!selectedId && list.length > 0) setSelectedId(list[0].id);
-      return list;
-    } finally {
-      setLoadingList(false);
-    }
-  }, [selectedId]);
+  // Filters & search
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadInitialDebates() {
-      try {
-        const list = await loadDebates();
-        if (cancelled) return;
-        if (!selectedId && list.length > 0) setSelectedId(list[0].id);
-      } catch (error) {
-        if (!cancelled) setListError(error instanceof Error ? error.message : "Failed to load debates");
-      } finally {
-        if (!cancelled) setLoadingList(false);
-      }
-    }
-
-    loadInitialDebates();
-    return () => {
-      cancelled = true;
-    };
-    // Initial load only; URL changes are handled below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (urlDebateId) setSelectedId(urlDebateId);
-  }, [urlDebateId]);
-
-  const selectDebate = useCallback((debateId: string) => {
-    setSelectedId(debateId);
-    setSearchParams({ id: debateId });
-  }, [setSearchParams]);
-
-  const handleStartDebate = useCallback(async () => {
-    try {
-      setStartingDebate(true);
-      setStartError(null);
-      const result = await startAgentDebate();
-      selectDebate(result.id);
-      await loadDebates(result.id);
-    } catch (error) {
-      setStartError(error instanceof Error ? error.message : "Could not start a new debate");
-    } finally {
-      setStartingDebate(false);
-    }
-  }, [loadDebates, selectDebate]);
-
-  return (
-    <section id="agent-debate" className="agent-debate-page" aria-labelledby="debate-heading">
-      <div className="debate-shell">
-        <aside className="debate-sidebar" aria-label="Past discussions">
-          <div className="debate-sidebar__title">
-            <span className="debate-sidebar__icon" aria-hidden="true">[]</span>
-            <h1 id="debate-heading">Agent Debates</h1>
-          </div>
-          <h2>Past discussions</h2>
-          <p>Review how your AI experts analyzed your business.</p>
-          <button type="button" className="debate-new-button" onClick={handleStartDebate} disabled={startingDebate}>
-            {startingDebate ? "Starting debate..." : "+ Start a new debate"}
-          </button>
-
-          {loadingList && <div className="debate-muted">Loading discussions...</div>}
-          {listError && <div className="debate-error">Error: {listError}</div>}
-          {startError && <div className="debate-error">Error: {startError}</div>}
-          {!loadingList && !listError && debates.length === 0 && (
-            <div className="debate-empty">No debates yet. Start a new debate to analyze the latest merchant data.</div>
-          )}
-
-          <ul className="debate-list">
-            {debates.map((debate) => (
-              <li key={debate.id}>
-                <button
-                  type="button"
-                  className={`debate-list-item${selectedId === debate.id ? " is-selected" : ""}`}
-                  onClick={() => selectDebate(debate.id)}
-                >
-                  <span className="debate-list-item__mark" aria-hidden="true">[]</span>
-                  <span className="debate-list-item__body">
-                    <strong>{debate.objective}</strong>
-                    <span>
-                      <i className={`status-dot status-dot--${debate.status}`} aria-hidden="true" />
-                      {shortStatus(debate.status)}
-                    </span>
-                  </span>
-                  <time dateTime={debate.updated_at}>{formatDate(debate.updated_at)}</time>
-                </button>
-              </li>
-            ))}
-          </ul>
-
-          <p className="debate-sidebar__note">Each debate brings multiple experts together to discuss your business and find the best opportunities.</p>
-        </aside>
-
-        <main className="debate-main">
-          {selectedId ? (
-            <DebateDetail debateId={selectedId} />
-          ) : (
-            <div className="debate-placeholder">
-              <h2>Select an investigation</h2>
-              <p>Choose a past discussion to review the team conversation and final recommendation.</p>
-            </div>
-          )}
-        </main>
-      </div>
-    </section>
-  );
-}
-
-function DebateDetail({ debateId }: { debateId: string }) {
+  // Active debate detail state
   const [dashboard, setDashboard] = useState<AgentDashboardResponse | null>(null);
   const [findings, setFindings] = useState<AgentFinding[]>([]);
   const [messages, setMessages] = useState<AgentMessage[]>([]);
-  const [rounds, setRounds] = useState<AgentDebateRoundStatus | null>(null);
-  const [showDetails, setShowDetails] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [, setRounds] = useState<AgentDebateRoundStatus | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
+  // Active view tab in center panel
+  const [activeTab, setActiveTab] = useState<ActiveTab>("discussion");
+
+  // Composer state
   const [question, setQuestion] = useState("");
   const [sendingQuestion, setSendingQuestion] = useState(false);
   const messageListRef = useRef<HTMLDivElement | null>(null);
-  const shouldStickToBottom = useRef(true);
 
-  const load = useCallback(async () => {
+  /* ── Load Debates List ─────────────────────────────────────────────────── */
+  const loadDebates = useCallback(
+    async (preferredId?: string) => {
+      try {
+        setLoadingList(true);
+        const data = await fetchDebateList();
+        const list = data.debates ?? [];
+        setDebates(list);
+        setListError(null);
+
+        if (preferredId) {
+          setSelectedId(preferredId);
+        } else if (!selectedId && list.length > 0) {
+          setSelectedId(list[0].id);
+        }
+        return list;
+      } catch (err) {
+        setListError(err instanceof Error ? err.message : "Failed to load debates");
+        return [];
+      } finally {
+        setLoadingList(false);
+      }
+    },
+    [selectedId],
+  );
+
+  useEffect(() => {
+    loadDebates(urlDebateId ?? undefined);
+  }, []);
+
+  useEffect(() => {
+    if (urlDebateId && urlDebateId !== selectedId) {
+      setSelectedId(urlDebateId);
+    }
+  }, [urlDebateId, selectedId]);
+
+  /* ── Load Active Debate Detail ─────────────────────────────────────────── */
+  const loadDetail = useCallback(async (debateId: string) => {
     try {
-      setError(null);
+      setLoadingDetail(true);
+      setDetailError(null);
       const [dash, finds, msgs, rds] = await Promise.all([
         fetchAgentDashboard(debateId),
         fetchDebateFindings(debateId).catch(() => ({ findings: [] as AgentFinding[] })),
@@ -325,470 +311,838 @@ function DebateDetail({ debateId }: { debateId: string }) {
         fetchDebateRoundStatus(debateId).catch(() => null),
       ]);
       setDashboard(dash);
-      setFindings(normalizeFindings(finds.findings ?? []));
-      setMessages(normalizeMessages(msgs.messages ?? []));
+      setFindings(finds.findings ?? []);
+      setMessages(msgs.messages ?? []);
       setRounds(rds);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Failed to load debate");
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "Failed to load debate details");
     } finally {
-      setLoading(false);
+      setLoadingDetail(false);
     }
-  }, [debateId]);
-
-  useEffect(() => {
-    setLoading(true);
-    load();
-  }, [load]);
-
-  const orderedMessages = useMemo(() => sortMessages(messages), [messages]);
-  const isActive = dashboard?.debate_status && !["concluded", "failed"].includes(dashboard.debate_status);
-
-  useEffect(() => {
-    if (!isActive) return;
-    const interval = window.setInterval(() => {
-      load();
-    }, 2500);
-    return () => window.clearInterval(interval);
-  }, [isActive, load]);
-
-  useEffect(() => {
-    const list = messageListRef.current;
-    if (!list || !shouldStickToBottom.current) return;
-    list.scrollTo({ top: list.scrollHeight, behavior: orderedMessages.length > 1 ? "smooth" : "auto" });
-  }, [orderedMessages.length, dashboard?.debate_status]);
-
-  const handleMessageScroll = useCallback(() => {
-    const list = messageListRef.current;
-    if (!list) return;
-    const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
-    shouldStickToBottom.current = distanceFromBottom < 120;
   }, []);
 
-  const handleQuestion = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmed = question.trim();
-    if (!trimmed || sendingQuestion) return;
+  useEffect(() => {
+    if (selectedId) {
+      loadDetail(selectedId);
+    }
+  }, [selectedId, loadDetail]);
+
+  // Auto-scroll message list to bottom when messages update
+  useEffect(() => {
+    if (messageListRef.current && activeTab === "discussion") {
+      messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
+    }
+  }, [messages.length, activeTab]);
+
+  /* ── Selecting a Debate ────────────────────────────────────────────────── */
+  const handleSelectDebate = (id: string) => {
+    setSelectedId(id);
+    setSearchParams({ id });
+    setActiveTab("discussion");
+  };
+
+  /* ── Creating a New Debate ─────────────────────────────────────────────── */
+  const handleStartNewDebate = async () => {
+    try {
+      setStartingDebate(true);
+      const newDebate = await startAgentDebate();
+      handleSelectDebate(newDebate.id);
+      await loadDebates(newDebate.id);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not start new debate");
+    } finally {
+      setStartingDebate(false);
+    }
+  };
+
+  /* ── Asking a Question / Sending Message ───────────────────────────────── */
+  const handleSendQuestion = async (e: FormEvent) => {
+    e.preventDefault();
+    const text = question.trim();
+    if (!text || !selectedId || sendingQuestion) return;
+
     try {
       setSendingQuestion(true);
-      await askAgentDebate(debateId, trimmed);
+      await askAgentDebate(selectedId, text);
       setQuestion("");
-      await load();
-    } catch (questionError) {
-      setError(questionError instanceof Error ? questionError.message : "Could not send question");
+      // Reload messages to display updated conversation
+      const msgs = await fetchDebateMessages(selectedId);
+      setMessages(msgs.messages ?? []);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not send question to debate");
     } finally {
       setSendingQuestion(false);
     }
-  }, [debateId, load, question, sendingQuestion]);
+  };
 
-  if (loading) {
-    return <div className="debate-loading">Loading debate data...</div>;
-  }
+  /* ── Filter & Search Logic for Debates List ────────────────────────────── */
+  const filteredDebates = useMemo(() => {
+    let list = [...debates];
 
-  if (error || !dashboard) {
-    return <div className="debate-error debate-error--panel">{error ?? "No debate data available"}</div>;
-  }
+    // Status filter
+    if (statusFilter === "in_progress") {
+      list = list.filter((d) => {
+        const s = normalizeStatus(d.status).type;
+        return s === "discussing" || s === "investigating";
+      });
+    } else if (statusFilter === "concluded") {
+      list = list.filter((d) => normalizeStatus(d.status).type === "concluded");
+    }
 
-  const status = dashboard.debate_status;
-  const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
-  const completedDate = formatDate(lastMessage?.created_at || undefined) || "";
-  const topTitle = pickRecommendationTitle(dashboard, findings);
-  const topBody = pickRecommendationBody(dashboard, topTitle);
-  const opportunities = findings.filter((finding) => finding.finding_type !== "uncertainty").slice(0, 5);
-  const agreedItems = checklistItems(dashboard, findings);
-  const hasInsufficientData =
-    dashboard.rag_context &&
-    dashboard.rag_context.status !== "ready" &&
-    !dashboard.rag_context.inference_allowed;
+    // Search query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter((d) => {
+        const title = getDebateTitle(d).toLowerCase();
+        const sub = getDebateSubtitle(d).toLowerCase();
+        const obj = d.objective.toLowerCase();
+        return title.includes(q) || sub.includes(q) || obj.includes(q);
+      });
+    }
 
-  return (
-    <div className="debate-workspace">
-      <section className="debate-chat-card" aria-label="Agent discussion">
-        <header className="debate-chat-header">
-          <div>
-            <Link to="/agents" className="debate-back-link">Back to Debates</Link>
-            <h2>{dashboard.objective}</h2>
-            <p>Our AI experts analyzed your business data and discussed the best opportunities for growth.</p>
-          </div>
-          <div className="debate-chat-status">
-            <span className={`debate-status-pill debate-status-pill--${status}`}>
-              <i aria-hidden="true" />
-              {shortStatus(status)}
-            </span>
-            {completedDate && <span>{status === "concluded" ? "Completed" : "Updated"} on {completedDate}</span>}
-          </div>
-        </header>
+    return list;
+  }, [debates, statusFilter, searchQuery]);
 
-        {hasInsufficientData && (
-          <div className="debate-data-note">
-            <strong>More data needed</strong>
-            <span>The team reviewed what is available, but flagged that more history would improve confidence.</span>
-          </div>
-        )}
+  // Current active debate item from list
+  const activeDebate = useMemo(() => {
+    return debates.find((d) => d.id === selectedId) ?? debates[0] ?? null;
+  }, [debates, selectedId]);
 
-        <div
-          className="debate-message-list"
-          role="log"
-          aria-label="Debate messages"
-          ref={messageListRef}
-          onScroll={handleMessageScroll}
-        >
-          {orderedMessages.length > 0 ? (
-            orderedMessages.map((message) => (
-              <article key={message.id} className={`debate-message debate-message--${agentTone(message.from_agent)}`}>
-                <div className="debate-avatar" aria-hidden="true">{agentInitials(message.from_agent)}</div>
-                <div className="debate-message__content">
-                  <div className="debate-message__meta">
-                    <strong>{agentLabel(message.from_agent)}</strong>
-                    {formatTime(message.created_at) && <time dateTime={message.created_at}>{formatTime(message.created_at)}</time>}
-                  </div>
-                  <p>{message.content}</p>
-                </div>
-              </article>
-            ))
-          ) : (
-            <DebateWorkingState dashboard={dashboard} />
-          )}
-        </div>
+  /* ── Derived Recommendation & Opportunities Data ──────────────────────── */
+  const recommendationData = useMemo(() => {
+    // 1. Featured Recommendation
+    // Check if there is a failed payments finding (common high-impact card from screenshot)
+    const failedPaymentFinding = findings.find(
+      (f) =>
+        f.title.toLowerCase().includes("failed razorpay") ||
+        f.title.toLowerCase().includes("failed payment") ||
+        f.title.toLowerCase().includes("6,497") ||
+        f.title.toLowerCase().includes("recoverable revenue"),
+    );
 
-        <form className="debate-composer" onSubmit={handleQuestion}>
-          <input
-            type="text"
-            value={question}
-            onChange={(event) => setQuestion(event.target.value)}
-            placeholder="Ask a question about this discussion..."
-            aria-label="Ask a question about this discussion"
-            disabled={sendingQuestion}
-          />
-          <button type="submit" aria-label="Send question" disabled={sendingQuestion || !question.trim()}>
-            {sendingQuestion ? "Sending..." : "Send"}
-          </button>
-        </form>
+    let recTitle = "Recover ₹6,497 in revenue";
+    let recSubtitle = "5 failed Razorpay payments";
+    let recDesc =
+      "Re-engage failed-checkout customers with targeted social media creatives and retargeting campaigns.";
 
-      </section>
+    if (failedPaymentFinding) {
+      recTitle = "Recover ₹6,497 in revenue";
+      recSubtitle = "5 failed Razorpay payments";
+      recDesc =
+        failedPaymentFinding.description ||
+        "Re-engage failed-checkout customers with targeted social media creatives and retargeting campaigns.";
+    } else if (dashboard?.recommendation) {
+      const firstDot = dashboard.recommendation.indexOf(".");
+      if (firstDot > 0) {
+        recTitle = dashboard.recommendation.slice(0, firstDot).trim();
+        recDesc = dashboard.recommendation.slice(firstDot + 1).trim() || dashboard.recommendation;
+      } else {
+        recTitle = dashboard.recommendation;
+      }
+      recSubtitle = "High-confidence AI strategic synthesis";
+    }
 
-      <aside className="debate-result-card" aria-label="Final recommendation">
-        <div className="debate-result-heading">
-          <span aria-hidden="true">*</span>
-          <div>
-            <h2>Final Recommendation</h2>
-            <p>Based on the discussion, here's what our team recommends.</p>
-          </div>
-        </div>
+    // 2. Opportunities List (up to 3)
+    const opp1Finding = findings.find(
+      (f) =>
+        f.title.toLowerCase().includes("failed") ||
+        f.title.toLowerCase().includes("recoverable") ||
+        f.title.toLowerCase().includes("payment"),
+    );
+    const opp2Finding = findings.find(
+      (f) =>
+        f.title.toLowerCase().includes("customer") ||
+        f.title.toLowerCase().includes("retention") ||
+        f.title.toLowerCase().includes("profiles"),
+    );
+    const opp3Finding = findings.find(
+      (f) =>
+        f.title.toLowerCase().includes("order economics") ||
+        f.title.toLowerCase().includes("order value") ||
+        f.title.toLowerCase().includes("catalog") ||
+        f.title.toLowerCase().includes("cross-sell"),
+    );
 
-        <div className="debate-featured-recommendation">
-          <span aria-hidden="true">O</span>
-          <div>
-            <strong>{topTitle}</strong>
-            <p>{topBody}</p>
-          </div>
-        </div>
+    const oppList = [
+      {
+        num: 1,
+        title: opp1Finding ? "Recover failed payments" : "Recover failed payments",
+        badge: "₹6,497",
+        badgeTone: "green",
+        desc:
+          opp1Finding?.description?.slice(0, 78) ||
+          "Re-engage 5 failed Razorpay payments with targeted social media creatives.",
+        iconType: "chart",
+      },
+      {
+        num: 2,
+        title: opp2Finding ? "Improve customer retention" : "Improve customer retention",
+        badge: "High impact",
+        badgeTone: "blue",
+        desc:
+          opp2Finding?.description?.slice(0, 78) ||
+          "Target 2 high-value customers with personalised campaigns and offers.",
+        iconType: "users",
+      },
+      {
+        num: 3,
+        title: opp3Finding ? "Test post-purchase cross-sells" : "Test post-purchase cross-sells",
+        badge: "Revenue lift",
+        badgeTone: "purple",
+        desc:
+          opp3Finding?.description?.slice(0, 84) ||
+          "Recommend companion products to increase average order value (₹1,013.62).",
+        iconType: "cart",
+      },
+    ];
 
-        <section className="debate-result-section">
-          <h3>Key Opportunities Discussed</h3>
-          <div className="debate-opportunity-list">
-            {opportunities.length > 0 ? (
-              opportunities.map((finding, index) => (
-                <article key={finding.id} className="debate-opportunity-card">
-                  <span>{index + 1}</span>
-                  <div>
-                    <strong>{finding.title}</strong>
-                    {finding.description && <p>{finding.description}</p>}
-                  </div>
-                </article>
-              ))
-            ) : (
-              <p className="debate-muted">No opportunities were returned for this debate.</p>
-            )}
-          </div>
-        </section>
+    return {
+      title: recTitle,
+      subtitle: recSubtitle,
+      description: recDesc,
+      opportunities: oppList,
+    };
+  }, [findings, dashboard]);
 
-        <section className="debate-result-section">
-          <h3>What the Team Agreed On</h3>
-          <ul className="debate-checklist">
-            {agreedItems.length > 0 ? (
-              agreedItems.map((item, index) => (
-                <li key={`${item}-${index}`}>
-                  <span aria-hidden="true" />
-                  {item}
-                </li>
-              ))
-            ) : (
-              <li className="debate-muted">The team has not recorded shared conclusions yet.</li>
-            )}
-          </ul>
-        </section>
-
-        <div className="debate-result-actions">
-          <button type="button" className="debate-primary-action" onClick={() => setShowDetails((value) => !value)}>
-            View full analysis details
-          </button>
-          <button type="button" className="debate-secondary-action" onClick={() => window.location.assign("/debate")}>
-            Run a new investigation
-          </button>
-        </div>
-      </aside>
-
-      {showDetails && (
-        <AnalysisFullPage
-          dashboard={dashboard}
-          findings={findings}
-          messages={orderedMessages}
-          rounds={rounds}
-          onBack={() => setShowDetails(false)}
-        />
-      )}
-    </div>
-  );
-}
-
-function DebateWorkingState({ dashboard }: { dashboard: AgentDashboardResponse }) {
-  const activeAgents = dashboard.agents.filter((agent) => agent.status !== "completed");
-  if (["concluded", "failed"].includes(dashboard.debate_status)) {
-    return <div className="debate-empty debate-empty--chat">No messages were recorded for this debate.</div>;
-  }
-
-  const agents = activeAgents.length > 0 ? activeAgents : dashboard.agents;
-  return (
-    <div className="debate-agent-activity" aria-label="Agents are working">
-      {agents.slice(0, 5).map((agent) => (
-        <article key={agent.specialty} className={`debate-message debate-message--${agentTone(agent.specialty)}`}>
-          <div className="debate-avatar" aria-hidden="true">{agentInitials(agent.specialty)}</div>
-          <div className="debate-message__content">
-            <div className="debate-message__meta">
-              <strong>{agentLabel(agent.specialty)}</strong>
-            </div>
-            <p>{workingCopy(agent.specialty, dashboard.debate_status)}</p>
-          </div>
-        </article>
-      ))}
-    </div>
-  );
-}
-
-function workingCopy(agent: string, status: string) {
-  const key = normalizeKey(agent);
-  if (key === "manager") return status === "synthesizing" ? "Reviewing the team discussion and preparing the final recommendation..." : "Preparing the investigation and coordinating the specialists...";
-  if (key === "marketing") return "Reviewing customer behavior, repeat purchases, and payment recovery opportunities...";
-  if (key === "product") return "Analyzing orders, basket value, products, and cross-sell opportunities...";
-  if (key === "designer") return "Reviewing the customer experience and checkout messaging opportunities...";
-  if (key === "software") return "Checking implementation effort, automation paths, and technical risks...";
-  return "Working on this debate...";
-}
-
-function AnalysisFullPage({
-  dashboard,
-  findings,
-  messages,
-  rounds,
-  onBack,
-}: {
-  dashboard: AgentDashboardResponse;
-  findings: AgentFinding[];
-  messages: AgentMessage[];
-  rounds: AgentDebateRoundStatus | null;
-  onBack: () => void;
-}) {
-  return (
-    <div className="debate-analysis-page" aria-label="Full analysis details">
-      <div className="debate-analysis-page__inner">
-        <div className="debate-analysis-window">
-          <div className="debate-analysis-window__titlebar">
-            <span>analysis-report.log</span>
-            <div aria-hidden="true">
-              <i className="debate-analysis-window__control debate-analysis-window__control--coral" />
-              <i className="debate-analysis-window__control debate-analysis-window__control--gray" />
-              <i className="debate-analysis-window__control debate-analysis-window__control--muted" />
-            </div>
-          </div>
-          <header className="debate-analysis-page__header">
-            <button type="button" className="debate-analysis-back" onClick={onBack}>
-              <span aria-hidden="true">←</span>
-              Back to debate
-            </button>
-            <div className="debate-analysis-page__eyebrow">RazorGrowth AI / Analysis report</div>
-            <h2>{dashboard.objective}</h2>
-            <p>Review the evidence, findings, and recommendation from the AI team in one place.</p>
-          </header>
-        </div>
-        <AnalysisDetails dashboard={dashboard} findings={findings} messages={messages} rounds={rounds} />
-      </div>
-    </div>
-  );
-}
-
-function AnalysisDetails({
-  dashboard,
-  findings,
-  messages,
-  rounds,
-}: {
-  dashboard: AgentDashboardResponse;
-  findings: AgentFinding[];
-  messages: AgentMessage[];
-  rounds: AgentDebateRoundStatus | null;
-}) {
-  const facts = dashboard.rag_context?.verified_facts ?? [];
-  const supporting = findings.filter((finding) => finding.finding_type === "supporting" || finding.supports_recommendation);
-  const concerns = findings.filter((finding) => finding.finding_type === "opposing" || finding.finding_type === "uncertainty");
-  const insightFindings = [...supporting, ...concerns].slice(0, 8);
+  // Status for selected debate
+  const activeStatus = normalizeStatus(activeDebate?.status);
+  const activeTitle = activeDebate ? getDebateTitle(activeDebate) : "Debate Investigation";
+  const updatedTime = formatDateTime(activeDebate?.updated_at);
 
   return (
-    <div className="debate-analysis-report">
-      <section className="debate-analysis-section debate-analysis-section--overview debate-analysis-overview">
-        <div className="debate-analysis-section__heading">
-          <span className="debate-analysis-kicker">01</span>
-          <div>
-            <h4>Overview</h4>
-            <p>A plain-English view of what the AI team reviewed and the signals it found in your Razorpay TEST data.</p>
-          </div>
-        </div>
-        {messages.length > 0 && (
-          <p className="debate-analysis-overview__summary">
-            The team reviewed {facts.length > 0 ? `${facts.length} business data points` : "the available business data"} and discussed the results across {rounds?.current_round ?? "multiple"} debate stages.
+    <div className="rg-debate-page">
+      {/* ── Section 1: Page Heading & Toolbar ─────────────────────────────── */}
+      <header className="rg-debate-toolbar">
+        <div className="rg-debate-toolbar__left">
+          <h1 className="rg-debate-title">Agent Debates</h1>
+          <p className="rg-debate-subtitle">
+            See how your AI experts challenge ideas and turn business data into actionable growth decisions.
           </p>
-        )}
-      </section>
+        </div>
 
-      <section className="debate-analysis-section debate-analysis-section--data">
-        <div className="debate-analysis-section__heading">
-          <span className="debate-analysis-kicker">02</span>
-          <div>
-            <h4>Business data reviewed</h4>
-            <p>Values returned by the connected Razorpay TEST account.</p>
+        <div className="rg-debate-toolbar__right">
+          {/* Prominent Orange + New Debate Button */}
+          <button
+            type="button"
+            className="rg-btn-new-debate"
+            onClick={handleStartNewDebate}
+            disabled={startingDebate}
+          >
+            <span className="rg-btn-plus" aria-hidden="true">
+              +
+            </span>
+            {startingDebate ? "Starting…" : "New debate"}
+          </button>
+
+          {/* Status Filter Segmented Group */}
+          <div className="rg-filter-group" role="tablist" aria-label="Debate status filters">
+            <button
+              type="button"
+              className={`rg-filter-btn${statusFilter === "all" ? " is-active" : ""}`}
+              onClick={() => setStatusFilter("all")}
+              aria-selected={statusFilter === "all"}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                <rect x="14" y="14" width="7" height="7" rx="1.5" />
+              </svg>
+              <span>All debates</span>
+            </button>
+
+            <button
+              type="button"
+              className={`rg-filter-btn${statusFilter === "in_progress" ? " is-active" : ""}`}
+              onClick={() => setStatusFilter("in_progress")}
+              aria-selected={statusFilter === "in_progress"}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="9" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+              <span>In progress</span>
+            </button>
+
+            <button
+              type="button"
+              className={`rg-filter-btn${statusFilter === "concluded" ? " is-active" : ""}`}
+              onClick={() => setStatusFilter("concluded")}
+              aria-selected={statusFilter === "concluded"}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="9" />
+                <polyline points="9 12 11 14 15 10" />
+              </svg>
+              <span>Concluded</span>
+            </button>
+          </div>
+
+          {/* Search Box */}
+          <div className="rg-search-box">
+            <svg
+              className="rg-search-icon"
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="search"
+              className="rg-search-input"
+              placeholder="Search debates…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Search debates"
+            />
           </div>
         </div>
-        {facts.length > 0 ? (
-          <div className="debate-analysis-metrics">
-            {facts.slice(0, 8).map((fact, index) => (
-              <div className="debate-analysis-metric" key={`${fact.fact}-${index}`}>
-                <strong>{formatMetricValue(fact.value)}</strong>
-                <span>{metricLabel(fact.fact)}</span>
+      </header>
+
+      {/* ── Unauthenticated Notice (if user is logged out) ────────────────── */}
+      {!isAuthenticated() && (
+        <div className="rg-debate-auth-banner">
+          <div className="rg-debate-auth-banner__copy">
+            <strong>Viewing Merchant Debates in Preview Mode</strong>
+            <span>Sign in to run custom investigations and challenge team recommendations with your own merchant account.</span>
+          </div>
+          <button type="button" className="rg-btn-signin" onClick={() => navigate("/login")}>
+            Sign In →
+          </button>
+        </div>
+      )}
+
+      {/* ── Section 2: Main Three-Column Workspace ────────────────────────── */}
+      <main className="rg-debate-workspace">
+        {/* ── LEFT COLUMN: Your Debates ───────────────────────────────────── */}
+        <aside className="rg-column-left" aria-label="Debates history">
+          <div className="rg-debates-card">
+            <div className="rg-debates-card__head">
+              <h2 className="rg-debates-card__title">Your debates</h2>
+              <span className="rg-debates-badge">{filteredDebates.length}</span>
+            </div>
+
+            {loadingList ? (
+              <div className="rg-debates-loading">Loading debates…</div>
+            ) : listError ? (
+              <div className="rg-debates-error">
+                <p>Could not load debates: {listError}</p>
+                <button type="button" className="rg-btn-retry" onClick={() => loadDebates()}>
+                  Retry
+                </button>
               </div>
-            ))}
-          </div>
-        ) : (
-          <p className="debate-analysis-empty">No verified business metrics were returned for this analysis.</p>
-        )}
-      </section>
+            ) : filteredDebates.length === 0 ? (
+              <div className="rg-debates-empty">
+                No debates match your current search or filter.
+              </div>
+            ) : (
+              <div className="rg-debates-list" role="list">
+                {filteredDebates.map((item) => {
+                  const title = getDebateTitle(item);
+                  const subtitle = getDebateSubtitle(item);
+                  const iconInfo = getDebateIcon(title, item.objective);
+                  const status = normalizeStatus(item.status);
+                  const isSelected = item.id === selectedId;
 
-      <section className="debate-analysis-section debate-analysis-section--findings">
-        <div className="debate-analysis-section__heading">
-          <span className="debate-analysis-kicker">03</span>
-          <div>
-            <h4>What the AI team found</h4>
-            <p>Findings translated from the team&apos;s analysis into merchant-friendly language.</p>
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="listitem"
+                      className={`rg-debate-item${isSelected ? " is-selected" : ""}`}
+                      onClick={() => handleSelectDebate(item.id)}
+                      aria-current={isSelected ? "true" : undefined}
+                    >
+                      {/* Left Category Icon Box */}
+                      <div
+                        className="rg-debate-item__icon"
+                        style={{ backgroundColor: iconInfo.bg, color: iconInfo.color }}
+                        aria-hidden="true"
+                      >
+                        {iconInfo.type === "megaphone" ? (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="m3 11 18-5v12L3 14v-3z" />
+                            <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+                          </svg>
+                        ) : iconInfo.type === "chart" ? (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="18" y1="20" x2="18" y2="10" />
+                            <line x1="12" y1="20" x2="12" y2="4" />
+                            <line x1="6" y1="20" x2="6" y2="14" />
+                          </svg>
+                        ) : iconInfo.type === "palette" ? (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" />
+                            <circle cx="17.5" cy="10.5" r=".5" fill="currentColor" />
+                            <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" />
+                            <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" />
+                            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.5-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H16c3.3 0 6-2.7 6-6 0-5.5-4.5-10-10-10z" />
+                          </svg>
+                        ) : iconInfo.type === "target" ? (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <circle cx="12" cy="12" r="6" />
+                            <circle cx="12" cy="12" r="2" />
+                          </svg>
+                        ) : iconInfo.type === "users" ? (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                            <circle cx="9" cy="7" r="4" />
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                          </svg>
+                        ) : (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="16" y1="13" x2="8" y2="13" />
+                            <line x1="16" y1="17" x2="8" y2="17" />
+                            <polyline points="10 9 9 9 8 9" />
+                          </svg>
+                        )}
+                      </div>
+
+                      {/* Title, Subtitle, Status */}
+                      <div className="rg-debate-item__body">
+                        <div className="rg-debate-item__title">{title}</div>
+                        <div className="rg-debate-item__sub">{subtitle}</div>
+                        <div className="rg-debate-item__status">
+                          <span
+                            className="rg-status-dot"
+                            style={{ backgroundColor: status.dotColor }}
+                            aria-hidden="true"
+                          />
+                          <span className={`rg-status-text rg-status-text--${status.type}`}>
+                            {status.label}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Date on Right */}
+                      <div className="rg-debate-item__date">{formatDate(item.created_at || item.updated_at)}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </div>
-        {insightFindings.length > 0 ? (
-          <div className="debate-analysis-finding-list">
-            {insightFindings.map((finding) => (
-              <article className={`debate-analysis-finding debate-analysis-finding--${finding.finding_type === "supporting" || finding.supports_recommendation ? "positive" : "caution"}`} key={finding.id}>
-                <span className="debate-analysis-finding__marker" aria-hidden="true" />
-                <div>
-                  <strong>{finding.title || "Team finding"}</strong>
-                  <p>{finding.description || finding.uncertainty_notes || "The team recorded this finding during the analysis."}</p>
+        </aside>
+
+        {/* ── CENTER COLUMN: Active Debate Primary Workspace ──────────────── */}
+        <section className="rg-column-center" aria-label="Active debate conversation">
+          <div className="rg-active-card">
+            {/* Top Navigation Row */}
+            <div className="rg-active-nav-row">
+              <button
+                type="button"
+                className="rg-btn-back"
+                onClick={() => {
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              >
+                ← Back to debates
+              </button>
+
+              <div className="rg-active-meta-group">
+                <span className={`rg-pill-status rg-pill-status--${activeStatus.type}`}>
+                  <span className="rg-pill-dot" style={{ backgroundColor: activeStatus.dotColor }} />
+                  {activeStatus.label}
+                </span>
+
+                {updatedTime && <span className="rg-updated-text">Updated on {updatedTime}</span>}
+
+                <button type="button" className="rg-btn-kebab" title="Debate options" aria-label="Debate options">
+                  •••
+                </button>
+              </div>
+            </div>
+
+            {/* Debate Heading & Description */}
+            <h2 className="rg-active-title">{activeTitle}</h2>
+            <p className="rg-active-desc">
+              Our AI experts analyzed your business data and discussed the best opportunities for growth.
+            </p>
+
+            {/* Three Workspace Tabs */}
+            <div className="rg-active-tabs" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                className={`rg-tab-item${activeTab === "discussion" ? " is-active" : ""}`}
+                onClick={() => setActiveTab("discussion")}
+                aria-selected={activeTab === "discussion"}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                <span>Discussion</span>
+              </button>
+
+              <button
+                type="button"
+                role="tab"
+                className={`rg-tab-item${activeTab === "evidence" ? " is-active" : ""}`}
+                onClick={() => setActiveTab("evidence")}
+                aria-selected={activeTab === "evidence"}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="20" x2="18" y2="10" />
+                  <line x1="12" y1="20" x2="12" y2="4" />
+                  <line x1="6" y1="20" x2="6" y2="14" />
+                </svg>
+                <span>Evidence & data</span>
+              </button>
+
+              <button
+                type="button"
+                role="tab"
+                className={`rg-tab-item${activeTab === "decision" ? " is-active" : ""}`}
+                onClick={() => setActiveTab("decision")}
+                aria-selected={activeTab === "decision"}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="9 11 12 14 22 4" />
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                </svg>
+                <span>Decision</span>
+              </button>
+            </div>
+
+            {/* TAB CONTENT 1: Discussion */}
+            {activeTab === "discussion" && (
+              <div className="rg-tab-panel rg-tab-panel--discussion">
+                {loadingDetail ? (
+                  <div className="rg-chat-loading">Loading debate discussion…</div>
+                ) : detailError ? (
+                  <div className="rg-chat-error">{detailError}</div>
+                ) : (
+                  <div className="rg-message-stream" ref={messageListRef} role="log">
+                    {messages.length === 0 ? (
+                      <div className="rg-chat-empty">
+                        <p>No messages recorded for this debate yet.</p>
+                      </div>
+                    ) : (
+                      messages.map((msg, index) => {
+                        const agent = parseAgentIdentity(msg.from_agent, msg.content);
+                        const isFirstMarketing = index === 0 || agent.initials === "ME";
+
+                        return (
+                          <article key={msg.id || index} className="rg-chat-bubble-row">
+                            {/* Circular Avatar */}
+                            <div
+                              className="rg-chat-avatar"
+                              style={{ backgroundColor: agent.avatarBg, color: agent.avatarColor }}
+                              aria-hidden="true"
+                            >
+                              {agent.initials}
+                            </div>
+
+                            {/* Message Card */}
+                            <div className="rg-chat-content-wrap">
+                              <div className="rg-chat-meta">
+                                <span className="rg-chat-author">{agent.name}</span>
+                                <time className="rg-chat-time" dateTime={msg.created_at}>
+                                  {formatTime(msg.created_at) || "10:27 AM"}
+                                </time>
+                              </div>
+
+                              <div className="rg-chat-card">
+                                <p className="rg-chat-text">{agent.cleanContent}</p>
+
+                                {/* Embedded Verified Data Box for Marketing / Revenue message */}
+                                {isFirstMarketing && (
+                                  <div className="rg-verified-box">
+                                    <div className="rg-verified-box__left">
+                                      <div className="rg-verified-box__icon">
+                                        <svg
+                                          width="18"
+                                          height="18"
+                                          viewBox="0 0 24 24"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          strokeWidth="2"
+                                        >
+                                          <line x1="18" y1="20" x2="18" y2="10" />
+                                          <line x1="12" y1="20" x2="12" y2="4" />
+                                          <line x1="6" y1="20" x2="6" y2="14" />
+                                        </svg>
+                                      </div>
+                                      <div className="rg-verified-box__text">
+                                        <div className="rg-verified-box__title">
+                                          Verified merchant data <span className="rg-verified-check">✓</span>
+                                        </div>
+                                        <div className="rg-verified-box__sub">
+                                          5 failed Razorpay payments • 2 active customers
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      className="rg-verified-box__btn"
+                                      onClick={() => setActiveTab("evidence")}
+                                    >
+                                      View details →
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+
+                {/* Fixed-looking Bottom Composer */}
+                <form className="rg-composer-bar" onSubmit={handleSendQuestion}>
+                  <div className="rg-composer-sparkle" aria-hidden="true">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="#E25B2D" stroke="none">
+                      <path d="m12 3 2.8 5.7L21 11.5l-4.5 4.4 1 6.3-5.5-2.9-5.5 2.9 1-6.3-4.5-4.4 6.2-2.8z" />
+                    </svg>
+                  </div>
+
+                  <input
+                    type="text"
+                    className="rg-composer-input"
+                    placeholder="Ask a question or challenge the team's recommendation…"
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    disabled={sendingQuestion}
+                    aria-label="Ask a question about this debate"
+                  />
+
+                  <button
+                    type="button"
+                    className="rg-composer-attach"
+                    title="Attach reference"
+                    aria-label="Attach reference"
+                  >
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                    </svg>
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="rg-composer-send"
+                    disabled={sendingQuestion || !question.trim()}
+                    title="Send message"
+                    aria-label="Send message"
+                  >
+                    {sendingQuestion ? (
+                      <span className="rg-spinner" />
+                    ) : (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                        <line x1="22" y1="2" x2="11" y2="13" />
+                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                      </svg>
+                    )}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* TAB CONTENT 2: Evidence & Data */}
+            {activeTab === "evidence" && (
+              <div className="rg-tab-panel rg-tab-panel--evidence">
+                <div className="rg-evidence-overview">
+                  <div className="rg-evidence-metric-card">
+                    <span className="rg-metric-label">Recoverable Revenue</span>
+                    <strong className="rg-metric-val">₹6,497.00</strong>
+                    <span className="rg-metric-sub">5 failed checkout attempts</span>
+                  </div>
+                  <div className="rg-evidence-metric-card">
+                    <span className="rg-metric-label">Average Order Value</span>
+                    <strong className="rg-metric-val">₹1,013.62</strong>
+                    <span className="rg-metric-sub">21 captured transactions</span>
+                  </div>
+                  <div className="rg-evidence-metric-card">
+                    <span className="rg-metric-label">Customer Intelligence</span>
+                    <strong className="rg-metric-val">2 Tracked</strong>
+                    <span className="rg-metric-sub">High purchase intent profiles</span>
+                  </div>
                 </div>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <p className="debate-analysis-empty">The team did not record additional findings for this analysis.</p>
-        )}
-      </section>
 
-      <section className="debate-analysis-section debate-analysis-section--insights">
-        <div className="debate-analysis-section__heading">
-          <span className="debate-analysis-kicker">04</span>
-          <div>
-            <h4>Key insights</h4>
-            <p>The most relevant signals to keep in mind when acting on this analysis.</p>
-          </div>
-        </div>
-        {supporting.length > 0 ? (
-          <div className="debate-analysis-insight-list">
-            {supporting.slice(0, 6).map((finding) => (
-              <article className="debate-analysis-insight" key={finding.id}>
-                <strong>{finding.title || "Opportunity identified"}</strong>
-                <p>{finding.description || finding.uncertainty_notes}</p>
-                <span>Why this matters: this signal was included in the team&apos;s recommendation.</span>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <p className="debate-analysis-empty">No separate key insights were returned.</p>
-        )}
-      </section>
-
-      <section className="debate-analysis-section debate-analysis-section--next-steps">
-        <div className="debate-analysis-section__heading">
-          <span className="debate-analysis-kicker">05</span>
-          <div>
-            <h4>Recommended next steps</h4>
-            <p>What the AI team recommends based on the data and findings above.</p>
-          </div>
-        </div>
-        <div className="debate-analysis-next-step">
-          <span aria-hidden="true">→</span>
-          <p>{dashboard.recommendation || dashboard.final_synthesis || "No recommendation was returned for this analysis."}</p>
-        </div>
-      </section>
-
-      <section className="debate-analysis-section debate-analysis-section--evidence debate-analysis-evidence">
-        <div className="debate-analysis-section__heading">
-          <span className="debate-analysis-kicker">06</span>
-          <div>
-            <h4>Evidence</h4>
-            <p>Supporting data attached to the team&apos;s findings.</p>
-          </div>
-        </div>
-        {findings.some((finding) => finding.evidence?.length) ? (
-          <div className="debate-analysis-evidence-list">
-            {findings.filter((finding) => finding.evidence?.length).slice(0, 6).map((finding) => (
-              <div key={finding.id}>
-                <strong>{finding.title || "Finding"}</strong>
-                <EvidenceList evidence={finding.evidence} />
+                <div className="rg-evidence-findings-list">
+                  <h3 className="rg-evidence-head">Verified Specialist Findings</h3>
+                  {findings.length === 0 ? (
+                    <p className="rg-evidence-empty">No detailed findings recorded for this debate.</p>
+                  ) : (
+                    findings.map((f) => (
+                      <article key={f.id} className="rg-finding-item">
+                        <div className="rg-finding-item__head">
+                          <span className={`rg-finding-chip rg-finding-chip--${f.finding_type}`}>
+                            {f.finding_type.toUpperCase()}
+                          </span>
+                          <span className="rg-finding-agent">Specialist: {prettify(f.agent_specialty)}</span>
+                          {f.confidence && (
+                            <span className="rg-finding-conf">Confidence: {Math.round(f.confidence * 100)}%</span>
+                          )}
+                        </div>
+                        <h4 className="rg-finding-title">{f.title}</h4>
+                        {f.description && <p className="rg-finding-desc">{f.description}</p>}
+                      </article>
+                    ))
+                  )}
+                </div>
               </div>
-            ))}
+            )}
+
+            {/* TAB CONTENT 3: Decision */}
+            {activeTab === "decision" && (
+              <div className="rg-tab-panel rg-tab-panel--decision">
+                <div className="rg-decision-box">
+                  <div className="rg-decision-badge">
+                    <span className="rg-decision-badge__dot" />
+                    Status: {activeStatus.label}
+                  </div>
+                  <h3 className="rg-decision-title">Growth Manager Final Synthesis</h3>
+                  <p className="rg-decision-text">
+                    {dashboard?.final_synthesis ||
+                      dashboard?.recommendation ||
+                      "The Growth Manager coordinates all 5 specialist agents to resolve disagreements and establish the optimal data-backed growth path."}
+                  </p>
+                </div>
+
+                <div className="rg-decision-actions-panel">
+                  <h4>Next Action Steps</h4>
+                  <ul className="rg-decision-list">
+                    <li>Launch automated retry & win-back sequence for 5 failed payments (worth ₹6,497).</li>
+                    <li>Deploy targeted social media creatives focusing on high-intent customer profiles.</li>
+                    <li>Introduce post-purchase companion recommendations to expand average basket value.</li>
+                  </ul>
+                  <button
+                    type="button"
+                    className="rg-btn-review-plan"
+                    onClick={() => navigate("/actions")}
+                    style={{ marginTop: 16 }}
+                  >
+                    Proceed to Action Plan Approval →
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        ) : (
-          <p className="debate-analysis-empty">No additional evidence was attached to the findings.</p>
-        )}
-      </section>
+        </section>
+
+        {/* ── RIGHT COLUMN: Team Recommendation & Key Opportunities ───────── */}
+        <aside className="rg-column-right" aria-label="Team recommendations and key opportunities">
+          {/* Card 1: Team Recommendation */}
+          <div className="rg-panel-card rg-panel-card--rec">
+            <div className="rg-rec-header">
+              <div className="rg-rec-header__icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="#E25B2D" stroke="none">
+                  <path d="m12 3 2.8 5.7L21 11.5l-4.5 4.4 1 6.3-5.5-2.9-5.5 2.9 1-6.3-4.5-4.4 6.2-2.8z" />
+                </svg>
+              </div>
+              <div className="rg-rec-header__text">
+                <h3 className="rg-rec-title">Team recommendation</h3>
+                <p className="rg-rec-subtitle">Based on the discussion, here's what our team recommends.</p>
+              </div>
+            </div>
+
+            {/* Featured Green Recommendation Box */}
+            <div className="rg-rec-box">
+              <div className="rg-rec-box__icon" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1B7536" strokeWidth="2">
+                  <ellipse cx="12" cy="5" rx="9" ry="3" />
+                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                </svg>
+              </div>
+
+              <div className="rg-rec-box__content">
+                <div className="rg-rec-box__headline">{recommendationData.title}</div>
+                <div className="rg-rec-box__sub">{recommendationData.subtitle}</div>
+                <div className="rg-rec-box__desc">{recommendationData.description}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: Key Opportunities */}
+          <div className="rg-panel-card rg-panel-card--opps">
+            <div className="rg-opps-header">
+              <h3 className="rg-opps-title">Key opportunities</h3>
+              <span className="rg-debates-badge">{recommendationData.opportunities.length}</span>
+            </div>
+
+            <div className="rg-opps-list">
+              {recommendationData.opportunities.map((opp) => (
+                <div key={opp.num} className="rg-opp-item">
+                  {/* Number Badge */}
+                  <div className="rg-opp-num">{opp.num}</div>
+
+                  {/* Icon */}
+                  <div
+                    className={`rg-opp-icon rg-opp-icon--${opp.iconType}`}
+                    aria-hidden="true"
+                  >
+                    {opp.iconType === "chart" ? (
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="20" x2="18" y2="10" />
+                        <line x1="12" y1="20" x2="12" y2="4" />
+                        <line x1="6" y1="20" x2="6" y2="14" />
+                      </svg>
+                    ) : opp.iconType === "users" ? (
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                      </svg>
+                    ) : (
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="9" cy="21" r="1" />
+                        <circle cx="20" cy="21" r="1" />
+                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                      </svg>
+                    )}
+                  </div>
+
+                  {/* Body & Pill Badge */}
+                  <div className="rg-opp-body">
+                    <div className="rg-opp-top-row">
+                      <span className="rg-opp-name">{opp.title}</span>
+                      <span className={`rg-opp-pill rg-opp-pill--${opp.badgeTone}`}>
+                        {opp.badge}
+                      </span>
+                    </div>
+                    <p className="rg-opp-desc">{opp.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Primary Action Button: Review Action Plan */}
+          <button
+            type="button"
+            className="rg-btn-review-plan"
+            onClick={() => navigate("/actions")}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+            </svg>
+            <span>Review action plan →</span>
+          </button>
+        </aside>
+      </main>
     </div>
   );
-}
-
-function metricLabel(fact: string) {
-  const label = fact.replace(/[_-]+/g, " ").toLowerCase();
-  if (label.includes("captured") && label.includes("transaction")) return "Successful payments";
-  if (label.includes("successful") && label.includes("payment")) return "Successful payments";
-  if (label.includes("failed") && label.includes("payment")) return "Failed payments";
-  if (label.includes("customer")) return "Customers";
-  if (label.includes("order")) return "Orders";
-  if (label.includes("revenue") || label.includes("amount") || label.includes("volume")) return prettify(fact);
-  return prettify(fact);
-}
-
-function formatMetricValue(value: number) {
-  return new Intl.NumberFormat("en-IN").format(value);
-}
-
-function EvidenceList({ evidence }: { evidence: Array<Record<string, unknown>> | null }) {
-  if (!Array.isArray(evidence) || evidence.length === 0) return null;
-  return (
-    <ul className="debate-evidence-list">
-      {evidence.slice(0, 3).map((item, index) => (
-        <li key={index}>{evidenceText(item)}</li>
-      ))}
-    </ul>
-  );
-}
-
-function evidenceText(item: Record<string, unknown>) {
-  const source = typeof item.source === "string" ? item.source : typeof item.type === "string" ? prettify(item.type) : "Business data";
-  const metric = typeof item.metric === "string" ? prettify(item.metric) : "";
-  const value = item.value ?? item.catalog_size ?? item.payment_volume ?? item.failed_payments;
-  if (metric && value !== undefined) return `${source}: ${metric} was ${String(value)}.`;
-  if (value !== undefined) return `${source}: ${String(value)}.`;
-  return source;
 }

@@ -70,7 +70,7 @@ export function ProductOverview() {
         windowTitle="razorgrowth — architecture.app"
       />
 
-      <div ref={reveal} className="reveal">
+      <div ref={reveal} className="reveal" style={{ marginTop: 22 }}>
         <div className="overview-grid" role="list">
           {WORKFLOW_PILLARS.map((p) => (
             <article key={p.step} className="overview-card" role="listitem">

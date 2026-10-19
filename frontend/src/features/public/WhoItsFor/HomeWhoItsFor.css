@@ -6,9 +6,9 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-auto-rows: 1fr;
-  gap: 18px;
+  gap: 16px;
   width: 100%;
-  margin-top: 28px;
+  margin-top: 0;
 }
 
 .who-card {
@@ -19,17 +19,16 @@
   flex-direction: column;
   padding: 18px;
   overflow: hidden;
-  background: var(--paper-bright);
-  border: 1px solid var(--line-soft);
+  background: var(--paper);
+  border: 1px solid var(--line);
   border-radius: var(--radius-window);
-  box-shadow: var(--shadow-float-card);
-  opacity: 0;
-  transform: translateY(16px);
+  box-shadow: 3px 3px 0 rgba(33, 19, 14, 0.08);
+  opacity: 1;
+  transform: none;
   transition:
     border-color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out),
-    transform var(--dur-fast) var(--ease-out),
-    opacity var(--dur-med) var(--ease-out);
+    transform var(--dur-fast) var(--ease-out);
 }
 
 .who-card::before {

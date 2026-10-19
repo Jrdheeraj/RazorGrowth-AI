@@ -1,0 +1,192 @@
+{
+  "checkpoint": {
+    "v": 4,
+    "ts": "2026-10-18T16:26:17.799335+00:00",
+    "id": "1f1cb10a-546e-667a-8003-7073fed94d63",
+    "channel_values": {
+      "merchant_id": "b4517095-8167-476c-bd97-8201eb9e6c8e",
+      "run_id": "9b02731c0cfc423282d0c4d049194b30",
+      "workflow_id": "71e2d46d-590a-4fcb-8f52-c358f4c82f7e",
+      "mode": "growth_team",
+      "objective": "Find revenue growth opportunities",
+      "window_days": 30,
+      "params": {
+        "objective": "Find revenue growth opportunities",
+        "window_days": 30
+      },
+      "generation": 1,
+      "current_step_index": 1,
+      "selected_specialists": [],
+      "agents_run": [
+        {
+          "agent_name": "GrowthMemoryAgent",
+          "step_key": "growth_team:000:GrowthMemoryAgent:load:7e5f6a209b6f29398b2f3869",
+          "status": "completed",
+          "opportunities_created": 0,
+          "actions_proposed": 0,
+          "tools_used": [
+            "memory_retrieve",
+            "memory_record"
+          ],
+          "errors": []
+        }
+      ],
+      "resumed_steps": [],
+      "needs_reconciliation": [],
+      "opportunities": [],
+      "ranked_opportunities": [],
+      "findings": [],
+      "actions_proposed": [],
+      "tool_records": [],
+      "shared_memory": {
+        "rag_context": {
+          "merchant_id": "b4517095-8167-476c-bd97-8201eb9e6c8e",
+          "query": "Find revenue growth opportunities",
+          "status": "ready",
+          "data_sufficiency": {
+            "status": "sufficient",
+            "message": "Sufficient real captured transaction data is available for growth analysis.",
+            "minimum_required": 3,
+            "available": 3
+          },
+          "verified_facts": [
+            {
+              "fact": "captured_revenue",
+              "value": 300.0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "captured_transactions",
+              "value": 3,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "successful_payments",
+              "value": 3,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "failed_payments",
+              "value": 0,
+              "verified": true,
+              "source": "payments"
+            },
+            {
+              "fact": "total_customers",
+              "value": 3,
+              "verified": true,
+              "source": "customers"
+            },
+            {
+              "fact": "total_orders",
+              "value": 3,
+              "verified": true,
+              "source": "orders"
+            }
+          ],
+          "derived_metrics": {
+            "average_order_value": 100.0,
+            "signals": []
+          },
+          "retrieved_context": [
+            {
+              "source_type": "growth_radar",
+              "source_id": "b4517095-8167-476c-bd97-8201eb9e6c8e",
+              "document_id": "b4517095-8167-476c-bd97-8201eb9e6c8e",
+              "chunk_id": "radar-30",
+              "similarity": null,
+              "content_preview": "Captured revenue INR 300.00; captured transactions 3; customers 3; orders 3.",
+              "metadata": {
+                "verified": true,
+                "window_days": 30,
+                "signals": []
+              }
+            }
+          ],
+          "inference_allowed": true
+        },
+        "langchain_adapter": "<backend.app.ai.langchain_adapter.adapter.LangChainAgentAdapter object at 0x000001EB714C3210>",
+        "memories": []
+      },
+      "errors": [],
+      "status": "running",
+      "cancelled": false,
+      "cancelled_at_step": null,
+      "totals": {},
+      "debate_id": null,
+      "action_plan": null,
+      "terminal_outcome": {},
+      "branch:to:growth_team_manager_plan": null
+    },
+    "channel_versions": {
+      "__start__": 2,
+      "merchant_id": 2,
+      "run_id": 2,
+      "workflow_id": 2,
+      "mode": 2,
+      "objective": 2,
+      "window_days": 2,
+      "params": 2,
+      "generation": 2,
+      "current_step_index": 5,
+      "selected_specialists": 2,
+      "agents_run": 5,
+      "resumed_steps": 2,
+      "needs_reconciliation": 2,
+      "opportunities": 2,
+      "ranked_opportunities": 2,
+      "findings": 2,
+      "actions_proposed": 2,
+      "tool_records": 2,
+      "shared_memory": 5,
+      "errors": 2,
+      "status": 3,
+      "cancelled": 3,
+      "cancelled_at_step": 2,
+      "totals": 2,
+      "debate_id": 2,
+      "action_plan": 2,
+      "terminal_outcome": 2,
+      "branch:to:validate_request": 3,
+      "branch:to:load_context": 4,
+      "branch:to:growth_team_memory_load": 5,
+      "branch:to:growth_team_manager_plan": 5
+    },
+    "versions_seen": {
+      "__input__": {},
+      "__start__": {
+        "__start__": 1
+      },
+      "validate_request": {
+        "branch:to:validate_request": 2
+      },
+      "load_context": {
+        "branch:to:load_context": 3
+      },
+      "growth_team_memory_load": {
+        "branch:to:growth_team_memory_load": 4
+      }
+    },
+    "updated_channels": [
+      "agents_run",
+      "branch:to:growth_team_manager_plan",
+      "current_step_index",
+      "shared_memory"
+    ]
+  },
+  "metadata": {
+    "source": "loop",
+    "step": 3,
+    "parents": {}
+  },
+  "channel_versions": {
+    "current_step_index": 5,
+    "agents_run": 5,
+    "shared_memory": 5,
+    "branch:to:growth_team_memory_load": 5,
+    "branch:to:growth_team_manager_plan": 5
+  }
+}

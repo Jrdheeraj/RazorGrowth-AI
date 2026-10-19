@@ -94,7 +94,74 @@ const CONFIRMED_ROSTER = [
     route: "/growth-radar",
     linkText: "Radar Signals →",
   },
+  {
+    id: "revenue-optimization",
+    file: "revenue-optimization.agent",
+    icon: "📈",
+    name: "Revenue Optimization Specialist",
+    role: "SCORING & SIMULATION",
+    line: "Ranks open opportunities deterministically and simulates discount, pricing, and campaign payoff scenarios.",
+    tools: ["opportunity_ranking", "what_if_simulation", "phase4_propose"],
+    route: "/growth-radar",
+    linkText: "Optimization Radar →",
+  },
+  {
+    id: "campaign-strategist",
+    file: "campaign-strategist.agent",
+    icon: "🎯",
+    name: "Campaign Strategist Specialist",
+    role: "STRATEGY & AUDIENCE OFFERS",
+    line: "Designs multi-channel campaign strategies from real cohort data and drafts human-gated campaign actions.",
+    tools: ["segment_lookup", "campaign_simulation", "phase4_propose"],
+    route: "/actions",
+    linkText: "Campaign Proposals →",
+  },
+  {
+    id: "opportunity-prioritization",
+    file: "opportunity-prioritization.agent",
+    icon: "⚖️",
+    name: "Opportunity Prioritization Specialist",
+    role: "OBJECTIVE RANKING",
+    line: "Scores and ranks open merchant opportunities so growth leaders review high-conviction initiatives first.",
+    tools: ["opportunity_scoring", "confidence_weighting", "queue_priority"],
+    route: "/growth-radar",
+    linkText: "Prioritized Queue →",
+  },
+  {
+    id: "experiment-agent",
+    file: "experiment-agent.agent",
+    icon: "🧪",
+    name: "Experiment Specialist",
+    role: "A/B TESTING & MEASUREMENT",
+    line: "Designs rigorous A/B experiments with control vs treatment cohorts, pending empirical customer lift.",
+    tools: ["experiment_design", "cohort_split", "significance_test"],
+    route: "/product-agent",
+    linkText: "Experiment Lab →",
+  },
+  {
+    id: "growth-memory",
+    file: "growth-memory.agent",
+    icon: "🧠",
+    name: "Growth Memory Specialist",
+    role: "HISTORICAL CONTEXT",
+    line: "Maintains merchant-scoped vector memory of prior recommendations and outcomes to ground new proposals.",
+    tools: ["memory_retrieve", "memory_record", "pattern_matching"],
+    route: "/activity",
+    linkText: "Memory Trace →",
+  },
+  {
+    id: "personalization-agent",
+    file: "personalization-agent.agent",
+    icon: "👤",
+    name: "Personalization Specialist",
+    role: "NEXT-BEST-ACTION",
+    line: "Delivers explainable 1-to-1 customer next-best-action decisions based on customer intelligence and affinity.",
+    tools: ["customer.insights", "commerce.catalog_intelligence", "cohort_assignment"],
+    route: "/growth-radar",
+    linkText: "Personalization Signals →",
+  },
 ] as const;
+
 
 export function Agents() {
   const reveal = useReveal<HTMLDivElement>();
@@ -110,7 +177,7 @@ export function Agents() {
         windowTitle="razorgrowth — ai_team_roster.app"
       />
 
-      <div ref={reveal} className="reveal">
+      <div ref={reveal} className="reveal" style={{ marginTop: 22 }}>
         <div className="agents-grid">
           {CONFIRMED_ROSTER.map((a) => (
             <WindowPanel key={a.id} title={a.file} className="agent-card">

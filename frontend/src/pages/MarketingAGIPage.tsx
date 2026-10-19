@@ -62,7 +62,9 @@ import { WindowPanel } from "../components/WindowPanel";
 import { Button } from "../components/Button";
 import { StatusChip } from "../components/StatusIndicator";
 import { AgentOfficeArt } from "../components/AgentOfficeArt";
-import { GlobalEnvironment } from "../features/public/Environment/GlobalEnvironment";
+import { PreviewModeBanner } from "../components/PreviewModeBanner";
+import { MerchantWorldBackground } from "../features/public/MerchantWorld/MerchantWorldBackground";
+import { isAuthenticated } from "../lib/auth";
 import "./MarketingAGIPage.css";
 
 /* ── Status helpers ─────────────────────────────────────────────────── */
@@ -1055,6 +1057,7 @@ export function MarketingAGIPage() {
   >([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "login_required" | "no_workspace" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isPreview, setIsPreview] = useState(!isAuthenticated());
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [selectedStack, setSelectedStack] = useState<string | null>(null);
   const [connBusy, setConnBusy] = useState<string | null>(null);
@@ -1117,6 +1120,13 @@ export function MarketingAGIPage() {
   const loadAll = useCallback(
     async (withActiveRun = true) => {
       const seq = ++loadSeqRef.current;
+      if (!isAuthenticated()) {
+        setIsPreview(true);
+        setLoadState("ready");
+        setErrorMsg(null);
+        setLastUpdated(new Date().toISOString());
+        return;
+      }
       try {
         const [st, rs, cs, ls, hs, tc, rd, an] = await Promise.all([
           fetchMarketingAGIStatus(),
@@ -1190,8 +1200,11 @@ export function MarketingAGIPage() {
       } catch (e) {
         if (seq !== loadSeqRef.current) return; // stale error — ignore
         const err = e as { status?: number; message?: string };
-        if (err.status === 401) setLoadState("login_required");
-        else if (err.status === 403) setLoadState("no_workspace");
+        if (err.status === 401) {
+          setIsPreview(true);
+          setLoadState("ready");
+          setErrorMsg(null);
+        } else if (err.status === 403) setLoadState("no_workspace");
         else {
           setLoadState("error");
           setErrorMsg(err.message ?? "Failed to load workstation");
@@ -1215,6 +1228,7 @@ export function MarketingAGIPage() {
    * A monotonic sequence guard keeps a slow response from landing after a
    * newer load took over the same state. */
   const refreshLists = useCallback(async () => {
+    if (!isAuthenticated()) return null;
     const seq = ++listSeqRef.current;
     const loadSeq = loadSeqRef.current;
     try {
@@ -1820,29 +1834,9 @@ export function MarketingAGIPage() {
   if (loadState === "loading") {
     return (
       <div className="magi-world">
-        <GlobalEnvironment />
+        <MerchantWorldBackground />
         <div className="magi-shell">
           <p className="magi-loading">Loading Marketing Agent workstation…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (loadState === "login_required") {
-    return (
-      <div className="magi-world">
-        <GlobalEnvironment />
-        <div className="magi-shell">
-          <WindowPanel title="marketing-agent.app" className="magi-gate">
-            <p className="magi-eyebrow">MARKETING AGENT</p>
-            <h1 className="magi-gate__title">Your autonomous marketing employee.</h1>
-            <p className="magi-gate__lead">
-              Log in to monitor the autonomous marketing employee working on your business.
-            </p>
-            <div style={{ marginTop: 16 }}>
-              <Button variant="primary" mono onClick={() => navigate("/login")}>Sign in</Button>
-            </div>
-          </WindowPanel>
         </div>
       </div>
     );
@@ -1851,7 +1845,7 @@ export function MarketingAGIPage() {
   if (loadState === "no_workspace") {
     return (
       <div className="magi-world">
-        <GlobalEnvironment />
+        <MerchantWorldBackground />
         <div className="magi-shell">
           <WindowPanel title="marketing-agent.app" className="magi-gate">
             <p className="magi-eyebrow">MARKETING AGENT</p>
@@ -1867,9 +1861,15 @@ export function MarketingAGIPage() {
 
   return (
     <div className="magi-world">
-      <GlobalEnvironment />
+      <MerchantWorldBackground />
 
       <div className="magi-shell">
+        {isPreview && (
+          <PreviewModeBanner
+            pageName="Marketing Specialist Workstation"
+            description="Explore your autonomous marketing employee in preview mode. Sign in with your merchant account to monitor live campaigns and review proposed actions."
+          />
+        )}
         {/* ── HERO — a large WindowPanel, same system as the dashboard ── */}
         <WindowPanel title="marketing.agent" className="magi-hero">
           <div className="magi-hero__inner">

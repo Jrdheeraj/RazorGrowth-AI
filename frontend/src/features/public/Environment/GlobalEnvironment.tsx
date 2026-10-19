@@ -1,17 +1,9 @@
-import { EnvironmentScene } from "./EnvironmentScene";
-import { useWorldScroll } from "./useWorldScroll";
+import { MerchantWorldBackground } from "../MerchantWorld/MerchantWorldBackground";
 
 /**
- * GlobalEnvironment — the persistent living commerce world behind the
- * RazorGrowth homepage. Fixed to the viewport, pointer-transparent,
- * scroll-driven, zero React re-renders while scrolling.
+ * GlobalEnvironment — Persistent living commerce merchant-world background
+ * powered by the new Gemini Day-to-Night illustration system.
  */
 export function GlobalEnvironment() {
-  useWorldScroll(true);
-
-  return (
-    <div className="world-env" role="presentation">
-      <EnvironmentScene />
-    </div>
-  );
+  return <MerchantWorldBackground />;
 }
