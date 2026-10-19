@@ -14,7 +14,7 @@
 [![LangGraph](https://img.shields.io/badge/Orchestration-LangGraph_1.2_%2B_LangChain-FF6F00?style=flat-square)](https://langchain-ai.github.io/langgraph/)
 [![Razorpay](https://img.shields.io/badge/Payments-Razorpay_TEST_Mode-0c2451?style=flat-square&logo=razorpay&logoColor=white)](https://razorpay.com)
 [![Cloudflare Workers AI](https://img.shields.io/badge/LLM-Cloudflare_Workers_AI-F38020?style=flat-square&logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers-ai/)
-[![Test Suite](https://img.shields.io/badge/Tests-2%2C155_Collected_%7C_1%2C650%2B_Passing-brightgreen?style=flat-square&logo=pytest&logoColor=white)](#-testing-and-verification)
+[![Test Suite](https://img.shields.io/badge/Tests-2%2C155_Collected_%7C_1%2C650%2B_Passing-brightgreen?style=flat-square&logo=pytest&logoColor=white)](#testing-and-verification)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
 <br/>
@@ -30,12 +30,25 @@
 <a href="#system-architecture">
   <img src="https://img.shields.io/badge/Architecture-LangGraph_%26_Guardrails-10182b?style=for-the-badge" alt="System Architecture" />
 </a>
+&nbsp;
+<a href="#human-in-the-loop-safeguards--double-guardrails">
+  <img src="https://img.shields.io/badge/Security-Human_Gate_%26_Guardrails-c85f43?style=for-the-badge" alt="Human-in-the-Loop Safeguards" />
+</a>
 
 <br/><br/>
 
-<p align="center">
-  <img src="frontend/src/assets/homepage.png" alt="RazorGrowth AI Merchant Operating System" width="100%" style="border-radius: 6px; border: 1px solid #2a1810; box-shadow: 0 12px 36px rgba(16, 24, 43, 0.25);" />
-</p>
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                          RAZORGROWTH AI PLATFORM OVERVIEW                              │
+│                                                                                        │
+│   • 14 Specialized AI Agents (5 Collaborative Team + 9 Domain Analysts)                │
+│   • 4-Round Adversarial Debate: Investigation → Cross-Exam → Rebuttal → Synthesis      │
+│   • Double Guardrails: Pre-Approval Financial Cap + Pre-Execution Live Re-validation   │
+│   • Zero Autonomous Money Movement: 100% Gated Behind Merchant Owner / Admin Approval  │
+│   • Verified Razorpay TEST-Mode Telemetry · Deterministic Scoring · Pgvector RAG       │
+│   • Complete Enterprise Audit Log Stamped with AI / YOU / SYS Actor Provenance         │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
 
 </div>
 
@@ -56,25 +69,30 @@
 - [Executive Summary](#executive-summary)
 - [The Problem RazorGrowth AI Solves](#the-problem-razorgrowth-ai-solves)
 - [Core Platform Capabilities](#core-platform-capabilities)
-- [Verified Product Experience](#verified-product-experience)
+- [Quick Start & Complete Setup Guide](#quick-start)
+  - [Prerequisites & Supported Environments](#prerequisites-and-supported-environments)
+  - [Option 1 — Recommended Docker Deployment (One-Command)](#docker-deployment)
+  - [Option 2 — Host-Based Manual Local Development](#local-setup)
+  - [Option 3 — Common First-Run Issues & Verified Fixes](#troubleshooting-setup)
 - [How It Works — End-to-End Visual Workflow](#how-it-works--end-to-end-visual-workflow)
 - [The 14-Agent Growth Team](#the-14-agent-growth-team)
+  - [14-Agent System Collaboration Visual](#agent-collaboration-visual)
   - [Main Growth Team (Collaborative Debate & Planning)](#main-growth-team)
   - [Domain Specialists (Analysis & Decisioning Engine)](#domain-specialists)
   - [Canonical Tool Catalog & Strict Permission Model](#canonical-tool-catalog)
+- [Agent Execution Lifecycle & Durability](#agent-execution-lifecycle)
 - [Multi-Agent Orchestration & LangGraph](#multi-agent-orchestration--langgraph)
   - [Execution Modes & Plans](#execution-modes-and-plans)
   - [LangGraph StateGraph Integration](#langgraph-stategraph-integration)
   - [Durable Lifecycle, Lease Fencing & Recovery](#durable-lifecycle-and-recovery)
 - [The 4-Round Agent Debate Protocol](#the-4-round-agent-debate-protocol)
 - [Human-in-the-Loop Safeguards & Double Guardrails](#human-in-the-loop-safeguards--double-guardrails)
+  - [Action Lifecycle State Transitions](#action-lifecycle-state-transitions)
 - [External Integrations & Execution Layer](#external-integrations--execution-layer)
-- [System Architecture](#system-architecture)
+- [System Architecture & Request Pathways](#system-architecture)
+  - [Shipped Frontend Experience Routes](#shipped-frontend-experience-routes)
 - [Technology Stack](#technology-stack)
 - [Repository Structure](#repository-structure)
-- [Quick Start](#quick-start)
-  - [One-Command Docker Deployment (Recommended)](#docker-deployment)
-  - [Local Development Setup](#local-setup)
 - [Environment Configuration](#environment-configuration)
 - [Database Setup & Alembic Migrations](#database-setup--alembic-migrations)
 - [API Usage & Endpoints](#api-usage--endpoints)
@@ -131,39 +149,176 @@ Unified model provider abstraction routing between **Cloudflare Workers AI** (th
 
 ---
 
-## <a id="verified-product-experience"></a>🖼️ Verified Product Experience
+## <a id="quick-start"></a>⚡ Quick Start & Complete Setup Guide
 
-RazorGrowth AI features a custom-built, warm editorial design system combining retro-computing aesthetics with high-density data visualization (built with Archivo Variable typography, IBM Plex Mono code elements, paper-cream surfaces, and terracotta/coral accents).
+Follow this guide to get RazorGrowth AI running on a fresh clone.
 
-<br/>
+> [!TIP]
+> **Recommended for Beginners & Rapid Evaluation**: Use **Option 1 (Docker Compose)**. It provisions PostgreSQL 16 with pre-installed `pgvector`, runs database health checks, applies all Alembic migrations automatically on container startup, and configures safe local defaults with zero manual database administration.
 
-<div align="center">
-  <table>
-    <tr>
-      <td width="50%">
-        <img src="frontend/src/assets/homepage.png" alt="RazorGrowth AI Merchant Dashboard" width="100%" />
-        <p align="center"><b>Live Merchant Workspace & Growth Radar</b><br/><i>Real-time transaction signals, revenue trends, and priority opportunity queue.</i></p>
-      </td>
-      <td width="50%">
-        <img src="frontend/src/assets/illustrations/Desinger_agent_Design.png" alt="Designer Agent Creative Studio" width="100%" />
-        <p align="center"><b>Designer Agent Creative Studio</b><br/><i>Autonomous campaign brief synthesis, typography specs, and FLUX visual generation.</i></p>
-      </td>
-    </tr>
-  </table>
-</div>
+### <a id="prerequisites-and-supported-environments"></a>Prerequisites & Supported Environments
 
-### Shipped Frontend Experience Routes
-- **`/`**: Public product landing page, manifesto, interactive merchant world canvas, and feature architecture.
-- **`/growth-radar`**: Real-time business diagnostic radar computed directly from PostgreSQL transaction tables.
-- **`/agents`**: Coordinated 14-Agent Growth Team dashboard displaying active statuses, tool capabilities, and run logs.
-- **`/manager-agent`**: Manager Agent autonomous coordinator panel (goal intake, validated execution planning, workflow status).
-- **`/marketing-agent`**: Marketing AGI workstation (integrations stack with Resend, Google Ads, Meta Ads, Instagram).
-- **`/designer-agent`**: Creative studio for asset review, brief generation, and Cloudflare FLUX image synthesis.
-- **`/product-agent`**: Product catalog intelligence, SKU affinity mapping, and basket bundle discovery.
-- **`/software-agent`**: Technical feasibility and integration architecture analysis console.
-- **`/debate`**: Multi-agent adversarial debate viewer with round-by-round cross-examination cards and debate chat assistant.
-- **`/actions`**: Growth Actions approval console featuring double-guardrail status and immutable audit timeline.
-- **`/checkout`**: Live AI Buyer simulator running genuine Razorpay TEST transactions against merchant products.
+| Platform / Tool | Supported Versions | Notes |
+|:---|:---|:---|
+| **Operating System** | Windows 10/11 (with WSL2 or Docker Desktop), macOS (Apple Silicon & Intel), Ubuntu 20.04+, Debian 12+, Fedora | Native PowerShell scripts provided for Windows; standard Bash for Unix. |
+| **Docker & Compose** | Docker Desktop 24.0+ / Docker Compose v2.20+ | Required for Option 1; used to host `pgvector/pgvector:pg16` for Option 2. |
+| **Python** | Python `3.11.x` or `3.12.x` | Required for Option 2 (manual host setup). Verify with `python --version`. |
+| **Node.js & npm** | Node.js `18.x` or `20.x` LTS, npm `9.x`+ | Required for Option 2 (frontend Vite compilation). |
+
+---
+
+### <a id="docker-deployment"></a>Option 1 — Recommended Docker Deployment (One-Command)
+
+Docker Compose configures three interconnected containers: `db` (PostgreSQL 16 with pgvector), `backend` (FastAPI with automatic migrations), and `frontend` (React 19 served by Nginx with `/api` reverse proxy).
+
+#### Step 1: Start Docker Desktop
+Ensure Docker Desktop is running on Windows/macOS, or verify the daemon on Linux:
+```bash
+docker info
+```
+
+#### Step 2: Clone the Repository
+```bash
+git clone https://github.com/Jrdheeraj/RazorGrowth-AI.git
+cd RazorGrowth-AI
+```
+
+#### Step 3: Local Configuration File (Optional for Docker)
+The repository `docker-compose.yml` provides secure, working local development defaults out-of-the-box (`AUTH_SECRET_KEY`, database credentials, and standard ports). Creating a local `.env` file is **optional** unless you want to customize port allocations or provide live Cloudflare Workers AI or OpenAI API tokens:
+```bash
+# Optional: copy template to customize ports or add LLM API keys
+cp .env.example .env
+```
+
+#### Step 4: Build and Start the Full Application Stack
+```bash
+docker compose up --build
+```
+
+#### Step 5: How Docker Boots & Auto-Migrates
+1. **Database Initialization (`db`)**: The `pgvector/pgvector:pg16` image launches and mounts the `postgres_data` volume. A healthcheck verifies readiness (`pg_isready`).
+2. **Backend Startup (`backend`)**: The backend container waits for `db` to become completely healthy via `depends_on: { db: { condition: service_healthy } }`. The entrypoint script (`scripts/start.sh`) automatically executes:
+   ```bash
+   alembic upgrade head
+   ```
+   This migrates all 15 schema revisions up to `p5e2r0na1z04` before launching Uvicorn on port 8001. No manual database setup is required.
+3. **Frontend Compilation & Proxy (`frontend`)**: Vite builds the production React application and Nginx serves it on port 5173, routing `/api/*` requests directly to `backend:8001`.
+
+#### Step 6: Verified Service Access Points
+Once startup completes, open your browser to the following verified URLs:
+- **Frontend Workspace**: [http://localhost:5173](http://localhost:5173)
+- **Interactive Swagger API Documentation**: [http://localhost:8001/docs](http://localhost:8001/docs)
+- **Backend Health Check**: [http://localhost:8001/api/health](http://localhost:8001/api/health)
+- **PostgreSQL Database**: `localhost:5432` (Username: `razorgrowth`, Password: `razorgrowth`, Database: `razorgrowth`)
+
+#### Step 7: First-Time User Onboarding & Tenant Signup
+RazorGrowth AI does not ship with hardcoded credentials. To initialize your workspace:
+1. Open [http://localhost:5173](http://localhost:5173) and click **Sign Up** (or use `POST /api/auth/register`).
+2. Register with your email and a password of at least 12 characters (must include letters and numbers).
+3. The registration handler calls `initialize_user_workspace`, creating your private tenant-isolated workspace (`merchant_id`) and pre-seeding an initial 10-product demo catalog.
+
+#### Step 8: Managing Docker Services
+- **View Live Backend Logs**: `docker compose logs -f backend`
+- **View Database Logs**: `docker compose logs -f db`
+- **Stop Containers (Preserving Data)**: `docker compose down`
+- **Complete Reset (Wipes Database Volume)**: `docker compose down -v`
+
+---
+
+### <a id="local-setup"></a>Option 2 — Host-Based Manual Local Development
+
+For developers actively modifying backend Python code or frontend components on their local host machine.
+
+#### Step 1: Start PostgreSQL with pgvector via Docker
+The simplest and most reliable way to obtain PostgreSQL 16 with pre-compiled pgvector without manual C compilation is using Docker:
+```bash
+docker compose up -d db
+```
+*If you run PostgreSQL natively on your host, ensure `pgvector` is installed and run `CREATE EXTENSION IF NOT EXISTS vector;` in your database.*
+
+#### Step 2: Configure & Run the Backend
+
+##### A. Windows (PowerShell)
+```powershell
+# Verify Python version (must be 3.11+)
+python --version
+
+# Create and activate virtual environment
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+# Install pinned Python dependencies
+pip install -r requirements.txt
+
+# Create your local environment configuration
+Copy-Item .env.example .env
+```
+
+##### B. Linux / macOS (Bash)
+```bash
+# Verify Python version (must be 3.11+)
+python3 --version
+
+# Create and activate virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install pinned Python dependencies
+pip install -r requirements.txt
+
+# Create your local environment configuration
+cp .env.example .env
+```
+
+##### C. Configure Required Settings in `.env`
+Open `.env` in your editor and configure the single mandatory setting before first startup:
+- Set `AUTH_SECRET_KEY` to any random string of 32 or more characters. Generate one with:
+  ```bash
+  python -c "import secrets; print(secrets.token_urlsafe(48))"
+  ```
+- Ensure `DATABASE_URL` matches your local PostgreSQL instance:
+  ```env
+  DATABASE_URL=postgresql://razorgrowth:razorgrowth@localhost:5432/razorgrowth
+  ```
+
+##### D. Apply Database Migrations
+Run Alembic from the **repository root directory** (where `alembic.ini` is located):
+```bash
+alembic upgrade head
+```
+*Verify the active migration revision with `alembic current`. You should see `p5e2r0na1z04 (head)`.*
+
+##### E. Start the FastAPI Backend Server
+```bash
+uvicorn backend.app.main:app --host 127.0.0.1 --port 8001 --reload
+```
+*The backend is now live at [http://127.0.0.1:8001](http://127.0.0.1:8001) and interactive Swagger docs at [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs).*
+
+#### Step 3: Configure & Run the Frontend (Second Terminal)
+Open a new terminal window:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Open [http://localhost:5173](http://localhost:5173). Vite's development proxy automatically forwards `/api/*` network requests to `http://127.0.0.1:8001`.
+
+---
+
+### <a id="troubleshooting-setup"></a>Option 3 — Common First-Run Issues & Verified Fixes
+
+| Problem / Error Message | Root Cause | Verified Resolution |
+|:---|:---|:---|
+| `docker: error during connect` / `daemon not running` | Docker Desktop is not started or WSL2 integration is disabled. | Start Docker Desktop, wait until the tray icon turns green, and ensure WSL2 integration is active in Settings → Resources → WSL Integration. |
+| `Bind for 0.0.0.0:5432 failed: port is already allocated` | A local PostgreSQL service is already running on port 5432. | Either stop local PostgreSQL (`net stop postgresql-x64-16` on Windows or `sudo systemctl stop postgresql` on Linux), or change `POSTGRES_PORT=5433` in `.env`. |
+| `Bind for 0.0.0.0:8001 failed` / `port 8001 in use` | Another Uvicorn or backend instance is occupying port 8001. | Terminate the existing process or set `BACKEND_PORT=8002` in `.env`. |
+| `sqlalchemy.exc.OperationalError: connection to server at localhost:5432 refused` | The database container has not completed booting or `DATABASE_URL` host is incorrect. | Ensure `docker compose up -d db` is healthy (`docker compose ps db`). If running inside Docker, backend must connect to host `db:5432`, not `localhost:5432`. |
+| `type "vector" does not exist` | Standard PostgreSQL was started instead of the pgvector image. | Ensure your image is `pgvector/pgvector:pg16` as declared in `docker-compose.yml`. Standard `postgres:16` lacks vector extensions. |
+| `alembic: command not found` or migration fails from subdirectory | Virtual environment not active or Alembic run from wrong working directory. | Activate `.venv` and ensure you run `alembic upgrade head` from the **repository root**, not from inside `migrations/` or `backend/`. |
+| `422 Unprocessable Entity` on user registration | Password does not satisfy the security policy. | Passwords must be at least 12 characters long and contain both letters and numbers. |
+| `npm ERR! code ERESOLVE` during `npm install` | Node.js version mismatch or conflicting cached dependencies. | Use Node 20 LTS. Run `npm install --legacy-peer-deps` if peer dependency warnings block installation. |
+| `503 Service Unavailable: AI provider not configured` | No Cloudflare or OpenAI credentials provided in `.env`. | Expected behavior when optional LLM keys are omitted. Analytical tools and deterministic scoring continue to function; configure `CLOUDFLARE_API_TOKEN` or `LLM_API_KEY` for generative features. |
+| Frontend displays network error / CORS failure | Frontend attempted direct external API request or backend is down. | Ensure backend is running on `127.0.0.1:8001`. Vite proxies `/api/*` automatically; do not alter `VITE_API_BASE_URL` in local development. |
 
 ---
 
@@ -173,37 +328,36 @@ The platform enforces a deterministic, multi-stage progression from raw payment 
 
 ```mermaid
 flowchart TD
-    subgraph S1["1. Ingestion & Signal Detection"]
-        RZP["Razorpay TEST Mode<br/>Orders · Payments · Webhooks"] -->|HMAC-SHA256 Ingest| DB[(PostgreSQL 16 + pgvector<br/>Tenant-Isolated Data Store)]
+    subgraph INGEST["1. Ingestion & Signal Detection"]
+        RZP["Razorpay TEST Mode<br/>Orders · Payments · Webhooks"] -->|HMAC-SHA256 Ingest| DB[("PostgreSQL 16 + pgvector<br/>Tenant-Isolated Data Store")]
         DB --> RADAR["Growth Radar Engine<br/>Failure Rates · Cohort Churn · AOV Shifts"]
         RADAR --> DISC["GrowthDiscoveryAgent<br/>Signal Deduplication & Scoring"]
     end
 
-    subgraph S2["2. Orchestration & Adversarial Debate"]
+    subgraph ORCH["2. Orchestration & Adversarial Debate"]
         DISC --> MGR["ManagerAgent<br/>Goal Decomposition & Plan Materialization"]
-        MGR -->|LangGraph StateGraph / Orchestrator| DEBATE{"4-Round Multi-Agent Debate"}
+        MGR -->|LangGraph StateGraph / Orchestrator| R1
         
-        subgraph ROUNDS["Structured Debate Pipeline"]
+        subgraph DEBATE["4-Round Structured Debate Pipeline"]
             R1["Round 1: Individual Investigation<br/>Marketing · Product · Designer · Software"] --> R2["Round 2: Cross-Examination<br/>Adversarial Challenge & Verification"]
             R2 --> R3["Round 3: Formal Rebuttal<br/>Evidence Validation & Defense"]
-            R3 --> R4["Round 4: Executive Synthesis<br/>Manager Formulates Final Consensus"]
+            R3 --> R4["Round 4: Executive Synthesis<br/>Manager Formulates Consensus"]
         end
-        DEBATE --- ROUNDS
     end
 
-    subgraph S3["3. Proposal, Guardrails & Human Gate"]
+    subgraph GOVERN["3. Proposal, Guardrails & Human Gate"]
         R4 --> PROP["Action Proposal Prepared<br/>Why · Scope · Financial Bounds · Will/Will-Not-Do"]
-        PROP --> G1{"Pre-Approval Guardrail<br/>Ceiling <= ₹50,000 INR"}
-        G1 -->|Pass| GATE["HUMAN APPROVAL GATE<br/>Owner / Admin Authentication Required"]
-        G1 -->|Fail| REJECT["Action Rejected / Scope Clamped"]
+        PROP --> G1{"Pre-Approval Guardrail<br/>Amount &le; ₹50,000 INR?"}
+        G1 -->|Within Limit| GATE["HUMAN APPROVAL GATE<br/>Owner / Admin Authentication Required"]
+        G1 -->|Exceeded| REJECT["Action Rejected / Scope Clamped"]
         GATE -->|Human Rejects| ABORT["Workflow Terminated<br/>Recorded to Audit Log"]
         GATE -->|Human Approves| G2{"Pre-Execution Guardrail<br/>Live Balance · Rate Limits · Kill Switch"}
     end
 
-    subgraph S4["4. Execution, Audit & Learning"]
+    subgraph EXEC_PERSIST["4. Execution, Audit & Learning"]
         G2 -->|Verified| EXEC["Execution Engine<br/>Resend Email · Paused Ad Campaign · Retry Schedule"]
         EXEC --> AUDIT["Immutable Audit Trail<br/>Stamped with AI / YOU / SYS Actors"]
-        AUDIT --> MEM["GrowthMemoryAgent<br/>Vector & Outcome Persistence (pgvector)"]
+        AUDIT --> MEM["GrowthMemoryAgent<br/>Vector & Outcome Persistence - pgvector"]
         MEM -->|Grounds Future Cycles| MGR
     end
 
@@ -216,11 +370,87 @@ flowchart TD
     class G1,G2 alert;
 ```
 
+*Figure 1: Complete end-to-end data progression from Razorpay TEST transactions through deterministic signal detection, multi-agent debate, two-tier guardrails, human approval, and persistent vector memory.*
+
 ---
 
 ## <a id="the-14-agent-growth-team"></a>🧠 The 14-Agent Growth Team
 
-The RazorGrowth AI agent system is defined authoritatively in `backend/app/agents/registry.py`. Every agent inherits from `BaseGrowthAgent` (`backend/app/agents/base.py`) and declares an explicit capability boundary.
+The RazorGrowth AI agent roster is defined authoritatively in `backend/app/agents/registry.py`. Every agent inherits from `BaseGrowthAgent` (`backend/app/agents/base.py`) and declares an explicit capability boundary.
+
+> [!NOTE]
+> **Subsystem Clarification**: The names **`MarketingAGI`** and **`ProductAGI`** refer to broader platform subsystems (such as the external marketing integration hub and the catalog intelligence module). They are not separate or additional registered agent instances beyond the canonical 14-agent registry.
+
+### <a id="agent-collaboration-visual"></a>14-Agent System Collaboration Visual
+
+The diagram below illustrates how the 5 Main Growth Team agents and 9 Domain Specialist agents collaborate under `ManagerAgent` orchestration:
+
+```mermaid
+flowchart TB
+    subgraph MGR_BOX["Central Coordination & Synthesis"]
+        MGR["ManagerAgent<br/>★ Strategic Planning & Decomposition<br/>★ Task Delegation & Handoffs<br/>★ Debate Direction & Consensus<br/>★ Action Proposal Synthesis"]
+    end
+
+    subgraph MAIN_TEAM["Main Growth Team (Collaborative Debate & Planning)"]
+        direction LR
+        MKT["MarketingAgent<br/>• Retention & Churn Analysis<br/>• Customer LTV Cohorts<br/>• Win-back Messaging"]
+        PROD["ProductAgent<br/>• Catalog Intelligence<br/>• SKU Affinity & Bundling<br/>• Basket Pricing Dynamics"]
+        DES["DesignerAgent<br/>• Creative Campaign Briefs<br/>• Copywriting Variants<br/>• FLUX Visual Asset Specs"]
+        SOFT["SoftwareAgent<br/>• API & Integration Specs<br/>• Technical Feasibility<br/>• Infrastructure Bounds"]
+    end
+
+    subgraph SPECIALISTS["Domain Specialists (Deep Analytics & Scoring Engine)"]
+        direction TB
+        subgraph S_ROW1["Signal Ingestion & Customer Intel"]
+            DISC["GrowthDiscoveryAgent<br/>Radar Signals & Scoring"]
+            CUST["CustomerIntelligenceAgent<br/>RFM & Churn Probability"]
+            PERS["PersonalizationAgent<br/>Next-Best-Action Engine"]
+        end
+        subgraph S_ROW2["Revenue Optimization & Campaigns"]
+            REV["RevenueOptimizationAgent<br/>Elasticity & Margin Models"]
+            CAMP["CampaignStrategistAgent<br/>Multi-Channel Blueprints"]
+            PAY["PaymentRecoveryAgent<br/>Decline Heuristics & Retries"]
+        end
+        subgraph S_ROW3["Prioritization, Experimentation & Memory"]
+            PRIOR["OpportunityPrioritizationAgent<br/>Deterministic Scoring Matrix"]
+            EXP["ExperimentAgent<br/>A/B Hypothesis & Power Specs"]
+            MEM["GrowthMemoryAgent<br/>Vector & Audit Memory Recall"]
+        end
+    end
+
+    subgraph OUTPUT_BOX["Action Governance & Execution Pipeline"]
+        ACTION["Proposed Growth Action<br/>Status: requested · Bounded Scope · Financial Ceiling"]
+    end
+
+    %% Inter-Agent Information Flows
+    DISC -->|Anomaly Signals| PRIOR
+    CUST -->|Cohort Segments| MKT
+    CUST -->|RFM Data| PERS
+    REV -->|Price Elasticity| PROD
+    PAY -->|Failed Transactions| PRIOR
+    CAMP -->|Channel Plans| MGR
+    EXP -->|Test Variants| SOFT
+    MEM -->|Historical Context| MGR
+
+    PRIOR -->|Ranked Opportunity Queue| MGR
+    MGR <-->|Debate Rounds 1-4| MAIN_TEAM
+    MGR -->|Synthesize Consensus| ACTION
+    ACTION -->|Post-Execution Outcome| MEM
+
+    classDef mgr fill:#2a1810,stroke:#d97757,stroke-width:2px,color:#fff3df;
+    classDef main fill:#10182b,stroke:#d97757,stroke-width:1px,color:#f7ebd7;
+    classDef spec fill:#182238,stroke:#336791,stroke-width:1px,color:#e2ecf8;
+    classDef action fill:#0f2d1d,stroke:#70b88a,stroke-width:2px,color:#f0fdf4;
+
+    class MGR mgr;
+    class MKT,PROD,DES,SOFT main;
+    class DISC,CUST,PERS,REV,CAMP,PAY,PRIOR,EXP,MEM spec;
+    class ACTION action;
+```
+
+*Figure 2: Collaboration and data interchange topology across all 14 registered agents, illustrating how specialist analytical findings flow into ManagerAgent planning, multi-agent debate, and human-gated action synthesis.*
+
+---
 
 ### <a id="main-growth-team"></a>1. Main Growth Team (Collaborative Debate & Planning)
 
@@ -286,6 +516,55 @@ No agent holds or can be granted these permissions. Proposing an action creates 
 
 ---
 
+## <a id="agent-execution-lifecycle"></a>🔄 Agent Execution Lifecycle & Durability
+
+Every agent run adheres to an 8-stage bounded lifecycle defined in `BaseGrowthAgent.execute()` (`backend/app/agents/base.py`). The lifecycle is completely decoupled from crash-recovery leasing and human approval:
+
+```mermaid
+flowchart LR
+    G["1. Goal Setting<br/>Intake Objective & Bounds"] --> C["2. Context Gathering<br/>RAG Facts & DB Telemetry"]
+    C --> P["3. Planning<br/>Decompose into Steps"]
+    P --> TS["4. Tool Selection<br/>Catalog Registry Check"]
+    TS --> TE["5. Tool Execution<br/>Isolated in SAVEPOINT"]
+    TE --> O["6. Observation<br/>Metrics & Trace Capture"]
+    O --> EV{"7. Evaluation<br/>Constraints Met?"}
+    
+    EV -->|Yes| PF["8. Persist Findings<br/>Step Records & Vectors"]
+    EV -->|No - Replan| P
+    EV -->|Fatal / Denied| PF
+
+    subgraph CONCERNS["Independent Operational Concerns"]
+        direction TB
+        CHECKPOINT["Crash Recovery & Leasing<br/>• Atomic Compare-and-Set Leases<br/>• Generation Fencing Tokens<br/>• Safe Replay of Persisted Steps"]
+        APPROVAL["Human-in-the-Loop Governance<br/>• Actions Output in 'requested' Status<br/>• Agents Structurally Cannot Approve<br/>• Exclusive to Merchant Owner / Admin"]
+    end
+
+    PF -.-> CHECKPOINT
+    PF -.-> APPROVAL
+
+    classDef stage fill:#10182b,stroke:#d97757,stroke-width:1px,color:#f7ebd7;
+    classDef decision fill:#2a1810,stroke:#d97757,stroke-width:2px,color:#fff3df;
+    classDef concern fill:#182238,stroke:#70b88a,stroke-width:1px,color:#e2ecf8;
+
+    class G,C,P,TS,TE,O,PF stage;
+    class EV decision;
+    class CHECKPOINT,APPROVAL concern;
+```
+
+*Figure 3: The 8-phase bounded agent execution lifecycle, highlighting how failure isolation, database savepoints, and durable checkpointing operate independently from merchant approval gating.*
+
+### The 8 Bounded Lifecycle Stages
+1. **Goal Setting (`goal_set`)**: Parses merchant objective, window parameters, and resource boundaries.
+2. **Context Gathering (`context_gathering`)**: Ingests RAG factual context, verified order telemetry, and customer segments.
+3. **Planning (`planning`)**: The agent's core engine breaks the objective into concrete sub-tasks.
+4. **Tool Selection (`tools`)**: Identifies registered tools from `TOOL_REGISTRY` and validates caller permissions.
+5. **Tool Execution (`tool_exec`)**: Executes the tool within an isolated database `SAVEPOINT`. Errors are captured without crashing sibling agents.
+6. **Observation (`observation`)**: Records execution latency, token counts, error payloads, and intermediate results.
+7. **Evaluation (`evaluation_result`)**: Validates findings against commercial rules. If confidence thresholds are not met, a bounded replan is triggered (up to `max_retries`).
+8. **Persistence (`persist_findings`)**: Persists structured output to `agent_workflow_steps` and writes outcome embeddings to pgvector.
+
+---
+
 ## <a id="multi-agent-orchestration--langgraph"></a>⚙️ Multi-Agent Orchestration & LangGraph
 
 The orchestration architecture operates through two complementary, production-grade layers:
@@ -306,22 +585,59 @@ The orchestration architecture operates through two complementary, production-gr
 LangGraph compiles an authoritative `StateGraph(GrowthWorkflowState)` wiring all agents into conditional execution paths:
 
 ```mermaid
-flowchart LR
-    START([START]) --> VR[validate_request]
-    VR --> LC[load_context]
-    LC --> ROUTE{Route by Mode}
+flowchart TD
+    START([START]) --> VR["validate_request<br/>Validate Payload & Permissions"]
+    VR --> LC["load_context<br/>Resolve Merchant & RAG Context"]
+    LC --> ROUTE{"Route by Mode"}
     
-    ROUTE -->|fast| FM[fast_memory_load] --> FD[fast_discovery] --> FP[fast_payment_recovery] --> FO[fast_prioritization] --> FW[finalize_workflow]
+    subgraph M_FAST["Mode: fast (Instant Deterministic Scan)"]
+        FM["fast_memory_load"] --> FD["fast_discovery"]
+        FD --> FP["fast_payment_recovery"]
+        FP --> FO["fast_prioritization"]
+    end
+
+    subgraph M_DEEP["Mode: deep (Comprehensive Business Audit)"]
+        DM["deep_memory_load"] --> DD["deep_discovery"]
+        DD --> DC["deep_customer_intel"]
+        DC --> DP["deep_payment_recovery"]
+        DP --> DCS["deep_campaign_strategist"]
+        DCS --> DR["deep_revenue_opt"]
+        DR --> DE["deep_experiment"]
+        DE --> DO["deep_prioritization"]
+        DO --> DMP["deep_memory_persist"]
+    end
+
+    subgraph M_GT["Mode: growth_team (4-Round Multi-Agent Collaboration)"]
+        GM["growth_team_memory_load"] --> GP["growth_team_manager_plan"]
+        GP --> G_MKT["growth_team_marketing"]
+        G_MKT --> G_PROD["growth_team_product"]
+        G_PROD --> G_DES["growth_team_designer"]
+        G_DES --> G_SOFT["growth_team_software"]
+        G_SOFT --> G_PRIOR["growth_team_prioritization"]
+        G_PRIOR --> GS["growth_team_manager_synth"]
+        GS --> GMP["growth_team_memory_persist"]
+    end
+
+    ROUTE -->|fast| FM
+    ROUTE -->|deep| DM
+    ROUTE -->|growth_team| GM
     
-    ROUTE -->|deep| DM[deep_memory_load] --> DD[deep_discovery] --> DC[deep_customer_intel] --> DP[deep_payment_recovery] --> DCS[deep_campaign_strategist] --> DR[deep_revenue_opt] --> DE[deep_experiment] --> DO[deep_prioritization] --> DMP[deep_memory_persist] --> FW
-    
-    ROUTE -->|growth_team| GM[growth_team_memory_load] --> GP[growth_team_manager_plan] --> GDEB[4-Round Multi-Agent Debate] --> GS[growth_team_manager_synth] --> GMP[growth_team_memory_persist] --> FW
+    FO --> FW["finalize_workflow<br/>Snapshot Metrics & Status"]
+    DMP --> FW
+    GMP --> FW
     
     FW --> END([END])
-    
-    classDef graphNode fill:#10182b,stroke:#d97757,stroke-width:1px,color:#f7ebd7;
-    class VR,LC,FM,FD,FP,FO,DM,DD,DC,DP,DCS,DR,DE,DO,DMP,GM,GP,GDEB,GS,GMP,FW graphNode;
+
+    classDef nodeStyle fill:#10182b,stroke:#d97757,stroke-width:1px,color:#f7ebd7;
+    classDef decision fill:#2a1810,stroke:#d97757,stroke-width:2px,color:#fff3df;
+    classDef terminal fill:#0f2d1d,stroke:#70b88a,stroke-width:2px,color:#f0fdf4;
+
+    class VR,LC,FM,FD,FP,FO,DM,DD,DC,DP,DCS,DR,DE,DO,DMP,GM,GP,G_MKT,G_PROD,G_DES,G_SOFT,G_PRIOR,GS,GMP,FW nodeStyle;
+    class ROUTE decision;
+    class START,END terminal;
 ```
+
+*Figure 4: The compiled LangGraph StateGraph topology, highlighting conditional mode dispatch (`fast`, `deep`, `growth_team`), shared foundation nodes, and workflow finalization.*
 
 ### <a id="durable-lifecycle-and-recovery"></a>Durable Lifecycle, Lease Fencing & Recovery
 
@@ -389,6 +705,8 @@ sequenceDiagram
     Act-->>Merchant: Action Executed & Stamped to Immutable Audit Log
 ```
 
+*Figure 5: Sequence diagram of the 4-round adversarial debate protocol, from initial manager delegation through multi-agent cross-examination, synthesis, and human approval.*
+
 ---
 
 ## <a id="human-in-the-loop-safeguards--double-guardrails"></a>🛡️ Human-in-the-Loop Safeguards & Double Guardrails
@@ -399,27 +717,27 @@ RazorGrowth AI guarantees that autonomous agents can never trigger direct financ
 flowchart TD
     AGENT["AI Agent Proposes Growth Action"] --> PREP["Action Created in 'requested' Status<br/>Stored in agent_actions"]
     
-    subgraph G1["First Guardrail Pass (Pre-Approval Evaluation)"]
-        PREP --> CHK1{"Amount <= GUARDRAIL_MAX_AMOUNT_INR?<br/>Default: ₹50,000 INR"}
-        CHK1 -->|Exceeded| AUTO_REJ["Marked as REJECTED<br/>Reason: GUARDRAIL_LIMIT_EXCEEDED"]
+    subgraph G1["First Guardrail Pass: Pre-Approval Evaluation"]
+        PREP --> CHK1{"Amount &le; GUARDRAIL_MAX_AMOUNT_INR?<br/>Default: ₹50,000 INR"}
+        CHK1 -->|Exceeded| AUTO_REJ["Status: REJECTED<br/>Reason: GUARDRAIL_LIMIT_EXCEEDED"]
         CHK1 -->|Within Limit| AUD1["Audit Event Logged: action_proposed<br/>Actor: AI"]
     end
     
     AUD1 --> QUEUE["Action Placed in Merchant Approval Queue"]
     
-    subgraph HUMAN_GATE["Human Gate (Owner / Admin Only)"]
+    subgraph HUMAN_GATE["Human Gate: Owner / Admin Only"]
         QUEUE --> REVIEW["Merchant Inspects Proposal<br/>Rationale · Evidence · Scope · Will/Will-Not-Do"]
         REVIEW --> DECISION{"Merchant Decision"}
         DECISION -->|Reject| REJ_ACT["Status: REJECTED<br/>Actor: YOU<br/>Audit Event: action_rejected"]
         DECISION -->|Approve| APP_ACT["Status: APPROVED<br/>Actor: YOU<br/>Audit Event: action_approved"]
     end
     
-    subgraph G2["Second Guardrail Pass (Pre-Execution Re-check)"]
-        APP_ACT --> RE_EVAL{"Re-validate Guardrails Live"}
+    subgraph G2["Second Guardrail Pass: Pre-Execution Re-check"]
+        APP_ACT --> RE_EVAL{"Re-validate Guardrails Live<br/>Balance · Volume · Rate Limits"}
         RE_EVAL -->|Fails| SAFE_STATE["Execution Aborted<br/>Safe State Persisted in Audit"]
         RE_EVAL -->|Passes| KILL_SW{"EXECUTION_ENABLED == true?"}
-        KILL_SW -->|false (Default)| TEST_EXEC["Dry-Run / Test-Mode Response<br/>mode: 'test', executed: false<br/>Audit: action_executed_test_mode"]
-        KILL_SW -->|true| LIVE_EXEC["Execute External Provider Call<br/>Resend / Google Ads / Meta Ads"]
+        KILL_SW -->|false - Default Dry Run| TEST_EXEC["Dry-Run / Test-Mode Response<br/>mode: 'test', executed: false<br/>Audit: action_executed_test_mode"]
+        KILL_SW -->|true - Authorized Live| LIVE_EXEC["Execute External Provider Call<br/>Resend / Google Ads / Meta Ads"]
         LIVE_EXEC --> AUD2["Audit Event: action_executed<br/>Actor: SYS · Idempotency Key Locked"]
     end
 
@@ -431,6 +749,31 @@ flowchart TD
     class REVIEW,DECISION,APP_ACT gate;
     class AUTO_REJ,REJ_ACT,SAFE_STATE fail;
 ```
+
+*Figure 6: The two-pass guardrail security workflow. All agent proposals are bounded by pre-approval limits, gated by human authentication, re-evaluated before execution, and governed by the global execution switch.*
+
+### <a id="action-lifecycle-state-transitions"></a>Action Lifecycle State Transitions
+
+The state diagram below maps all supported transitions for an `AgentAction` record (`backend/app/models/enums.py`):
+
+```mermaid
+stateDiagram-v2
+    [*] --> Requested: Agent proposes action (propose_action)
+    Requested --> Rejected: Pre-approval guardrail fails (Amount > Limit)
+    Requested --> Rejected: Merchant rejects proposal (action_rejected)
+    Requested --> Approved: Merchant approves proposal (action_approved)
+    Approved --> Aborted: Pre-execution guardrail fails (Live limits)
+    Approved --> Executing: Guardrails pass & Idempotency locked
+    Executing --> Completed: Test-mode dry run (EXECUTION_ENABLED = false)
+    Executing --> Completed: External API delivered (EXECUTION_ENABLED = true)
+    Executing --> Failed: Provider network error / Timeout
+    Completed --> [*]
+    Rejected --> [*]
+    Failed --> [*]
+    Aborted --> [*]
+```
+
+*Figure 7: Finite state machine governing growth action proposals from creation in requested state to human review, double-guardrailed execution, and audit finalization.*
 
 ---
 
@@ -454,57 +797,80 @@ The **Marketing AGI** execution engine connects to external advertising, messagi
 
 ---
 
-## <a id="system-architecture"></a>🏛️ System Architecture
+## <a id="system-architecture"></a>🏛️ System Architecture & Request Pathways
 
 RazorGrowth AI is architected as an authenticated, tenant-isolated multi-tier application:
 
+```mermaid
+flowchart LR
+    subgraph CLIENT["Client Tier"]
+        UI["React 19 + Vite 6<br/>Workspace & Canvas UI"]
+    end
+
+    subgraph API_GATE["FastAPI Gateway"]
+        AUTH["Auth & Tenant Context<br/>Bearer JWT · merchant_ctx"]
+        ROUTES["API Controllers<br/>/agents · /actions · /debate"]
+    end
+
+    subgraph ORCH["Dual Orchestration Engine"]
+        LG["LangGraphWorkflowExecutor<br/>StateGraph · Mode Routing · Checkpoints"]
+        GO["GrowthAgentOrchestrator<br/>Lease Fencing · Savepoint Isolation"]
+    end
+
+    subgraph AGENT_TIER["14 Agents & Tool Catalog"]
+        AGENTS["14 Specialized Agents<br/>5 Main Team · 9 Specialists"]
+        TOOLS["Canonical Tool Catalog<br/>12 Verified Implementations"]
+    end
+
+    subgraph PERSIST["PostgreSQL 16 + pgvector"]
+        DATA[("Tenant Tables<br/>orders · payments · customers")]
+        CHECK[("LangGraph Checkpoints<br/>Workflow State & Steps")]
+        AUDIT_DB[("Immutable Audit Log<br/>AI / YOU / SYS Events")]
+        VEC[("Vector Embeddings<br/>1536-dim Merchant Memory")]
+    end
+
+    subgraph PROVIDERS["Model & External Providers"]
+        LLM["Cloudflare Workers AI / OpenAI<br/>resolve_llm_provider"]
+        EXT["External APIs (Approval-Gated)<br/>Resend · Google Ads · Meta Ads"]
+    end
+
+    UI -->|HTTPS / Bearer JWT| AUTH
+    AUTH --> ROUTES
+    ROUTES --> LG
+    LG <--> GO
+    LG --> AGENTS
+    AGENTS --> TOOLS
+    AGENTS <--> LLM
+    GO --> DATA
+    LG --> CHECK
+    TOOLS --> DATA
+    ROUTES --> AUDIT_DB
+    ROUTES -->|After Human Approval| EXT
+    AGENTS --> VEC
+
+    classDef c1 fill:#10182b,stroke:#d97757,stroke-width:1px,color:#f7ebd7;
+    classDef c2 fill:#182238,stroke:#336791,stroke-width:1px,color:#e2ecf8;
+    classDef c3 fill:#0f2d1d,stroke:#70b88a,stroke-width:1px,color:#f0fdf4;
+
+    class UI,AUTH,ROUTES,LG,GO c1;
+    class AGENTS,TOOLS,LLM,EXT c2;
+    class DATA,CHECK,AUDIT_DB,VEC c3;
 ```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                        CLIENT TIER — React 19 · TypeScript 5.7 · Vite 6                │
-│   Growth Radar · 14-Agent Team Console · Manager Control Panel · Marketing Workstation │
-│   Designer Studio · Product Intelligence · 4-Round Debate Viewer · Actions & Checkout  │
-└───────────────────────────────────────────┬────────────────────────────────────────────┘
-                                            │ REST /api + Bearer JWT
-┌───────────────────────────────────────────▼────────────────────────────────────────────┐
-│                        API ROUTING & SECURITY MIDDLEWARE                               │
-│   RequestCorrelation · SecurityHeaders · TrustedHosts · Sliding-Window RateLimiter     │
-│   Tenant Context Resolution (merchant_ctx / operator_ctx / approver_ctx)               │
-└───────────────────────────────────────────┬────────────────────────────────────────────┘
-                                            │
-┌───────────────────────────────────────────▼────────────────────────────────────────────┐
-│                  FASTAPI APPLICATION TIER (Python 3.11+ / SQLAlchemy 2.0)              │
-│                                                                                        │
-│  ┌───────────────────────┐ ┌─────────────────────────┐ ┌────────────────────────────┐ │
-│  │ 14 SPECIALIZED AGENTS │ │ MULTI-AGENT DEBATE      │ │ OPPORTUNITY & SCORING      │ │
-│  │ Main Team (5)         │ │ 4-Round Cross-Exam      │ │ Deterministic Matrix       │ │
-│  │ Specialists (9)       │ │ LLM Debate Assistant   │ │ Simulation Engine          │ │
-│  └───────────┬───────────┘ └────────────┬────────────┘ └─────────────┬──────────────┘ │
-│              │                          │                            │                │
-│  ┌───────────▼──────────────────────────▼────────────────────────────▼──────────────┐ │
-│  │ DUAL-LAYER ORCHESTRATION ARCHITECTURE                                            │ │
-│  │ • LangGraph StateGraph (Graph topology, conditional branching, checkpointers)    │ │
-│  │ • GrowthAgentOrchestrator (Savepoint isolation, lease fencing, step recovery)     │ │
-│  └──────────────────────────────────────┬───────────────────────────────────────────┘ │
-│                                         │                                             │
-│  ┌──────────────────────────────────────▼───────────────────────────────────────────┐ │
-│  │ GUARDRAILS, ACTIONS & IMMUTABLE AUDIT ENGINE                                     │ │
-│  │ Double Guardrails (Amount Ceilings) · Approval Gate · Idempotent Action Lock     │ │
-│  └──────────────────────────────────────┬───────────────────────────────────────────┘ │
-│                                         │                                             │
-│  ┌──────────────────────────────────────▼───────────────────────────────────────────┐ │
-│  │ MULTI-PROVIDER MODEL LAYER (resolve_llm_provider)                                │ │
-│  │ Cloudflare Workers AI (GLM-4.7-Flash / FLUX) · OpenAI (gpt-4o-mini / Embeddings) │ │
-│  └──────────────────────────────────────────────────────────────────────────────────┘ │
-└──────────────────────┬─────────────────────────────────────────┬───────────────────────┘
-                       │                                         │
-┌──────────────────────▼─────────────────┐     ┌─────────────────▼──────────────────────┐
-│  DATABASE & KNOWLEDGE PERSISTENCE      │     │  EXTERNAL PAYMENT & API INTEGRATIONS   │
-│  PostgreSQL 16 + pgvector              │     │  • Razorpay TEST API (HMAC Webhooks)   │
-│  • Tenant-isolated commerce tables     │     │  • Resend (Email Campaign Delivery)    │
-│  • 15-revision single-head Alembic     │     │  • Google Ads API (OAuth2 + Dev Token) │
-│  • Durable checkpoints (.langgraph)    │     │  • Meta Graph API (Instagram & Ads)    │
-└────────────────────────────────────────┘     └────────────────────────────────────────┘
-```
+
+*Figure 8: High-level architectural data flow from the React client through FastAPI security middleware, dual orchestration, agent execution, and durable PostgreSQL/pgvector persistence.*
+
+### <a id="shipped-frontend-experience-routes"></a>Shipped Frontend Experience Routes
+- **`/`**: Public product landing page, manifesto, interactive merchant world canvas, and feature architecture.
+- **`/growth-radar`**: Real-time business diagnostic radar computed directly from PostgreSQL transaction tables.
+- **`/agents`**: Coordinated 14-Agent Growth Team dashboard displaying active statuses, tool capabilities, and run logs.
+- **`/manager-agent`**: Manager Agent autonomous coordinator panel (goal intake, validated execution planning, workflow status).
+- **`/marketing-agent`**: Marketing AGI workstation (integrations stack with Resend, Google Ads, Meta Ads, Instagram).
+- **`/designer-agent`**: Creative studio for asset review, brief generation, and Cloudflare FLUX image synthesis.
+- **`/product-agent`**: Product catalog intelligence, SKU affinity mapping, and basket bundle discovery.
+- **`/software-agent`**: Technical feasibility and integration architecture analysis console.
+- **`/debate`**: Multi-agent adversarial debate viewer with round-by-round cross-examination cards and debate chat assistant.
+- **`/actions`**: Growth Actions approval console featuring double-guardrail status and immutable audit timeline.
+- **`/checkout`**: Live AI Buyer simulator running genuine Razorpay TEST transactions against merchant products.
 
 ---
 
@@ -523,9 +889,9 @@ Every component and library in RazorGrowth AI has been verified against the acti
 | **Agent Orchestration** | **LangGraph** | `1.2.16` | Multi-agent state machines, cyclical graphs, state reducers, and checkpointers |
 | **Agent Abstractions** | **LangChain** | `1.4.6` / `1.6.12` | Structured prompt templates, message abstractions, and tool schemas |
 | **Payment Gateway** | **Razorpay Python** | `2.0.1` | Order creation, payment verification, and HMAC-SHA256 webhook validation |
-| **Authentication & Crypto**| **PyJWT & Cryptography** | `2.7.0` / `44.0.2` | HS256 JWT token lifecycle and Fernet encryption for workspace secrets |
+| **Authentication & Crypto**| **PyJWT & Cryptography** | `2.13.0` / `44.0.2` | HS256 JWT token lifecycle and Fernet encryption for workspace secrets |
 | **HTTP Client** | **HTTPX** | `0.28.1` | Asynchronous HTTP client for provider verification and webhooks |
-| **Testing Engine** | **Pytest** | `9.1.1` | 2,155-test suite covering unit, recovery, security, and contract fixtures |
+| **Testing Engine** | **Pytest** | `8.4.2` | 2,155-test suite covering unit, recovery, security, and contract fixtures |
 | **Frontend Framework** | **React** | `19.0.0` | Latest concurrent React framework powering merchant workspace UIs |
 | **Frontend Tooling** | **Vite** | `6.0.5` | Next-generation ESM bundler and development proxy server |
 | **Type Safety** | **TypeScript** | `5.7.2` | End-to-end typed interfaces across API clients and component states |
@@ -565,7 +931,6 @@ RazorGrowth AI/
 │   ├── Dockerfile                   # Multi-stage Vite build served via Nginx
 │   ├── package.json                 # React 19, TypeScript 5.7, Vite 6 dependencies
 │   └── src/
-│       ├── assets/                  # Verified product screenshots & brand artwork
 │       ├── components/              # WindowPanel, Button, StatusBadge, AuthGuards
 │       ├── features/public/         # Landing page, Merchant World canvas, Hero
 │       ├── lib/                     # Typed API client, authentication context
@@ -574,90 +939,13 @@ RazorGrowth AI/
 ├── migrations/
 │   ├── env.py                       # Alembic environment configuration (pgvector)
 │   └── versions/                    # 15 single-head migrations (up to p5e2r0na1z04)
+├── scripts/
+│   └── start.sh                     # Backend container entrypoint (db wait + migration + uvicorn)
 ├── tests/                           # 62 test files (2,155 collected test cases)
 ├── docker-compose.yml               # Complete stack: PostgreSQL 16 + pgvector, Backend, Frontend
 ├── requirements.txt                 # Exact pinned Python dependencies
 └── .env.example                     # Comprehensive configuration template with blank secrets
 ```
-
----
-
-## <a id="quick-start"></a>⚡ Quick Start
-
-### <a id="docker-deployment"></a>One-Command Docker Deployment (Recommended)
-
-The fastest and most reliable way to run RazorGrowth AI is using Docker Compose. The configuration starts PostgreSQL 16 with pre-installed `pgvector`, waits for database healthchecks, runs all Alembic migrations automatically, and starts the backend and frontend services.
-
-#### 1. Clone the repository
-```bash
-git clone https://github.com/Jrdheeraj/RazorGrowth-AI.git
-cd RazorGrowth-AI
-```
-
-#### 2. Start the application stack
-```bash
-docker compose up --build
-```
-
-#### 3. Access the running application
-- **Frontend Workspace**: [http://localhost:5173](http://localhost:5173)
-- **Interactive Swagger API Docs**: [http://localhost:8001/docs](http://localhost:8001/docs)
-- **Backend Health Check**: [http://localhost:8001/api/health](http://localhost:8001/api/health)
-- **PostgreSQL Database**: `localhost:5432` (`razorgrowth` / `razorgrowth`)
-
-> [!TIP]
-> **Zero Configuration Required**: Docker Compose ships with safe development defaults for ports, database credentials, and local authentication keys. You do not need to configure an external `.env` file to explore the platform. Signing up creates your private merchant workspace and a pre-seeded 10-product catalog immediately.
-
-#### Managing Docker Services
-- **Stop containers**: `docker compose down` (preserves your local database volume).
-- **Reset database completely**: `docker compose down -v` (removes the `postgres_data` volume).
-
----
-
-### <a id="local-setup"></a>Local Development Setup
-
-For developers modifying Python code or frontend components directly on their host machine:
-
-#### Prerequisites
-- **Python 3.11+**
-- **Node.js 18+ & npm**
-- **Docker** (to host PostgreSQL 16 + pgvector)
-
-#### Step 1: Start PostgreSQL with pgvector
-```bash
-docker compose up -d db
-```
-
-#### Step 2: Configure & Run Backend
-```bash
-# Create and activate virtual environment
-python -m venv .venv
-# Windows:
-.venv\Scripts\activate
-# Linux/macOS:
-source .venv/bin/activate
-
-# Install verified dependencies
-pip install -r requirements.txt
-
-# Create local configuration
-cp .env.example .env
-# Set AUTH_SECRET_KEY to any random 32+ character string in .env
-
-# Run database migrations
-alembic upgrade head
-
-# Start FastAPI backend
-uvicorn backend.app.main:app --host 127.0.0.1 --port 8001 --reload
-```
-
-#### Step 3: Configure & Run Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
-Open [http://localhost:5173](http://localhost:5173). Vite automatically proxies all `/api/*` network requests to `http://127.0.0.1:8001`.
 
 ---
 
@@ -672,7 +960,7 @@ All settings are managed via environment variables and parsed through Pydantic S
 |:---|:---|:---|
 | `APP_ENV` | `development` | Runtime environment (`development`, `staging`, `production`) |
 | `DATABASE_URL` | `postgresql://...` | Connection URI for PostgreSQL 16 + pgvector |
-| `AUTH_SECRET_KEY` | *(Required)* | Secret key for signing JWT tokens (min 32 characters) |
+| `AUTH_SECRET_KEY` | *(Required in local)* | Secret key for signing JWT tokens (min 32 characters) |
 | `AUTH_ACCESS_TOKEN_EXPIRE_MINUTES` | `1440` (24h) | JWT access token lifespan |
 | `EXECUTION_ENABLED` | `false` | **Global safety switch**. Keep `false` to enforce test-mode execution |
 | `GUARDRAIL_MAX_AMOUNT_INR` | `50000` | Maximum monetary amount (INR) an agent action may propose |
@@ -703,7 +991,7 @@ Initial Schema ──> Phase 3 ──> Phase 4 (Actions) ──> Phase 5 (Radar/
 ```
 
 ### Applying Migrations
-When running via Docker Compose, migrations execute automatically on container startup. To apply migrations manually:
+When running via Docker Compose, migrations execute automatically on container startup. To apply migrations manually from the repository root:
 ```bash
 alembic upgrade head
 ```
@@ -834,30 +1122,62 @@ curl -X GET http://localhost:8001/api/actions/<ACTION_ID>/audit \
 
 ## <a id="testing-and-verification"></a>🧪 Testing and Verification
 
-RazorGrowth AI is backed by an automated testing suite comprising **2,155 collected tests** across 62 test files. Tests run against an isolated in-memory SQLite schema with custom JSONB-compatible DDL, ensuring tests never mutate or depend on production PostgreSQL data.
+RazorGrowth AI is backed by an automated testing suite comprising **2,155 collected tests** across 62 test files.
 
+### Running Python Tests
+Default test execution runs against an isolated in-memory SQLite schema with custom JSONB-compatible DDL, ensuring test runs never mutate or depend on production PostgreSQL data:
 ```bash
-# Run the full test suite
+# Run the complete test suite
 pytest
 
 # Run tests with short execution summary
 pytest -q
+```
 
-# Run multi-agent LangGraph integration tests
+### Focused Backend Test Groups
+```bash
+# Run multi-agent LangGraph integration tests (all 14 agents)
 pytest tests/test_langchain_langgraph_14_agents.py
 
-# Run workflow recovery, leasing, and fence token tests
-pytest tests/test_workflow_recovery_unit.py tests/test_workflow_recovery_postgres.py
+# Run workflow recovery, leasing, and fence token unit tests
+pytest tests/test_workflow_recovery_unit.py
 
 # Run security, guardrails, and role-based access tests
 pytest tests/test_agent_security.py tests/test_roles.py tests/test_tenant_isolation.py
 ```
 
-### Verified Test Subsystems
-- **Multi-Agent LangGraph Integration**: Validates StateGraph compilation, node execution, checkpointer persistence, and conditional transitions across all 14 agents.
-- **Workflow Crash Recovery & Leasing**: Tests verify compare-and-set ownership (`claim`), fence token increments (`StaleLeaseError`), heartbeat freshness, and safe replay of persisted step outputs.
-- **Idempotency & Guardrail Bounds**: Confirms that duplicate action proposals return existing rows without advancing state, and that amounts exceeding `GUARDRAIL_MAX_AMOUNT_INR` are rejected.
-- **Frontend Contract Tests**: Validates specialist roster definitions, responsive CSS constraints, and office canvas layouts (`npm run test:roster`, `npm run test:office`).
+### PostgreSQL Integration Tests & Limitations
+Three specific test modules validate physical PostgreSQL features (pgvector indexes, concurrency locks, and migration chains):
+- `tests/test_workflow_recovery_postgres.py`
+- `tests/test_recovery_safety_postgres.py`
+- `tests/test_postgres_migration.py`
+
+> [!NOTE]
+> **Deliberate Skipping**: These three integration suites require a live PostgreSQL connection string via the `POSTGRES_DSN` environment variable. When `POSTGRES_DSN` is not set, they are **deliberately skipped** to prevent accidental mutation of local databases. They should never be described as passing until run against an explicit test PostgreSQL instance:
+> ```bash
+> # Linux/macOS
+> POSTGRES_DSN="postgresql://razorgrowth:razorgrowth@localhost:5432/razorgrowth" pytest tests/test_workflow_recovery_postgres.py
+>
+> # Windows PowerShell
+> $env:POSTGRES_DSN="postgresql://razorgrowth:razorgrowth@localhost:5432/razorgrowth"; pytest tests/test_workflow_recovery_postgres.py
+> ```
+
+### Frontend Testing & Verification
+```bash
+cd frontend
+
+# Run specialist roster definition contract tests
+npm run test:roster
+
+# Run office canvas layout tests
+npm run test:office
+
+# Run responsive CSS contract tests
+npm run test:responsive
+
+# Validate full production build
+npm run build
+```
 
 ---
 
@@ -868,7 +1188,7 @@ pytest tests/test_agent_security.py tests/test_roles.py tests/test_tenant_isolat
 | `Docker daemon not running` | Docker Desktop is stopped or starting up | Start Docker Desktop, wait for the engine status indicator to turn green, then rerun `docker compose up`. |
 | `Port 5432 / 8001 / 5173 is already allocated` | Existing local services (PostgreSQL or Node) occupy required ports | Change `POSTGRES_PORT`, `BACKEND_PORT`, or `FRONTEND_PORT` in your `.env` file (e.g., `FRONTEND_PORT=5174`). |
 | `422 Unprocessable Entity` on signup | Password fails platform complexity policy | Passwords must be at least 12 characters long and contain at least one letter and one number. |
-| `Database not initialized` on first local request | Alembic migrations have not been applied to PostgreSQL | Run `alembic upgrade head` before starting the Uvicorn server (Docker Compose handles this automatically). |
+| `Database not initialized` on first local request | Alembic migrations have not been applied to PostgreSQL | Run `alembic upgrade head` from repository root before starting the Uvicorn server (Docker Compose handles this automatically). |
 | `403 Forbidden: MERCHANT_ACCESS_DENIED` | Caller attempted to access data belonging to a different tenant workspace | Verify the `Authorization: Bearer <token>` corresponds to an active user belonging to that specific workspace. |
 | `LLM 429: Provider Rate Limited` | Free-tier Cloudflare Workers AI or OpenAI request rate limits reached | Wait for the provider rate window to refresh. The system handles rate limits cleanly without corrupting run state. |
 | `pgvector extension missing` | Using standard `postgres:16` instead of `pgvector/pgvector:pg16` | Ensure your Docker image is set to `pgvector/pgvector:pg16` as defined in `docker-compose.yml`. |
