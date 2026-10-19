@@ -2,42 +2,44 @@
 # RazorGrowth AI — Python dependencies
 #
 # Direct runtime and development dependencies, verified against the actual
-# repository imports (no unused packages). Frontend (npm) dependencies live
-# in frontend/package.json.
+# repository imports and existing virtual environment (no unused packages).
+# Frontend (npm) dependencies live in frontend/package.json.
 # ============================================================================
 
 # ── Core framework ──────────────────────────────────────────────────────────
-fastapi==0.141.1                 # backend API framework (routes, deps, validation)
-uvicorn[standard]==0.52.4         # ASGI server: uvicorn backend.app.main:app
+fastapi==0.141.1                 # backend API framework (routes, dependencies, validation)
+uvicorn[standard]==0.52.4        # ASGI server: uvicorn backend.app.main:app
 
-# ── Database ─────────────────────────────────────────────────────────────────
+# ── Database & Persistence ───────────────────────────────────────────────────
 sqlalchemy==2.0.52               # ORM, engine, tenant-scoped models
 psycopg2-binary==2.9.12          # PostgreSQL DBAPI driver for SQLAlchemy
-alembic==1.16.4                   # schema migrations (migrations/versions)
-pgvector==0.3.6                   # VECTOR column type for the knowledge store
+alembic==1.16.4                  # schema migrations (migrations/versions)
+pgvector==0.3.6                  # VECTOR column type for the knowledge store
 
-# ── Validation / settings ───────────────────────────────────────────────────
-pydantic==2.13.4                  # request/response schemas, model validation
-pydantic-settings==2.15.0         # .env-backed application settings (core/config.py)
+# ── Validation & Configuration ──────────────────────────────────────────────
+pydantic==2.13.4                 # request/response schemas, model validation
+pydantic-settings==2.15.0        # .env-backed application settings (core/config.py)
+python-dotenv==1.2.3             # required by pydantic-settings for .env file loading
 
-# ── Authentication ──────────────────────────────────────────────────────────
-PyJWT==2.7.0                      # JWT access-token signing/verification (core/security.py)
-cryptography==44.0.2              # Fernet encryption for stored integration credentials (core/credential_vault.py)
+# ── Authentication & Security ───────────────────────────────────────────────
+PyJWT==2.13.0                    # JWT access-token signing/verification (core/security.py)
+cryptography==44.0.2             # Fernet encryption for stored integration credentials (core/credential_vault.py)
 
-# ── HTTP / networking ───────────────────────────────────────────────────────
-httpx==0.28.1                     # HTTP client (tooling, tests, integration paths)
+# ── HTTP & Networking ───────────────────────────────────────────────────────
+httpx==0.28.1                    # HTTP client (tooling, tests, integration paths)
 
 # ── Payments ────────────────────────────────────────────────────────────────
-razorpay==2.0.1                   # Razorpay TEST-mode orders, payments, webhooks
+razorpay==2.0.1                  # Razorpay TEST-mode orders, payments, webhooks
 
-# ── AI / LLM / Multi-Agent Graph ─────────────────────────────────────────────
-openai==1.58.1                    # OpenAI SDK powering the provider layer
-                                  # (Cloudflare Workers AI / OpenAI — backend/app/ai/llm).
-                                   # Cloudflare is reached through its documented OpenAI-compatible endpoint,
-                                   # so one SDK serves both providers.
-langchain-core==1.6.12            # Unified prompt, message, tool, and model abstractions
-langgraph==1.2.16                 # Stateful multi-agent graph execution, state reducers, and checkpoints
-langchain==1.4.6                  # High-level agent and tool integration utilities
+# ── AI, LLM & Multi-Agent Graph ────────────────────────────────────────────
+openai==1.58.1                   # OpenAI SDK powering the provider layer
+                                 # (Cloudflare Workers AI / OpenAI — backend/app/ai/llm).
+                                 # Cloudflare is reached through its documented OpenAI-compatible endpoint,
+                                 # so one SDK serves both providers.
+langchain-core==1.6.12           # Unified prompt, message, tool, and model abstractions
+langgraph==1.2.16                # Stateful multi-agent graph execution, state reducers, and checkpoints
+langchain==1.4.6                 # High-level agent and tool integration utilities
 
-# ── Testing ─────────────────────────────────────────────────────────────────
-pytest==9.1.1                     # backend test suite (673 tests, SQLite-compatible)
+# ── Testing & Development ───────────────────────────────────────────────────
+pytest==8.4.2                    # backend test suite (2,155 collected tests, SQLite-compatible)
+PyYAML==6.0.3                    # YAML parsing for Docker Compose integration tests

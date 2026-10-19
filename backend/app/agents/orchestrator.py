@@ -38,6 +38,9 @@ from backend.app.agents.registry import AGENT_INSTANCES, MAIN_GROWTH_TEAM_AGENTS
 from backend.app.models.agent_workflow import AgentWorkflowRun
 from backend.app.models.merchant import Merchant
 from backend.app.services.workflow_run_service import (
+    EXECUTION_ENGINE_LANGGRAPH,
+    EXECUTION_ENGINE_LEGACY,
+    KNOWN_EXECUTION_ENGINES,
     PlanIncompatible,
     is_cancel_requested,
     ReuseVerdict,
@@ -255,6 +258,7 @@ class GrowthAgentOrchestrator:
             run_id=orchestrator_run_id,
             mode=mode,
             plan=plan,
+            execution_engine=EXECUTION_ENGINE_LEGACY,
         )
         if created:
             # Make the cycle visible to other processes before any step runs,
@@ -337,6 +341,7 @@ class GrowthAgentOrchestrator:
             run_id=orchestrator_run_id,
             mode=mode,
             plan=plan,
+            execution_engine=EXECUTION_ENGINE_LANGGRAPH,
         )
         if created:
             self.db.commit()
@@ -364,6 +369,36 @@ class GrowthAgentOrchestrator:
                     )
                     self.db.commit()
 
+        return self._execute_langgraph(
+            merchant_id=merchant_id,
+            mode=mode,
+            orchestrator_run_id=orchestrator_run_id,
+            params=params,
+            workflow_id=workflow.id,
+            wf=wf,
+            resumed=not created,
+            generation=generation,
+        )
+
+    def _execute_langgraph(
+        self,
+        *,
+        merchant_id: uuid.UUID,
+        mode: str,
+        orchestrator_run_id: str,
+        params: dict[str, Any] | None,
+        workflow_id: uuid.UUID,
+        wf: WorkflowRunService,
+        resumed: bool,
+        generation: int,
+    ) -> OrchestrationSummary:
+        """Execute one already-claimed cycle through the LangGraph graph.
+
+        Shared by a fresh LangGraph run and by recovery of a cycle whose
+        recorded engine is ``langgraph``, so both use the same executor and the
+        same final-state -> summary mapping. The CALLER owns the lease; this
+        method never claims one.
+        """
         from backend.app.ai.langgraph_orchestrator.executor import (
             LangGraphWorkflowExecutor,
         )
@@ -379,8 +414,8 @@ class GrowthAgentOrchestrator:
             mode=mode,
             orchestrator_run_id=orchestrator_run_id,
             params=params,
-            workflow_id=workflow.id,
-            resumed=not created,
+            workflow_id=workflow_id,
+            resumed=resumed,
             generation=generation,
         )
 
@@ -394,8 +429,8 @@ class GrowthAgentOrchestrator:
             agents_run=final_state.get("agents_run", []),
             totals=final_state.get("totals", {}),
             ranked_opportunities=final_state.get("ranked_opportunities", []),
-            resumed=not created,
-            workflow_id=str(workflow.id),
+            resumed=resumed,
+            workflow_id=str(workflow_id),
             resumed_steps=final_state.get("resumed_steps", []),
             needs_reconciliation=final_state.get("needs_reconciliation", []),
             cancelled_at_step=final_state.get("cancelled_at_step"),
@@ -421,10 +456,14 @@ class GrowthAgentOrchestrator:
           1. loads the durable workflow row, scoped to this merchant;
           2. verifies the stored plan still matches the requested plan (a
              changed plan is refused, never silently merged);
-          3. takes single-writer ownership via a compare-and-set lease, so a
+          3. refuses a cycle whose recorded execution engine is unknown, and
+             otherwise resumes it on the SAME engine that created it
+             (``langgraph`` -> graph executor, ``legacy``/NULL -> the legacy
+             step loop);
+          4. takes single-writer ownership via a compare-and-set lease, so a
              healthy worker is never taken over and two concurrent resumes
              cannot both proceed;
-          4. closes out steps left ``running`` by the dead process, recording
+          5. closes out steps left ``running`` by the dead process, recording
              them as ``interrupted`` rather than leaving a silent orphan.
 
         Completed and partially-completed steps are REUSED from their persisted
@@ -456,6 +495,17 @@ class GrowthAgentOrchestrator:
                 f"completed work and re-propose actions"
             )
 
+        # Engine provenance decides WHICH execution path is correct. NULL is
+        # historical: such rows predate the column and keep the legacy recovery
+        # behaviour they had before it existed. An unrecognised value is
+        # refused -- guessing could execute the wrong graph or skip steps.
+        engine = workflow.execution_engine
+        if engine is not None and engine not in KNOWN_EXECUTION_ENGINES:
+            raise WorkflowNotResumable(
+                f"workflow {run_id} records unknown execution engine {engine!r}; "
+                f"refusing to guess which executor should resume it"
+            )
+
         # Ownership BEFORE any state change, so a live worker is protected.
         # ``stale_after_seconds`` permits taking over a DEAD-but-unexpired
         # lease without waiting out its full duration -- while still refusing a
@@ -478,6 +528,19 @@ class GrowthAgentOrchestrator:
                 run_id, len(interrupted), interrupted,
             )
 
+        if engine == EXECUTION_ENGINE_LANGGRAPH:
+            return self._execute_langgraph(
+                merchant_id=merchant_id,
+                mode=mode,
+                orchestrator_run_id=run_id,
+                params=params,
+                workflow_id=workflow.id,
+                wf=wf,
+                resumed=True,
+                generation=generation,
+            )
+
+        # ``legacy`` and historical NULL both continue through the legacy loop.
         return self._execute(
             merchant_id=merchant_id,
             mode=mode,
@@ -506,11 +569,13 @@ class GrowthAgentOrchestrator:
         generation: int,
     ) -> OrchestrationSummary:
         """
-        The single execution path shared by ``run`` and ``resume``.
+        The legacy step-by-step execution path.
 
-        Keeping recovery on this one path is the point: there is exactly one
-        implementation of "execute a step", so a resumed cycle cannot drift
-        from a fresh one.
+        Shared by ``run(use_langgraph=False)`` and by recovery of a cycle whose
+        recorded engine is ``legacy`` (or NULL, for rows that predate engine
+        provenance). The LangGraph path has its own executor, but both use the
+        same durable step identity and reuse policy, so a resumed cycle cannot
+        drift from a fresh one on the same engine.
         """
         ctx = AgentContext(
             db=self.db,

@@ -105,7 +105,7 @@ def _execute_agent_step(
                     "errors": prior.errors or [],
                     "reused": True,
                 }
-                return {
+                updates: dict[str, Any] = {
                     "current_step_index": step_idx + 1,
                     "agents_run": [reused_item],
                     "resumed_steps": [
@@ -117,6 +117,25 @@ def _execute_agent_step(
                         }
                     ],
                 }
+                # Replay the persisted result into the cross-agent scratchpad,
+                # using the SAME mapping as the live/legacy path. Without this a
+                # resumed cycle silently loses the completed agent's findings
+                # for every downstream agent.
+                from backend.app.agents.orchestrator import _publish_findings
+
+                shared_updates: dict[str, Any] = {}
+                _publish_findings(agent_name, prior_output, shared_updates)
+                if shared_updates:
+                    updates["shared_memory"] = shared_updates
+                # The Manager's persisted output owns the cycle-level results.
+                # Only published when the step actually recorded them, so a
+                # Manager step that produced neither cannot fabricate them.
+                if agent_name == "ManagerAgent":
+                    if prior_output.get("debate_id"):
+                        updates["debate_id"] = str(prior_output["debate_id"])
+                    if "action_plan" in prior_output:
+                        updates["action_plan"] = prior_output["action_plan"]
+                return updates
 
     # Prepare step parameters
     step_params = dict(state.get("params") or {})
@@ -269,6 +288,16 @@ def _execute_agent_step(
         state_updates["ranked_opportunities"] = result.output["ranked"]
     elif "ranked_opportunities" in ctx.shared and isinstance(ctx.shared["ranked_opportunities"], list):
         state_updates["ranked_opportunities"] = ctx.shared["ranked_opportunities"]
+
+    # Cycle-level outputs produced by the Manager. `debate_id` only exists when
+    # a real AgentDebate row was created or retrieved, and `action_plan` only
+    # when the Manager actually coordinated one. Absent output leaves the state
+    # fields unset rather than inventing a value.
+    if agent_name == "ManagerAgent" and isinstance(result.output, dict):
+        if result.output.get("debate_id"):
+            state_updates["debate_id"] = str(result.output["debate_id"])
+        if "action_plan" in result.output:
+            state_updates["action_plan"] = result.output["action_plan"]
 
     return state_updates
 

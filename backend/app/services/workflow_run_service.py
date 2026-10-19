@@ -60,6 +60,16 @@ DEFAULT_LEASE_SECONDS = 900
 #: they cannot disagree about what counts as abandoned.
 DEFAULT_STALE_AFTER_SECONDS = 900
 
+#: Execution engines that may own a workflow cycle. Persisted on the row at
+#: creation so recovery continues the cycle on the engine that started it.
+#: ``None`` is reserved for rows that predate engine provenance and is treated
+#: as the historical legacy path; anything else is refused, never guessed.
+EXECUTION_ENGINE_LANGGRAPH = "langgraph"
+EXECUTION_ENGINE_LEGACY = "legacy"
+KNOWN_EXECUTION_ENGINES = frozenset(
+    {EXECUTION_ENGINE_LANGGRAPH, EXECUTION_ENGINE_LEGACY}
+)
+
 
 class WorkflowNotFound(LookupError):
     """No such workflow for this merchant (indistinguishable from another's)."""
@@ -643,6 +653,7 @@ class WorkflowRunService:
         mode: str,
         plan: Sequence[tuple[str, dict[str, Any]]],
         lease_seconds: int = DEFAULT_LEASE_SECONDS,
+        execution_engine: str | None = None,
     ) -> tuple[AgentWorkflowRun, bool]:
         """
         Create the cycle row, or return the existing one for this run id.
@@ -650,9 +661,33 @@ class WorkflowRunService:
         Returns ``(workflow, created)``. The unique ``(merchant_id, run_id)``
         constraint is what makes "reuse this run id" mean "resume this cycle"
         rather than "start a parallel one".
+
+        ``execution_engine`` records which executor owns the cycle. It is
+        written ONLY when the row is created: provenance is immutable, so a
+        caller cannot silently switch an existing cycle to another engine (that
+        raises instead). Historical rows created before this column existed
+        keep NULL and are recovered by the legacy path, preserving their
+        behaviour.
         """
+        if execution_engine is not None and execution_engine not in KNOWN_EXECUTION_ENGINES:
+            raise ValueError(
+                f"unknown execution engine {execution_engine!r}; expected one of "
+                f"{sorted(KNOWN_EXECUTION_ENGINES)}"
+            )
         existing = self.get_workflow(merchant_id=merchant_id, run_id=run_id)
         if existing is not None:
+            if (
+                execution_engine is not None
+                and existing.execution_engine is not None
+                and existing.execution_engine != execution_engine
+            ):
+                # Continuing a cycle under a different executor would violate
+                # the single execution path the workflow was built on.
+                raise WorkflowNotResumable(
+                    f"workflow {run_id} was started by the "
+                    f"{existing.execution_engine!r} engine; refusing to continue "
+                    f"it with {execution_engine!r}"
+                )
             return existing, False
 
         steps = materialise_plan(mode, plan)
@@ -666,6 +701,7 @@ class WorkflowRunService:
             merchant_id=merchant_id,
             run_id=run_id,
             mode=mode,
+            execution_engine=execution_engine,
             status=WorkflowStatus.running.value,
             plan=steps,
             plan_fingerprint=plan_fingerprint(steps),
@@ -1434,6 +1470,9 @@ def is_resumable(workflow: AgentWorkflowRun) -> bool:
 
 __all__ = [
     "DEFAULT_LEASE_SECONDS",
+    "EXECUTION_ENGINE_LANGGRAPH",
+    "EXECUTION_ENGINE_LEGACY",
+    "KNOWN_EXECUTION_ENGINES",
     "OrphanReconciliation",
     "PlanIncompatible",
     "ActiveRunReport",

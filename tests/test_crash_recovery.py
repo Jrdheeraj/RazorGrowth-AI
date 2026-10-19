@@ -169,6 +169,17 @@ def _probe(name):
         fh.write(name + "\n")
 
 
+def _name(entry):
+    """The agent behind one summary entry.
+
+    The two executors name this field differently: the legacy loop records
+    ``agent`` and the LangGraph state records ``agent_name``. Recovery now
+    routes each cycle to the engine that created it, so the harness must read
+    whichever engine actually resumed the cycle.
+    """
+    return entry.get("agent") or entry.get("agent_name")
+
+
 def _instrument():
     """Wrap every agent's real _run so execution is provable from outside."""
     from backend.app.agents.registry import AGENT_INSTANCES
@@ -287,8 +298,8 @@ if MODE == "resume":
     out = {
         "orchestrator_run_id": summary.orchestrator_run_id,
         "resumed": summary.resumed,
-        "agents_executed": [a["agent"] for a in summary.agents_run],
-        "reused": [a["agent"] for a in summary.agents_run if a.get("reused")],
+        "agents_executed": [_name(a) for a in summary.agents_run],
+        "reused": [_name(a) for a in summary.agents_run if a.get("reused")],
         "totals": summary.totals,
     }
     s.close()

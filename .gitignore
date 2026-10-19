@@ -4,8 +4,8 @@
 # Scope: FastAPI + SQLAlchemy backend, React + TypeScript + Vite frontend,
 #        PostgreSQL/pgvector (Docker), Alembic migrations, pytest suite.
 #
-# NOTE: `.env.example` files (root and backend/) are intentionally NOT
-#       ignored — they are tracked as configuration templates.
+# NOTE: `.env.example` files (root and subdirectories) are intentionally
+#       whitelisted — they are tracked as configuration templates.
 # ============================================================================
 
 # ── Environment variables & secrets ─────────────────────────────────────────
@@ -18,10 +18,18 @@
 .env.*.local
 .env.*
 !.env.example
+!**/.env.example
 *.pem
 *.key
 *.crt
+*.pfx
+*.p12
+*.kdbx
 secrets.*
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
 
 # ── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
@@ -29,29 +37,46 @@ __pycache__/
 *$py.class
 *.egg-info/
 .eggs/
+*.egg
 build/
 dist/
+develop-eggs/
+downloads/
+eggs/
+.installed.cfg
+parts/
+sdist/
+var/
+wheels/
+*.manifest
+*.spec
 
 # ── Virtual environments ─────────────────────────────────────────────────────
 .venv/
 venv/
 env/
+ENV/
+env.bak/
+venv.bak/
 
 # ── Testing & coverage ───────────────────────────────────────────────────────
 .pytest_cache/
 .coverage
 .coverage.*
 coverage.xml
+coverage/
 htmlcov/
 .hypothesis/
 .tox/
 .nox/
 .ruff_cache/
 .mypy_cache/
+.cache/
 
 # ── Node.js / frontend build output ─────────────────────────────────────────
 node_modules/
 dist-ssr/
+frontend/dist/
 .test-dist/
 .vite/
 *.local
@@ -60,12 +85,15 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 .eslintcache
+.turbo/
+tsconfig.tsbuildinfo
+frontend/.edge-hiw-profile/
 
 # ── Logs ─────────────────────────────────────────────────────────────────────
 logs/
 *.log
 
-# ── Local databases ──────────────────────────────────────────────────────────
+# ── Local databases & storage ────────────────────────────────────────────────
 # SQLite dev databases (e.g. razorgrowth.db) and journal/WAL sidecars.
 # Production PostgreSQL data lives in the Docker named volume, not in Git.
 *.db
@@ -76,7 +104,6 @@ logs/
 *.db-shm
 
 # ── AI / model caches & generated artifacts ──────────────────────────────────
-.cache/
 embeddings_cache/
 model_cache/
 
@@ -90,35 +117,42 @@ temp/
 *.tmp
 *.bak
 *.orig
+*.swp
+*.swo
+*~
 
 # ── IDE / editor files ───────────────────────────────────────────────────────
 .idea/
 .vscode/
 *.sublime-workspace
 *.sublime-project
-*.swp
 
 # ── OS-specific files ────────────────────────────────────────────────────────
 .DS_Store
+.DS_Store?
+._*
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 
+# ── Linked projects & external workspaces ────────────────────────────────────
+# External project links — unstaged by default
+munder-difflin-main
+.guildly/
+
+# OpenCode IDE artifacts (preserve tracked .opencode/agents/ definitions)
+.opencode/node_modules/
+.opencode/package*.json
+.opencode/bun.lock
+
 # ============================================================================
 # Review notes (over-ignoring audit):
 # - `env/` only matches directories named `env`, never `migrations/env.py`.
-# - `dist/` matches Vite/Python build output; no source code lives there.
+# - `dist/` matches build output; no tracked source code lives there.
 # - `*.db` hides only local SQLite databases; no tracked file uses this suffix.
-# - Migrations (`migrations/versions/*.py`), tests (`tests/`) and both
+# - Migrations (`migrations/versions/*.py`), tests (`tests/`) and all
 #   `.env.example` templates remain fully trackable.
+# - `.langgraph_checkpoints/` contains pre-existing tracked test checkpoints;
+#   it is not ignored here to avoid masking tracked durable state.
 # ============================================================================
-
-# TypeScript incremental build artifacts
-tsconfig.tsbuildinfo
-
-frontend/.edge-hiw-profile/
-
-munder-difflin-main
-# guildly agent workspace (linked project) — unstaged by default
-.guildly/

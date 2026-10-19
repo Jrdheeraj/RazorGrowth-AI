@@ -65,6 +65,18 @@ class AgentWorkflowRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     #: it can never silently fork a second cycle.
     run_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     mode: Mapped[str] = mapped_column(String(20), nullable=False, default="deep")
+
+    #: Which executor created this cycle: ``"langgraph"`` or ``"legacy"``.
+    #:
+    #: Recovery must continue a cycle on the SAME engine. The two engines do
+    #: not lay out every plan identically, so switching mid-cycle can skip or
+    #: duplicate work. This is execution metadata only -- no business data.
+    #:
+    #: NULL means the row predates this column. Such a row is recovered by the
+    #: historical legacy path, exactly as it would have been before the column
+    #: existed. A value outside the known set is refused rather than guessed.
+    execution_engine: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default=WorkflowStatus.running.value, index=True
     )

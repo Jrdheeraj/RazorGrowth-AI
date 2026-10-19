@@ -323,7 +323,10 @@ def run_agents(
             }
 
         cycle_id = uuid.uuid4().hex
-        from backend.app.services.workflow_run_service import WorkflowRunService
+        from backend.app.services.workflow_run_service import (
+            EXECUTION_ENGINE_LANGGRAPH,
+            WorkflowRunService,
+        )
         from backend.app.agents.orchestrator import AI_TEAM_PLAN
 
         wf = WorkflowRunService(db)
@@ -332,6 +335,10 @@ def run_agents(
             run_id=cycle_id,
             mode="team",
             plan=AI_TEAM_PLAN,
+            # The background worker below runs orchestrator.run(), whose
+            # default engine is LangGraph. Record that provenance at creation
+            # so recovery routes the cycle back to the same executor.
+            execution_engine=EXECUTION_ENGINE_LANGGRAPH,
         )
         db.commit()
 
