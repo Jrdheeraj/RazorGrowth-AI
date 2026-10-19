@@ -34,8 +34,13 @@
 <a href="#human-in-the-loop-safeguards--double-guardrails">
   <img src="https://img.shields.io/badge/Security-Human_Gate_%26_Guardrails-c85f43?style=for-the-badge" alt="Human-in-the-Loop Safeguards" />
 </a>
-
 <br/><br/>
+
+<p align="center">
+  <img src="frontend/src/assets/homepage.png" alt="RazorGrowth AI Merchant Operating System" width="100%" style="border-radius: 6px; border: 1px solid #2a1810; box-shadow: 0 12px 36px rgba(16, 24, 43, 0.25);" />
+</p>
+
+<br/>
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
